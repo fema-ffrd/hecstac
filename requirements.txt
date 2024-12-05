@@ -1,1 +1,5 @@
+geopandas
 pystac
+numpy
+shapely
+rashdf
