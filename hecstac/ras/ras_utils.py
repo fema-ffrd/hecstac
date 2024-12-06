@@ -19,7 +19,7 @@ def is_ras_prj(url: str) -> bool:
         return False
 
 
-def search_contents(lines: list, search_string: str, token: str = "=", expect_one: bool = True) -> list[str]:
+def search_contents(lines: list, search_string: str, token: str = "=", expect_one: bool = True) -> list[str] | str:
     """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
     results = []
     for line in lines:
@@ -97,7 +97,7 @@ def text_block_from_start_str_to_empty_line(start_str: str, lines: list) -> list
     return results
 
 
-def text_block_from_start_str_length(start_str: str, number_of_lines: int, lines: list) -> list[str]:
+def text_block_from_start_str_length(start_str: str, number_of_lines: int, lines: list[str]) -> list[str]:
     """Search for an exact match to the start token and return a number of lines equal to number_of_lines."""
     start_str = handle_spaces(start_str, lines)
     results = []
@@ -113,7 +113,7 @@ def text_block_from_start_str_length(start_str: str, number_of_lines: int, lines
                 results.append(line)
 
 
-def data_pairs_from_text_block(lines: list[str], width: int) -> list[tuple[float]]:
+def data_pairs_from_text_block(lines: list[str], width: int) -> list[tuple[float, float]]:
     """Split lines at given width to get paired data string. Split the string in half and convert to tuple of floats."""
     pairs = []
     for line in lines:
@@ -125,7 +125,7 @@ def data_pairs_from_text_block(lines: list[str], width: int) -> list[tuple[float
     return pairs
 
 
-def delimited_pairs_to_lists(lines: list[str]) -> list[list[float], list[float]]:
+def delimited_pairs_to_lists(lines: list[str]) -> tuple[list[float], list[float]]:
     """Extract subdivisions from the manning's text block."""
     stations = []
     mannings = []
