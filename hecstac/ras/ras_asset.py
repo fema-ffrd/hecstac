@@ -1,10 +1,12 @@
 import datetime
+import json
 import math
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterator, TypeAlias
 
 import geopandas as gpd
 import pandas as pd
@@ -12,20 +14,40 @@ from pystac import Asset, Link, MediaType, RelType
 from ras_utils import (
     data_pairs_from_text_block,
     delimited_pairs_to_lists,
+    junction_hull,
     search_contents,
     text_block_from_start_end_str,
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
 from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
-from shapely import LineString, Point, Polygon
+from shapely import (
+    LineString,
+    MultiPolygon,
+    Point,
+    Polygon,
+    make_valid,
+    to_geojson,
+    union_all,
+)
 
-from ..utils.placeholders import NULL_STAC_BBOX, NULL_STAC_GEOMETRY
+
+class LinkableAsset(Asset):
+    def _set_link(self, asset: Asset, rel: RelType | str) -> None:
+        link = Link(rel, asset)
+        link.set_owner(self)
+
+    def link_child(self, asset: Asset) -> None:
+        self._set_link(asset, RelType.CHILD)
+
+    def link_related(self, asset: Asset) -> None:
+        self._set_link(asset, "related")
 
 
-class GenericAsset(Asset):
+class GenericAsset(LinkableAsset):
 
     def __init__(self, href: str, *args, **kwargs):
+        # ensure ras extension is included in extensions link
         super().__init__(href, *args, **kwargs)
         self.name = Path(href).name
         self.stem = Path(href).stem
@@ -47,42 +69,186 @@ class GenericAsset(Asset):
     def short_summary(self):
         return {"title": self.ras_title, "file": str(self.name)}
 
-    def link_child(
-        self,
-        asset: Asset,
-    ) -> None:
-        link = Link(RelType.CHILD, asset, asset.media_type, asset.title, asset.extra_fields)
-        link.set_owner(self)
+
+class ProjectAsset(GenericAsset):
+
+    def __init__(self, href, *args, **kwargs):
+        super().__init__(href, *args, **kwargs)
+        self.name = Path(href).name
+        self.stem = Path(href).stem
+
+    @staticmethod
+    def media_type(href: str) -> MediaType:
+        # I think that if it ends with hdf, it should not be an instance of this class
+        if not href.endswith(".hdf"):
+            return MediaType.TEXT
+        return MediaType.HDF5
+
+    @property
+    @lru_cache
+    def file_lines(self) -> list[str]:
+        with open(self.href) as f:
+            return f.readlines()
+
+    @property
+    @lru_cache
+    def project_title(self) -> str:
+        # gets title and adds to asset properties
+        title = search_contents(self.file_str, "Proj Title")
+        self.extra_fields["ras:project_title"] = title
+
+    @property
+    @lru_cache
+    def project_units(self) -> str | None:
+        for line in self.file_str:
+            if "Units" in line:
+                units = " ".join(line.split(" ")[:-1])
+                self.extra_fields["ras:project_units"] = units
+                return units
+
+    @property
+    @lru_cache
+    def plan_current(self) -> str | None:
+        try:
+            suffix = search_contents(self.file_str, "Current Plan", expect_one=True)
+            return self.name_from_suffix(suffix)
+        except Exception:
+            return None
+
+    @property
+    def model_name(self) -> str:
+        pass
+
+    @property
+    def ras_version(self) -> str:
+        pass
+
+    @property
+    @lru_cache
+    def plan_files(self) -> list[str]:
+        suffixes = search_contents(self.file_str, "Plan File", expect_one=False)
+        return [self.name_from_suffix(i) for i in suffixes]
+
+    @property
+    @lru_cache
+    def geometry_files(self) -> list[str]:
+        suffixes = search_contents(self.file_str, "Geom File", expect_one=False)
+        return [self.name_from_suffix(i) for i in suffixes]
+
+    @property
+    @lru_cache
+    def steady_flow_files(self) -> list[str]:
+        suffixes = search_contents(self.file_str, "Flow File", expect_one=False)
+        return [self.name_from_suffix(i) for i in suffixes]
+
+    @property
+    @lru_cache
+    def quasi_unsteady_flow_files(self) -> list[str]:
+        suffixes = search_contents(self.file_str, "QuasiSteady File", expect_one=False)
+        return [self.name_from_suffix(i) for i in suffixes]
+
+    @property
+    @lru_cache
+    def unsteady_flow_files(self) -> list[str]:
+        suffixes = search_contents(self.file_str, "Unsteady File", expect_one=False)
+        return [self.name_from_suffix(i) for i in suffixes]
+
+    def create_links(self, asset_dict: dict[str, Asset]) -> None:
+        for plan_file in self.plan_files:
+            asset = asset_dict[plan_file]
+            self.link_related(asset)
+        for geom_file in self.geometry_files:
+            asset = asset_dict[geom_file]
+            self.link_related(asset)
+        for steady_flow_file in self.steady_flow_files:
+            asset = asset_dict[steady_flow_file]
+            self.link_related(asset)
+        for quasi_steady_flow_file in self.quasi_unsteady_flow_files:
+            asset = asset_dict[quasi_steady_flow_file]
+            self.link_related(asset)
+        for unsteady_file in self.unsteady_flow_files:
+            asset = asset_dict[unsteady_file]
+            self.link_related(asset)
+
+
+class PlanAsset(GenericAsset):
+
+    def __init__(self, href: str, *args, **kwargs):
+        super().__init__(href, *args, **kwargs)
+        self.extra_fields["ras:plan_title"] = self.plan_title
+        self.extra_fields["ras:short_id"] = self.short_id
+        self.extra_fields["ras:geometry"] = self.primary_geometry
+        self.extra_fields["ras:flow"] = self.primary_flow
+
+    @staticmethod
+    def media_type(href: str) -> MediaType:
+        # I think that if it ends with hdf, it should not be an instance of this class
+        if not href.endswith(".hdf"):
+            return MediaType.TEXT
+        return MediaType.HDF5
+
+    @property
+    def plan_title(self) -> str:
+        # gets title and adds to asset properties
+        title = search_contents(self.file_str, "Plan Title")
+        self.extra_fields["ras:plan_title"] = title
+
+    @property
+    def primary_geometry(self) -> str:
+        suffix = search_contents(self.file_str, "Geom File", expect_one=True)
+        return self.name_from_suffix(suffix)
+
+    @property
+    def primary_flow(self) -> str:
+        suffix = search_contents(self.file_str, "Flow File", expect_one=True)
+        return self.name_from_suffix(suffix)
+
+    @property
+    def short_id(self) -> str:
+        return search_contents(self.file_str, "Short Identifier")
+
+    def create_links(self, asset_dict: dict[str, Asset]) -> None:
+        primary_geometry_asset = asset_dict[self.primary_geometry]
+        self.link_related(primary_geometry_asset)
+        primary_flow_asset = asset_dict[self.primary_flow]
+        self.link_related(primary_flow_asset)
 
 
 class GeometryAsset(GenericAsset):
+    PROPERTIES_WITH_GDF = ["rivers", "reaches", "junctions", "cross_sections", "structures"]
 
     def __init__(self, href: str = "null", *args, **kwargs):
         super().__init__(href, *args, **kwargs)
         self.crs = kwargs.get("crs", None)
-        self.extra_fields = {
-            "ras:geom_title": self.geom_title,
-            "ras:rivers": len(self.rivers),
-            "ras:reaches": len(self.reaches),
-            "ras:cross_sections": {
-                "total": len(self.cross_sections),
-                "user_input_xss": len([xs for xs in self.cross_sections.values() if not xs.is_interpolated]),
-                "interpolated": len([xs for xs in self.cross_sections.values() if xs.is_interpolated]),
-            },
-            "ras:culverts": len([s for s in self.structures.values() if s.type == 2]),
-            "ras:bridges": len([s for s in self.structures.values() if s.type == 3]),
-            "ras:multiple_openings": len([s for s in self.structures.values() if s.type == 4]),
-            "ras:inline_structures": len([s for s in self.structures.values() if s.type == 5]),
-            "ras:lateral_structures": len([s for s in self.structures.values() if s.type == 6]),
-            "ras:storage_areas": 0,
-            "ras:2d_flow_areas": {
-                "2d_flow_areas": 0,
-                "total_cells": 0,
-            },
-            "ras:sa_connections": 0,
+        self.extra_fields["ras:geom_title"] = self.geom_title
+        self.extra_fields["ras:rivers"] = len(self.rivers)
+        self.extra_fields["ras:reaches"] = len(self.reaches)
+        self.extra_fields["ras:cross_sections"] = {
+            "total": len(self.cross_sections),
+            "user_input_xss": len([xs for xs in self.cross_sections.values() if not xs.is_interpolated]),
+            "interpolated": len([xs for xs in self.cross_sections.values() if xs.is_interpolated]),
         }
-        self.geometry = NULL_STAC_GEOMETRY
-        self.bbox = NULL_STAC_BBOX
+        self.extra_fields["ras:culverts"] = len(
+            [s for s in self.structures.values() if s.type == StructureType.CULVERT]
+        )
+        self.extra_fields["ras:bridges"] = len([s for s in self.structures.values() if s.type == StructureType.BRIDGE])
+        self.extra_fields["ras:multiple_openings"] = len(
+            [s for s in self.structures.values() if s.type == StructureType.MULTIPLE_OPENING]
+        )
+        self.extra_fields["ras:inline_structures"] = len(
+            [s for s in self.structures.values() if s.type == StructureType.INLINE_STRUCTURE]
+        )
+        self.extra_fields["ras:lateral_structures"] = len(
+            [s for s in self.structures.values() if s.type == StructureType.LATERAL_STRUCTURE]
+        )
+        self.extra_fields["ras:storage_areas"] = 0
+        self.extra_fields["ras:2d_flow_areas"] = {
+            "2d_flow_areas": 0,
+            "total_cells": 0,
+        }
+        self.extra_fields["ras:sa_connections"] = 0
+        self.geometry = json.load(to_geojson(self.concave_hull))
+        self.bbox = self.concave_hull.bounds
 
         # I think that if it ends with hdf, it should not be an instance of this class
         if not href.endswith(".hdf"):
@@ -143,16 +309,39 @@ class GeometryAsset(GenericAsset):
         return {c: Connection(c, self.crs) for c in connections}
 
     @property
-    def datetimes(self):
+    def datetimes(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry"""
         dts = search_contents(self.file_str, "Node Last Edited Time", expect_one=False)
         if len(dts) >= 1:
             try:
-                return [datetime.strptime(d, "%b/%d/%Y %H:%M:%S") for d in dts]
+                return [datetime.datetime.strptime(d, "%b/%d/%Y %H:%M:%S") for d in dts]
             except ValueError:
                 return []
         else:
             return []
+
+    @property
+    @lru_cache
+    def concave_hull(self) -> Polygon:
+        """Compute and return the concave hull (polygon) for cross sections."""
+        polygons = []
+        xs_df = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+        for river_reach in xs_df["river_reach"].unique():
+            xs_subset: gpd.GeoSeries = xs_df[xs_df["river_reach"] == river_reach]
+            points = xs_subset.boundary.explode(index_parts=True).unstack()
+            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
+            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
+            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
+            if isinstance(polygon, MultiPolygon):
+                polygons += list(polygon.geoms)
+            else:
+                polygons.append(polygon)
+        # # Code copied but cannot be implemented because I don't know where 'xs' cross section variable is meant to have been defined
+        # if len(self.junctions) > 0:
+        #     for _, j in self.junction_gdf.iterrows():
+        #         polygons.append(junction_hull(xs, j))
+        out_hull = [union_all([make_valid(p) for p in polygons])]
+        return out_hull
 
     def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
         """Get a geodataframe of a specific subtype of geometry asset."""
@@ -161,10 +350,14 @@ class GeometryAsset(GenericAsset):
             pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True)
         )  # TODO: may need to add some logic here for empy dicts
 
-    def to_gpkg(self, gpkg_path: str):
+    def iter_labeled_gdfs(self) -> Iterator[tuple[str, gpd.GeoDataFrame]]:
+        for property in self.PROPERTIES_WITH_GDF:
+            gdf = self.get_subtype_gdf(property)
+            yield property, gdf
+
+    def to_gpkg(self, gpkg_path: str) -> None:
         """Write the HEC-RAS Geometry file to geopackage."""
-        for subtype in ["rivers", "reaches", "junctions", "cross_sections", "structures"]:
-            gdf = self.get_subtype_gdf(subtype)
+        for subtype, gdf in self.iter_labeled_gdfs():
             gdf.to_file(gpkg_path, driver="GPKG", layer=subtype, ignore_index=True)
 
 
@@ -172,11 +365,11 @@ class SteadyFlowAsset(GenericAsset):
 
     def __init__(self, href, *args, **kwargs):
         super().__init__(href, *args, **kwargs)
-        self.extra_fields["ras:flow_title"] = self.ras_title
+        self.extra_fields["ras:flow_title"] = self.flow_title
         self.extra_fields["ras:number_of_profiles"] = self.n_profiles
 
     @property
-    def ras_title(self) -> str:
+    def flow_title(self) -> str:
         return search_contents(self.file_str, "Flow Title")
 
     @property
@@ -188,10 +381,10 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
 
     def __init__(self, href, *args, **kwargs):
         super().__init__(href, *args, **kwargs)
-        self.extra_fields["ras:flow_title"] = self.ras_title
+        self.extra_fields["ras:flow_title"] = self.flow_title
 
     @property
-    def ras_title(self) -> str:
+    def flow_title(self) -> str:
         tree = ET.parse(self.href)
         file_info = tree.find("FileInfo")
         return file_info.attrib.get("Title")
@@ -201,14 +394,14 @@ class UnsteadyFlowAsset(GenericAsset):
 
     def __init__(self, href, *args, **kwargs):
         super().__init__(href, *args, **kwargs)
-        self.extra_fields["ras:flow_title"] = self.ras_title
+        self.extra_fields["ras:flow_title"] = self.flow_title
 
     @property
-    def ras_title(self) -> str:
+    def flow_title(self) -> str:
         return search_contents(self.file_str, "Flow Title")
 
 
-class HdfAsset(Asset):
+class HdfAsset(LinkableAsset):
     # class to represent stac asset with properties shared between plan hdf and geom hdf
     def __init__(self, hdf_file: str, hdf_constructor: Callable[[str], RasHdf]):
         href = hdf_file
@@ -225,7 +418,7 @@ class HdfAsset(Asset):
         super().__init__(href, title, description, media_type, roles, extra_fields)
 
     @property
-    def version(self) -> str | None:
+    def file_version(self) -> str | None:
         # example property to show pattern: if attributes in which property is found is not loaded, load them
         # then use key for the property in the dictionary of attributes to retrieve the property
         if self._root_attrs == None:
@@ -233,9 +426,102 @@ class HdfAsset(Asset):
         return self._root_attrs.get("version")
 
     @property
+    def units_system(self) -> str | None:
+        pass
+
+    @property
+    def geometry_time(self) -> datetime.datetime | None:
+        pass
+
+    @property
+    def landcover_date_last_modified(self) -> datetime.datetime | None:
+        pass
+
+    @property
+    def landcover_filename(self) -> str | None:
+        pass
+
+    @property
+    def landcover_layername(self) -> str | None:
+        pass
+
+    @property
+    def rasmapperlibdll_date(self) -> datetime.datetime | None:
+        pass
+
+    @property
+    def si_units(self) -> bool | None:
+        pass
+
+    @property
+    def terrain_file_date(self) -> datetime.datetime | None:
+        pass
+
+    @property
+    def terrain_filename(self) -> str | None:
+        pass
+
+    @property
+    def terrain_layername(self) -> str | None:
+        pass
+
+    @property
+    def geometry_version(self) -> str | None:
+        pass
+
+    @property
+    def bridges(self) -> int | None:
+        pass
+
+    @property
+    def culverts(self) -> int | None:
+        pass
+
+    @property
+    def connections(self) -> int | None:
+        pass
+
+    @property
+    def inline_structures(self) -> int | None:
+        pass
+
+    @property
+    def lateral_structures(self) -> int | None:
+        pass
+
+    @property
+    def two_d_flow_cell_average_size(self) -> float | None:
+        pass
+
+    @property
+    def two_d_flow_cell_maximum_index(self) -> int | None:
+        pass
+
+    @property
+    def two_d_flow_cell_maximum_size(self) -> int | None:
+        pass
+
+    @property
+    def two_d_flow_cell_minimum_size(self) -> int | None:
+        pass
+
+    @property
     @lru_cache
     def mesh_areas(self) -> Polygon:
         pass
+
+    @property
+    @lru_cache
+    def landcover_filename(self) -> str | None:
+        # broken example property which would give a filename to use when linking assets together
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_attrs("geom_or_something")
+        return self._geom_attrs.get("land_cover_filename")
+
+    def create_links(self, asset_dict: dict[str, Asset]) -> None:
+        if self.landcover_filename:
+            landcover_asset = asset_dict[self.landcover_filename]
+            self.link_related(landcover_asset)
 
 
 class PlanHdfAsset(HdfAsset):
@@ -255,143 +541,160 @@ class PlanHdfAsset(HdfAsset):
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("base_output_interval")
 
+    @property
+    def plan_information_computation_time_step_base(self):
+        pass
+
+    @property
+    def plan_information_flow_filename(self):
+        pass
+
+    @property
+    def plan_information_geometry_filename(self):
+        pass
+
+    @property
+    def plan_information_plan_filename(self):
+        pass
+
+    @property
+    def plan_information_plan_name(self):
+        pass
+
+    @property
+    def plan_information_project_filename(self):
+        pass
+
+    @property
+    def plan_information_project_title(self):
+        pass
+
+    @property
+    def plan_information_simulation_end_time(self):
+        pass
+
+    @property
+    def plan_information_simulation_start_time(self):
+        pass
+
+    @property
+    def plan_parameters_1d_flow_tolerance(self):
+        pass
+
+    @property
+    def plan_parameters_1d_maximum_iterations(self):
+        pass
+
+    @property
+    def plan_parameters_1d_maximum_iterations_without_improvement(self):
+        pass
+
+    @property
+    def plan_parameters_1d_maximum_water_surface_error_to_abort(self):
+        pass
+
+    @property
+    def plan_parameters_1d_storage_area_elevation_tolerance(self):
+        pass
+
+    @property
+    def plan_parameters_1d_theta(self):
+        pass
+
+    @property
+    def plan_parameters_1d_theta_warmup(self):
+        pass
+
+    @property
+    def plan_parameters_1d_water_surface_elevation_tolerance(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_gate_flow_submergence_decay_exponent(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_is_stablity_factor(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_ls_stablity_factor(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_maximum_number_of_time_slices(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_minimum_time_step_for_slicinghours(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_number_of_warmup_steps(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_warmup_time_step_hours(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_weir_flow_submergence_decay_exponent(self):
+        pass
+
+    @property
+    def plan_parameters_1d2d_maxiter(self):
+        pass
+
+    @property
+    def plan_parameters_2d_equation_set(self):
+        pass
+
+    @property
+    def plan_parameters_2d_names(self):
+        pass
+
+    @property
+    def plan_parameters_2d_volume_tolerance(self):
+        pass
+
+    @property
+    def plan_parameters_2d_water_surface_tolerance(self):
+        pass
+
+    @property
+    def meteorology_dss_filename(self):
+        pass
+
+    @property
+    def meteorology_dss_pathname(self):
+        pass
+
+    @property
+    def meteorology_data_type(self):
+        pass
+
+    @property
+    def meteorology_mode(self):
+        pass
+
+    @property
+    def meteorology_raster_cellsize(self):
+        pass
+
+    @property
+    def meteorology_source(self):
+        pass
+
+    @property
+    def meteorology_units(self):
+        pass
+
 
 class GeomHdfAsset(HdfAsset):
     # class to represent stac asset for geom HDF file associated with model
     def __init__(self, hdf_file: str):
         super().__init__(hdf_file, RasGeomHdf.open_uri)
         self.hdf_object: RasGeomHdf
-
-
-class PlanAsset(GenericAsset):
-
-    def __init__(self, href: str, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
-        self.extra_fields["ras:plan_title"] = self.project_title
-        self.extra_fields["ras:short_id"] = self.short_id
-        self.extra_fields["ras:geometry"] = self.primary_geometry
-        self.extra_fields["ras:flow"] = self.primary_flow
-
-    @staticmethod
-    def media_type(href: str) -> MediaType:
-        # I think that if it ends with hdf, it should not be an instance of this class
-        if not href.endswith(".hdf"):
-            return MediaType.TEXT
-        return MediaType.HDF5
-
-    @property
-    def plan_title(self) -> str:
-        # gets title and adds to asset properties
-        title = search_contents(self.file_str, "Plan Title")
-        self.extra_fields["ras:plan_title"] = title
-
-    @property
-    def primary_geometry(self) -> str:
-        suffix = search_contents(self.file_str, "Geom File", expect_one=True)
-        return self.name_from_suffix(suffix)
-
-    @property
-    def primary_flow(self) -> str:
-        suffix = search_contents(self.file_str, "Flow File", expect_one=True)
-        return self.name_from_suffix(suffix)
-
-    @property
-    def short_id(self) -> str:
-        return search_contents(self.file_str, "Short Identifier")
-
-
-class ProjectAsset(GenericAsset):
-
-    def __init__(self, href, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
-        self.name = Path(href).name
-        self.stem = Path(href).stem
-
-    @staticmethod
-    def media_type(href: str) -> MediaType:
-        # I think that if it ends with hdf, it should not be an instance of this class
-        if not href.endswith(".hdf"):
-            return MediaType.TEXT
-        return MediaType.HDF5
-
-    @property
-    @lru_cache
-    def file_lines(self) -> list[str]:
-        with open(self.href) as f:
-            return f.readlines()
-
-    @property
-    @lru_cache
-    def project_title(self) -> str:
-        # gets title and adds to asset properties
-        title = search_contents(self.file_str, "Proj Title")
-        self.extra_fields["ras:project_title"] = title
-
-    @property
-    @lru_cache
-    def units(self) -> str | None:
-        for line in self.file_str:
-            if "Units" in line:
-                units = " ".join(line.split(" ")[:-1])
-                self.extra_fields["ras:project_units"] = units
-                return units
-
-    @property
-    @lru_cache
-    def plan_current(self) -> str | None:
-        # creates plan asset and creates link to plan asset as some type (child?) of relation to project asset
-        try:
-            suffix = search_contents(self.file_str, "Current Plan", expect_one=True)
-            return self.name_from_suffix(suffix)
-        except Exception:
-            return None
-
-    @property
-    @lru_cache
-    def plan_files(self) -> list[str]:
-        suffixes = search_contents(self.file_str, "Plan File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def geometry_files(self) -> list[str]:
-        suffixes = search_contents(self.file_str, "Geom File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def steady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_str, "Flow File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def quasi_unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_str, "QuasiSteady File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_str, "Unsteady File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    def create_links(self, asset_dict: dict[str, Asset]) -> None:
-        for plan_file in self.plan_files:
-            asset = asset_dict[plan_file]
-            self.link_child(asset)
-        for geom_file in self.geometry_files:
-            asset = asset_dict[geom_file]
-            self.link_child(asset)
-        for steady_flow_file in self.steady_flow_files:
-            asset = asset_dict[steady_flow_file]
-            self.link_child(asset)
-        for quasi_steady_flow_file in self.quasi_unsteady_flow_files:
-            asset = asset_dict[quasi_steady_flow_file]
-            self.link_child(asset)
-        for unsteady_file in self.unsteady_flow_files:
-            asset = asset_dict[unsteady_file]
-            self.link_child(asset)
 
 
 class River:
@@ -651,10 +954,19 @@ class XS:
         return q
 
 
+class StructureType(Enum):
+    XS = 1
+    CULVERT = 2
+    BRIDGE = 3
+    MULTIPLE_OPENING = 4
+    INLINE_STRUCTURE = 5
+    LATERAL_STRUCTURE = 6
+
+
 class Structure:
     """Structure."""
 
-    def __init__(self, ras_data: list, river_reach: str, river: str, reach: str, crs: str, us_xs: XS):
+    def __init__(self, ras_data: list[str], river_reach: str, river: str, reach: str, crs: str, us_xs: XS):
         self.ras_data = ras_data
         self.crs = crs
         self.river = river
@@ -679,23 +991,28 @@ class Structure:
         return float(self.split_structure_header(1))
 
     @property
-    def type(self) -> int:
+    def type(self) -> StructureType:
         """Structure type."""
-        return int(self.split_structure_header(0))
+        return StructureType(int(self.split_structure_header(0)))
 
     def structure_data(self, position: int) -> str | int:
         """Structure data."""
-        if self.type in [2, 3, 4]:  # 1 = Cross Section, 2 = Culvert, 3 = Bridge, 4 = Multiple Opening
+        if self.type in [
+            StructureType.XS,
+            StructureType.CULVERT,
+            StructureType.BRIDGE,
+            StructureType.MULTIPLE_OPENING,
+        ]:  # 1 = Cross Section, 2 = Culvert, 3 = Bridge, 4 = Multiple Opening
             data = text_block_from_start_str_length(
                 "Deck Dist Width WeirC Skew NumUp NumDn MinLoCord MaxHiCord MaxSubmerge Is_Ogee", 1, self.ras_data
             )
             return data[0].split(",")[position]
-        elif self.type == 5:  # 5 = Inline Structure
+        elif self.type == StructureType.INLINE_STRUCTURE:  # 5 = Inline Structure
             data = text_block_from_start_str_length(
                 "IW Dist,WD,Coef,Skew,MaxSub,Min_El,Is_Ogee,SpillHt,DesHd", 1, self.ras_data
             )
             return data[0].split(",")[position]
-        elif self.type == 6:  # 6 = Lateral Structure
+        elif self.type == StructureType.LATERAL_STRUCTURE:  # 6 = Lateral Structure
             return 0
 
     @property
@@ -733,7 +1050,7 @@ class Structure:
 class Reach:
     """HEC-RAS River Reach."""
 
-    def __init__(self, ras_data: list, river_reach: str, crs: str):
+    def __init__(self, ras_data: list[str], river_reach: str, crs: str):
         reach_lines = text_block_from_start_end_str(f"River Reach={river_reach}", ["River Reach"], ras_data, -1)
         self.ras_data = reach_lines
         self.crs = crs
@@ -961,7 +1278,7 @@ class Junction:
 
 class StorageArea:
 
-    def __init__(self, ras_data: list, crs: str):
+    def __init__(self, ras_data: list[str], crs: str):
         self.crs = crs
         self.ras_data = ras_data
         # TODO: Implement this
@@ -969,7 +1286,20 @@ class StorageArea:
 
 class Connection:
 
-    def __init__(self, ras_data: list, crs: str):
+    def __init__(self, ras_data: list[str], crs: str):
         self.crs = crs
         self.ras_data = ras_data
         # TODO: Implement this
+
+
+RasAsset: TypeAlias = (
+    GenericAsset
+    | GeometryAsset
+    | PlanAsset
+    | ProjectAsset
+    | QuasiUnsteadyFlowAsset
+    | RasGeomHdf
+    | RasPlanHdf
+    | SteadyFlowAsset
+    | UnsteadyFlowAsset
+)
