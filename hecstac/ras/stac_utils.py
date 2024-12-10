@@ -1,11 +1,12 @@
 from ras_asset import (
     GenericAsset,
     GeometryAsset,
+    GeomHdfAsset,
     PlanAsset,
+    PlanHdfAsset,
     ProjectAsset,
     QuasiUnsteadyFlowAsset,
-    RasGeomHdf,
-    RasPlanHdf,
+    RasAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
 )
@@ -13,15 +14,5 @@ from ras_asset import (
 
 def asset_factory(
     filepath: str,
-) -> (
-    GenericAsset
-    | GeometryAsset
-    | PlanAsset
-    | ProjectAsset
-    | QuasiUnsteadyFlowAsset
-    | RasGeomHdf
-    | RasPlanHdf
-    | SteadyFlowAsset
-    | UnsteadyFlowAsset
-):
+) -> RasAsset:
     pass
