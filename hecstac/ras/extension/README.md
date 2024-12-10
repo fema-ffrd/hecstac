@@ -23,8 +23,15 @@ Item properties include:
 
 ## Asset properties
 
-Possible asset properties for plan assets include:
 (** indicates that a property is referenced in different assets, ++ indicates that it has been identified as ignorable)
+
+Possible asset properties for project assets include:
+
+- project_title
+- ras_version
+- project_units
+
+Possible asset properties for plan assets include:
 
 - plan_title **
 - primary_geometry
