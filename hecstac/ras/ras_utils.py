@@ -4,9 +4,10 @@ from functools import wraps
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
-from shapely.geometry import LineString, MultiPoint, Point
+from shapely.geometry import LineString, MultiPoint, Point, Polygon
 
 
 def is_ras_prj(url: str) -> bool:
@@ -19,7 +20,53 @@ def is_ras_prj(url: str) -> bool:
         return False
 
 
-def search_contents(lines: list, search_string: str, token: str = "=", expect_one: bool = True) -> list[str] | str:
+def determine_junction_xs(xs: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> gpd.GeoDataFrame:
+    """Determine the cross sections that bound a junction."""
+    junction_xs = []
+    for us_river, us_reach in zip(junction.us_rivers.split(","), junction.us_reaches.split(",")):
+        xs_us_river_reach = xs[(xs["river"] == us_river) & (xs["reach"] == us_reach)]
+        junction_xs.append(
+            xs_us_river_reach[xs_us_river_reach["river_station"] == xs_us_river_reach["river_station"].min()]
+        )
+    for ds_river, ds_reach in zip(junction.ds_rivers.split(","), junction.ds_reaches.split(",")):
+        xs_ds_river_reach = xs[(xs["river"] == ds_river) & (xs["reach"] == ds_reach)]
+        xs_ds_river_reach["geometry"] = xs_ds_river_reach.reverse()
+        junction_xs.append(
+            xs_ds_river_reach[xs_ds_river_reach["river_station"] == xs_ds_river_reach["river_station"].max()]
+        )
+    return pd.concat(junction_xs)
+
+
+def determine_xs_order(row: gpd.GeoSeries, junction_xs: gpd.gpd.GeoDataFrame):
+    """Detemine what order cross sections bounding a junction should be in to produce a valid polygon."""
+    candidate_lines = junction_xs[junction_xs["river_reach_rs"] != row["river_reach_rs"]]
+    candidate_lines["distance"] = candidate_lines["start"].distance(row.end)
+    return candidate_lines.loc[candidate_lines["distance"] == candidate_lines["distance"].min(), "river_reach_rs"].iloc[
+        0
+    ]
+
+
+def junction_hull(xs: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> gpd.GeoDataFrame:
+    """Compute and return the concave hull (polygon) for a juction."""
+    junction_xs = determine_junction_xs(xs, junction)
+
+    junction_xs["start"] = junction_xs.apply(lambda row: row.geometry.boundary.geoms[0], axis=1)
+    junction_xs["end"] = junction_xs.apply(lambda row: row.geometry.boundary.geoms[1], axis=1)
+    junction_xs["to_line"] = junction_xs.apply(lambda row: determine_xs_order(row, junction_xs), axis=1)
+
+    coords = []
+    first_to_line = junction_xs["to_line"].iloc[0]
+    to_line = first_to_line
+    while True:
+        xs = junction_xs[junction_xs["river_reach_rs"] == to_line]
+        coords += list(xs.iloc[0].geometry.coords)
+        to_line = xs["to_line"].iloc[0]
+        if to_line == first_to_line:
+            break
+    return Polygon(coords)
+
+
+def search_contents(lines: list[str], search_string: str, token: str = "=", expect_one: bool = True) -> list[str] | str:
     """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
     results = []
     for line in lines:
