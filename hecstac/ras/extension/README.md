@@ -8,10 +8,6 @@ Contains JSON schema used for defining and validating terms relating to properti
 
 Item properties include:
 
-- model_name
-- ras_version
-- ras_units
-- plan_current
 - has_2d
 - has_1d
 - datetime_source
@@ -29,7 +25,15 @@ Possible asset properties for project assets include:
 
 - project_title
 - ras_version
+- model_name
+- ras_version
 - project_units
+
+Possible properties for links between assets:
+
+- link_type (a string value which describes the specific way in which an asset is related to another asset)
+
+  - possible values include [plan_referenced, plan_current, geometry_referenced, steady_flow_referenced, quasi_unsteady_flow_referenced, unsteady_flow_referenced, landcover_referenced, terrain_referenced, meteorology_dss_referenced]
 
 Possible asset properties for plan assets include:
 

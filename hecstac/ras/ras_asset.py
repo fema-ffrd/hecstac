@@ -1,16 +1,20 @@
 import datetime
 import json
+import logging
 import math
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Iterator, TypeAlias
+from typing import Any, Callable, Iterator, TypeAlias
 
 import geopandas as gpd
 import pandas as pd
+from errors import GeometryAssetInvalidCRSError
+from pyproj import CRS
 from pystac import Asset, Link, MediaType, RelType
+from pystac.extensions.projection import ProjectionExtension
 from ras_utils import (
     data_pairs_from_text_block,
     delimited_pairs_to_lists,
@@ -33,29 +37,35 @@ from shapely import (
 
 
 class LinkableAsset(Asset):
-    def _set_link(self, asset: Asset, rel: RelType | str) -> None:
-        link = Link(rel, asset)
+    def _set_link(self, asset: Asset, rel: RelType | str, extra_fields: dict[str, Any] | None) -> None:
+        link = Link(rel, asset, extra_fields=extra_fields)
         link.set_owner(self)
 
-    def link_child(self, asset: Asset) -> None:
-        self._set_link(asset, RelType.CHILD)
+    def link_child(self, asset: Asset, extra_fields: dict[str, Any] | None = None) -> None:
+        self._set_link(asset, RelType.CHILD, extra_fields)
 
-    def link_related(self, asset: Asset) -> None:
-        self._set_link(asset, "related")
+    def link_related(self, asset: Asset, extra_fields: dict[str, Any] | None = None) -> None:
+        self._set_link(asset, "related", extra_fields)
 
 
 class GenericAsset(LinkableAsset):
-
-    def __init__(self, href: str, *args, **kwargs):
-        # ensure ras extension is included in extensions link
-        super().__init__(href, *args, **kwargs)
+    def __init__(
+        self,
+        href: str,
+        title: str | None,
+        description: str | None,
+        media_type: str | MediaType | None,
+        roles: list[str] | None,
+        extra_fields: dict[str, Any] | None,
+    ):
+        roles = list(set(roles))
         self.name = Path(href).name
         self.stem = Path(href).stem
+        if title == None:
+            title = self.name
         with open(href) as f:
             self.file_str = f.read().splitlines()
-
-        if href.endswith(".hdf"):
-            self.roles.append(MediaType.HDF5)
+        super().__init__(href, title, description, media_type, roles, extra_fields)
 
     def name_from_suffix(self, suffix: str) -> str:
         return self.stem + "." + suffix
@@ -72,30 +82,30 @@ class GenericAsset(LinkableAsset):
 
 class ProjectAsset(GenericAsset):
 
-    def __init__(self, href, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
-        self.name = Path(href).name
-        self.stem = Path(href).stem
+    def __init__(self, project_file: str, **kwargs):
+        media_type = MediaType.TEXT
+        roles: list[str] = kwargs.get("roles", [])
+        roles.extend(["project-file", "ras-file"])
+        super().__init__(
+            project_file,
+            kwargs.get("title"),
+            kwargs.get("description", "The HEC-RAS project file."),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
 
-    @staticmethod
-    def media_type(href: str) -> MediaType:
-        # I think that if it ends with hdf, it should not be an instance of this class
-        if not href.endswith(".hdf"):
-            return MediaType.TEXT
-        return MediaType.HDF5
-
-    @property
-    @lru_cache
-    def file_lines(self) -> list[str]:
-        with open(self.href) as f:
-            return f.readlines()
+    def populate(self) -> None:
+        self.extra_fields["ras:project_title"] = self.project_title
+        self.extra_fields["ras:project_units"] = self.project_units
+        self.extra_fields["ras:model_name"] = self.model_name
+        self.extra_fields["ras:ras_version"] = self.ras_version
 
     @property
     @lru_cache
     def project_title(self) -> str:
-        # gets title and adds to asset properties
         title = search_contents(self.file_str, "Proj Title")
-        self.extra_fields["ras:project_title"] = title
+        return title
 
     @property
     @lru_cache
@@ -155,37 +165,47 @@ class ProjectAsset(GenericAsset):
 
     def create_links(self, asset_dict: dict[str, Asset]) -> None:
         for plan_file in self.plan_files:
+            link_type = "plan_referenced"
+            # give link extra attribute denoting that linked asset is current plan if it is current plan
+            if plan_file == self.plan_current:
+                link_type = "plan_current"
             asset = asset_dict[plan_file]
-            self.link_related(asset)
+            self.link_related(asset, {"ras:link_type", link_type})
         for geom_file in self.geometry_files:
             asset = asset_dict[geom_file]
-            self.link_related(asset)
+            self.link_related(asset, {"ras:link_type", "geometry_referenced"})
         for steady_flow_file in self.steady_flow_files:
             asset = asset_dict[steady_flow_file]
-            self.link_related(asset)
-        for quasi_steady_flow_file in self.quasi_unsteady_flow_files:
-            asset = asset_dict[quasi_steady_flow_file]
-            self.link_related(asset)
+            self.link_related(asset, {"ras:link_type", "steady_flow_referenced"})
+        for quasi_unsteady_flow_file in self.quasi_unsteady_flow_files:
+            asset = asset_dict[quasi_unsteady_flow_file]
+            self.link_related(asset, {"ras:link_type", "quasi_unsteady_flow_referenced"})
         for unsteady_file in self.unsteady_flow_files:
             asset = asset_dict[unsteady_file]
-            self.link_related(asset)
+            self.link_related(asset, {"ras:link_type", "unsteady_flow_referenced"})
 
 
 class PlanAsset(GenericAsset):
 
-    def __init__(self, href: str, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
+    def __init__(self, plan_file: str, **kwargs):
+        media_type = MediaType.TEXT
+        roles: list[str] = kwargs.get("roles", [])
+        roles.extend(["plan-file", "ras-file"])
+        super().__init__(
+            plan_file,
+            kwargs.get("title"),
+            kwargs.get(
+                "description",
+                "The plan file which contains a list of associated input files and all simulation options.",
+            ),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
+
+    def populate(self) -> None:
         self.extra_fields["ras:plan_title"] = self.plan_title
         self.extra_fields["ras:short_id"] = self.short_id
-        self.extra_fields["ras:geometry"] = self.primary_geometry
-        self.extra_fields["ras:flow"] = self.primary_flow
-
-    @staticmethod
-    def media_type(href: str) -> MediaType:
-        # I think that if it ends with hdf, it should not be an instance of this class
-        if not href.endswith(".hdf"):
-            return MediaType.TEXT
-        return MediaType.HDF5
 
     @property
     def plan_title(self) -> str:
@@ -209,17 +229,51 @@ class PlanAsset(GenericAsset):
 
     def create_links(self, asset_dict: dict[str, Asset]) -> None:
         primary_geometry_asset = asset_dict[self.primary_geometry]
-        self.link_related(primary_geometry_asset)
+        self.link_related(primary_geometry_asset, {"ras:link_type": "geometry_referenced"})
         primary_flow_asset = asset_dict[self.primary_flow]
-        self.link_related(primary_flow_asset)
+        flow_link_extra_fields = None
+        if isinstance(primary_flow_asset, SteadyFlowAsset):
+            flow_link_extra_fields = {"ras:link_type": "steady_flow_referenced"}
+        elif isinstance(primary_flow_asset, QuasiUnsteadyFlowAsset):
+            flow_link_extra_fields = {"ras:link_type": "quasi_unsteady_flow_referenced"}
+        elif isinstance(primary_flow_asset, UnsteadyFlowAsset):
+            flow_link_extra_fields = {"ras:link_type": "unsteady_flow_referenced"}
+        else:
+            logging.warning(
+                f"Asset being linked to plan asset {self.plan_title} is not one of the following: ['SteadyFlowAsset', 'QuasiUnsteadyFlowAsset', 'UnsteadyFlowAsset']; cannot provide a link type for the link object being created"
+            )
+        self.link_related(primary_flow_asset, flow_link_extra_fields)
 
 
 class GeometryAsset(GenericAsset):
     PROPERTIES_WITH_GDF = ["rivers", "reaches", "junctions", "cross_sections", "structures"]
 
-    def __init__(self, href: str = "null", *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
-        self.crs = kwargs.get("crs", None)
+    def __init__(self, geom_file: str, crs: str, **kwargs):
+        self.validate_crs(crs)
+        media_type = MediaType.TEXT
+        roles: list[str] = kwargs.get("roles", [])
+        roles.extend(["geometry-file", "ras-file"])
+        super().__init__(
+            geom_file,
+            kwargs.get("title"),
+            kwargs.get(
+                "description",
+                "The geometry file which contains cross-sectional, hydraulic structures, and modeling approach data.",
+            ),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
+        self.crs = crs
+
+    @staticmethod
+    def validate_crs(crs: str) -> None:
+        try:
+            CRS.from_user_input(crs)
+        except Exception as exc:
+            raise GeometryAssetInvalidCRSError(*exc.args)
+
+    def populate(self) -> None:
         self.extra_fields["ras:geom_title"] = self.geom_title
         self.extra_fields["ras:rivers"] = len(self.rivers)
         self.extra_fields["ras:reaches"] = len(self.reaches)
@@ -246,13 +300,11 @@ class GeometryAsset(GenericAsset):
             "2d_flow_areas": 0,
             "total_cells": 0,
         }
-        self.extra_fields["ras:sa_connections"] = 0
-        self.geometry = json.load(to_geojson(self.concave_hull))
-        self.bbox = self.concave_hull.bounds
 
-        # I think that if it ends with hdf, it should not be an instance of this class
-        if not href.endswith(".hdf"):
-            self.roles.append(MediaType.TEXT)
+        self.extra_fields["ras:sa_connections"] = 0
+        proj = ProjectionExtension.ext(self, True)
+        proj.geometry = json.load(to_geojson(self.concave_hull))
+        proj.bbox = self.concave_hull.bounds
 
     @property
     def geom_title(self) -> str:
@@ -345,7 +397,7 @@ class GeometryAsset(GenericAsset):
 
     def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
         """Get a geodataframe of a specific subtype of geometry asset."""
-        tmp_objs = getattr(self, subtype)
+        tmp_objs: dict[str, RasGeometryClass] = getattr(self, subtype)
         return gpd.GeoDataFrame(
             pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True)
         )  # TODO: may need to add some logic here for empy dicts
@@ -363,8 +415,23 @@ class GeometryAsset(GenericAsset):
 
 class SteadyFlowAsset(GenericAsset):
 
-    def __init__(self, href, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
+    def __init__(self, steady_flow_file: str, **kwargs):
+        media_type = MediaType.TEXT
+        roles: list[str] = kwargs.get("roles", [])
+        roles.extend(["steady-flow-file", "ras-file"])
+        super().__init__(
+            steady_flow_file,
+            kwargs.get("title"),
+            kwargs.get(
+                "description",
+                "Steady Flow file which contains profile information, flow data, and boundary conditions.",
+            ),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
+
+    def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
         self.extra_fields["ras:number_of_profiles"] = self.n_profiles
 
@@ -379,8 +446,20 @@ class SteadyFlowAsset(GenericAsset):
 
 class QuasiUnsteadyFlowAsset(GenericAsset):
 
-    def __init__(self, href, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
+    def __init__(self, quasi_unsteady_flow_file: str, **kwargs):
+        media_type = MediaType.TEXT
+        roles: list[str] = kwargs.get("roles", [])
+        roles.extend(["quasi-unsteady-flow-file", "ras-file"])
+        super().__init__(
+            quasi_unsteady_flow_file,
+            kwargs.get("title"),
+            kwargs.get("description", "Quasi-Unsteady Flow file."),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
+
+    def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
 
     @property
@@ -392,8 +471,23 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
 
 class UnsteadyFlowAsset(GenericAsset):
 
-    def __init__(self, href, *args, **kwargs):
-        super().__init__(href, *args, **kwargs)
+    def __init__(self, unsteady_flow_file: str, **kwargs):
+        media_type = MediaType.TEXT
+        roles: list[str] = kwargs.get("roles", [])
+        roles.extend(["unsteady-flow-file", "ras-file"])
+        super().__init__(
+            unsteady_flow_file,
+            kwargs.get("title"),
+            kwargs.get(
+                "description",
+                "The unsteady file contains hydrographs amd initial conditions, as well as any flow options.",
+            ),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
+
+    def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
 
     @property
@@ -403,19 +497,34 @@ class UnsteadyFlowAsset(GenericAsset):
 
 class HdfAsset(LinkableAsset):
     # class to represent stac asset with properties shared between plan hdf and geom hdf
-    def __init__(self, hdf_file: str, hdf_constructor: Callable[[str], RasHdf]):
-        href = hdf_file
-        title = ""
-        description = ""
-        media_type = ""
-        roles = []
-        extra_fields = {}
+    def __init__(self, hdf_file: str, hdf_constructor: Callable[[str], RasHdf], **kwargs):
+        media_type = MediaType.HDF
+        roles: list[str] = kwargs.get("roles", [])
+        roles.append("ras-file")
+        super().__init__(
+            hdf_file,
+            kwargs.get("title"),
+            kwargs.get("description"),
+            media_type,
+            roles,
+            kwargs.get("extra_fields"),
+        )
         self.hdf_object = hdf_constructor(hdf_file)
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
         self._2d_flow_attrs: dict | None = None
-        super().__init__(href, title, description, media_type, roles, extra_fields)
+
+    def populate(self, optional_property_dict: dict[str, str], required_property_dict: dict[str, str]) -> None:
+        # go through dictionary of stac property names and class property names, only adding property to extra fields if the value is not None
+        for stac_property_name, class_property_name in optional_property_dict.items():
+            property_value = getattr(self, class_property_name)
+            if property_value != None:
+                self.extra_fields[stac_property_name] = property_value
+        # go through dictionary of stac property names and class property names, adding all properties to extra fields regardless of value
+        for stac_property_name, class_property_name in required_property_dict.items():
+            property_value = getattr(self, class_property_name)
+            self.extra_fields[stac_property_name] = property_value
 
     @property
     def file_version(self) -> str | None:
@@ -521,13 +630,14 @@ class HdfAsset(LinkableAsset):
     def create_links(self, asset_dict: dict[str, Asset]) -> None:
         if self.landcover_filename:
             landcover_asset = asset_dict[self.landcover_filename]
-            self.link_related(landcover_asset)
+            self.link_related(landcover_asset, {"ras:link_type": "landcover_referenced"})
 
 
 class PlanHdfAsset(HdfAsset):
     # class to represent stac asset for plan HDF file associated with model
-    def __init__(self, hdf_file: str):
-        super().__init__(hdf_file, RasPlanHdf)
+    def __init__(self, hdf_file: str, **kwargs):
+        description = kwargs.get("description", "The HEC-RAS plan HDF file.")
+        super().__init__(hdf_file, RasPlanHdf, description=description)
         self.hdf_object: RasPlanHdf
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
@@ -690,9 +800,10 @@ class PlanHdfAsset(HdfAsset):
         pass
 
 
-class GeomHdfAsset(HdfAsset):
+class GeometryHdfAsset(HdfAsset):
     # class to represent stac asset for geom HDF file associated with model
-    def __init__(self, hdf_file: str):
+    def __init__(self, hdf_file: str, **kwargs):
+        description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
         super().__init__(hdf_file, RasGeomHdf.open_uri)
         self.hdf_object: RasGeomHdf
 
@@ -1298,8 +1409,10 @@ RasAsset: TypeAlias = (
     | PlanAsset
     | ProjectAsset
     | QuasiUnsteadyFlowAsset
-    | RasGeomHdf
-    | RasPlanHdf
+    | GeometryHdfAsset
+    | PlanHdfAsset
     | SteadyFlowAsset
     | UnsteadyFlowAsset
 )
+
+RasGeometryClass: TypeAlias = Reach | Junction | XS | Structure
