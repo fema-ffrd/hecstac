@@ -36,20 +36,7 @@ from .ras_utils import (
 )
 
 
-class LinkableAsset(Asset):
-    def _set_link(self, asset: Asset, rel: RelType | str, extra_fields: dict[str, Any] | None) -> None:
-        link = Link(rel, asset, extra_fields=extra_fields)
-        print(f"Creating link {link} between {self} and {asset}")
-        link.set_owner(self)
-
-    def link_child(self, asset: Asset, extra_fields: dict[str, Any] | None = None) -> None:
-        self._set_link(asset, RelType.CHILD, extra_fields)
-
-    def link_related(self, asset: Asset, extra_fields: dict[str, Any] | None = None) -> None:
-        self._set_link(asset, "related", extra_fields)
-
-
-class GenericAsset(LinkableAsset):
+class GenericAsset(Asset):
     def __init__(
         self,
         href: str,
@@ -60,8 +47,10 @@ class GenericAsset(LinkableAsset):
         extra_fields: dict[str, Any] | None,
     ):
         roles = list(set(roles))
-        self.name = Path(href).name
-        self.stem = Path(href).stem
+        href_path = Path(href)
+        self.parent = href_path.parent
+        self.name = href_path.name
+        self.stem = href_path.stem
         if title == None:
             title = self.name
         with open(href) as f:
@@ -70,6 +59,9 @@ class GenericAsset(LinkableAsset):
 
     def name_from_suffix(self, suffix: str) -> str:
         return self.stem + "." + suffix
+
+    def file_path_from_suffix(self, suffix: str) -> str:
+        return self.parent.joinpath(self.stem + "." + suffix).resolve()
 
     @property
     def program_version(self) -> str:
@@ -122,7 +114,7 @@ class ProjectAsset(GenericAsset):
     def plan_current(self) -> str | None:
         try:
             suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
-            return self.name_from_suffix(suffix)
+            return self.file_path_from_suffix(suffix)
         except Exception:
             return None
 
@@ -138,52 +130,59 @@ class ProjectAsset(GenericAsset):
     @lru_cache
     def plan_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Plan File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
+        return [self.file_path_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def geometry_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Geom File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
+        return [self.file_path_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def steady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Flow File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
+        return [self.file_path_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def quasi_unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
+        return [self.file_path_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
+        return [self.file_path_from_suffix(i) for i in suffixes]
 
-    def create_links(self, asset_dict: dict[str, Asset]) -> None:
+    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
+        plan_file_list: list[str] = []
         for plan_file in self.plan_files:
-            link_type = "plan_referenced"
-            # give link extra attribute denoting that linked asset is current plan if it is current plan
-            if plan_file == self.plan_current:
-                link_type = "plan_current"
             asset = asset_dict[plan_file]
-            self.link_related(asset, {"ras:link_type", link_type})
+            if plan_file == self.plan_current:
+                self.extra_fields["ras:plan_current"] = asset.href
+            plan_file_list.append(asset.href)
+        self.extra_fields["ras:plan_files"] = plan_file_list
+        geom_file_list: list[str] = []
         for geom_file in self.geometry_files:
             asset = asset_dict[geom_file]
-            self.link_related(asset, {"ras:link_type", "geometry_referenced"})
+            geom_file_list.append(asset.href)
+        self.extra_fields["ras:geom_files"] = geom_file_list
+        steady_flow_file_list: list[str] = []
         for steady_flow_file in self.steady_flow_files:
             asset = asset_dict[steady_flow_file]
-            self.link_related(asset, {"ras:link_type", "steady_flow_referenced"})
+            steady_flow_file_list.append(asset.href)
+        self.extra_fields["ras:steady_flow_files"] = steady_flow_file_list
+        quasi_unsteady_flow_file_list: list[str] = []
         for quasi_unsteady_flow_file in self.quasi_unsteady_flow_files:
             asset = asset_dict[quasi_unsteady_flow_file]
-            self.link_related(asset, {"ras:link_type", "quasi_unsteady_flow_referenced"})
+            quasi_unsteady_flow_file_list.append(asset.href)
+        self.extra_fields["ras:quasi_unsteady_flow_files"] = quasi_unsteady_flow_file_list
+        unsteady_flow_file_list: list[str] = []
         for unsteady_file in self.unsteady_flow_files:
             asset = asset_dict[unsteady_file]
-            self.link_related(asset, {"ras:link_type", "unsteady_flow_referenced"})
+        self.extra_fields["ras:unsteady_flow_files"] = unsteady_flow_file_list
 
 
 class PlanAsset(GenericAsset):
@@ -217,33 +216,32 @@ class PlanAsset(GenericAsset):
     @property
     def primary_geometry(self) -> str:
         suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
-        return self.name_from_suffix(suffix)
+        return self.file_path_from_suffix(suffix)
 
     @property
     def primary_flow(self) -> str:
         suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
-        return self.name_from_suffix(suffix)
+        return self.file_path_from_suffix(suffix)
 
     @property
     def short_id(self) -> str:
         return search_contents(self.file_lines, "Short Identifier")
 
-    def create_links(self, asset_dict: dict[str, Asset]) -> None:
+    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
         primary_geometry_asset = asset_dict[self.primary_geometry]
-        self.link_related(primary_geometry_asset, {"ras:link_type": "geometry_referenced"})
+        self.extra_fields["ras:geom_file"] = primary_geometry_asset.href
         primary_flow_asset = asset_dict[self.primary_flow]
-        flow_link_extra_fields = None
         if isinstance(primary_flow_asset, SteadyFlowAsset):
-            flow_link_extra_fields = {"ras:link_type": "steady_flow_referenced"}
+            property_name = "ras:steady_flow_file"
         elif isinstance(primary_flow_asset, QuasiUnsteadyFlowAsset):
-            flow_link_extra_fields = {"ras:link_type": "quasi_unsteady_flow_referenced"}
+            property_name = "ras:quasi_unsteady_flow_file"
         elif isinstance(primary_flow_asset, UnsteadyFlowAsset):
-            flow_link_extra_fields = {"ras:link_type": "unsteady_flow_referenced"}
+            property_name = "ras:unsteady_flow_file"
         else:
             logging.warning(
                 f"Asset being linked to plan asset {self.plan_title} is not one of the following: ['SteadyFlowAsset', 'QuasiUnsteadyFlowAsset', 'UnsteadyFlowAsset']; cannot provide a link type for the link object being created"
             )
-        self.link_related(primary_flow_asset, flow_link_extra_fields)
+        self.extra_fields[property_name] = primary_flow_asset.href
 
 
 class GeometryAsset(GenericAsset):
@@ -554,7 +552,7 @@ class UnsteadyFlowAsset(GenericAsset):
         return search_contents(self.file_lines, "Flow Title")
 
 
-class HdfAsset(LinkableAsset):
+class HdfAsset(Asset):
     # class to represent stac asset with properties shared between plan hdf and geom hdf
     def __init__(self, hdf_file: str, hdf_constructor: Callable[[str], RasHdf], **kwargs):
         media_type = MediaType.HDF
@@ -568,6 +566,7 @@ class HdfAsset(LinkableAsset):
             roles,
             kwargs.get("extra_fields"),
         )
+        self.parent = Path(hdf_file).parent
         self.hdf_object = hdf_constructor(hdf_file)
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
@@ -686,10 +685,10 @@ class HdfAsset(LinkableAsset):
             self._geom_attrs = self.hdf_object.get_attrs("geom_or_something")
         return self._geom_attrs.get("land_cover_filename")
 
-    def create_links(self, asset_dict: dict[str, Asset]) -> None:
+    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
         if self.landcover_filename:
-            landcover_asset = asset_dict[self.landcover_filename]
-            self.link_related(landcover_asset, {"ras:link_type": "landcover_referenced"})
+            landcover_asset = asset_dict[self.parent.joinpath(self.landcover_filename).resolve()]
+            self.extra_fields["ras:landcover_file"] = landcover_asset.href
 
 
 class PlanHdfAsset(HdfAsset):

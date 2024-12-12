@@ -70,7 +70,7 @@ class RasModelItem(Item):
         self._plan_files: list[PlanAsset] = []
         self._flow_files: list[SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset] = []
         self._geom_files: list[GeometryAsset | GeometryHdfAsset] = []
-        self._linkable_files: list[ProjectAsset | PlanAsset | PlanHdfAsset | GeometryHdfAsset] = []
+        self._files_with_associated_assets: list[ProjectAsset | PlanAsset | PlanHdfAsset | GeometryHdfAsset] = []
         self._has_1d = False
         self._has_2d = False
         self._dts: list[dt.datetime] = []
@@ -224,9 +224,9 @@ class RasModelItem(Item):
         self.extra_fields["ras:has_1d"] = self.has_1d
         self.extra_fields["ras:has_2d"] = self.has_2d
         # once all assets are created, populate links between assets
-        for asset in self._linkable_files:
+        for asset in self._files_with_associated_assets:
             print(f"creating link for asset {asset}")
-            asset.create_links(self.assets)
+            asset.associate_related_assets(self.assets)
 
     def add_asset(self, url: str) -> None:
         """Add an asset to the item."""
@@ -237,14 +237,14 @@ class RasModelItem(Item):
             if self._project is not None:
                 f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
             self._project = asset
-            self._linkable_files.append(asset)
+            self._files_with_associated_assets.append(asset)
         elif isinstance(asset, (PlanAsset, PlanHdfAsset)):
             self._plan_files.append(asset)
-            self._linkable_files.append(asset)
+            self._files_with_associated_assets.append(asset)
         elif isinstance(asset, (GeometryAsset, GeometryHdfAsset)):
             self._geom_files.append(asset)
             if isinstance(asset, GeometryHdfAsset):
-                self._linkable_files.append(asset)
+                self._files_with_associated_assets.append(asset)
                 # TODO: figure out how to determine has_1d, has_2d, and _dts from HDF asset alone
             if isinstance(asset, GeometryAsset):
                 if self._has_1d == False and asset.has_1d:
@@ -265,7 +265,7 @@ class RasModelItem(Item):
         if self._project == None:
             raise FileNotFoundError(f"no project file found")
         # after autofind has been run (building all assets associated with the item in the progress), create links between project asset and assets it references
-        self._project.create_links(self.assets)
+        self._project.associate_related_assets(self.assets)
         return self._project
 
     @property

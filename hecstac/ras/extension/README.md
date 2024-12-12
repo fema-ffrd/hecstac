@@ -28,8 +28,10 @@ Possible asset properties for project assets include:
 - model_name
 - ras_version
 - project_units
-
-Possible properties for links between assets:
+- plan_current
+- plan_files
+- geom_files
+- flow_files
 
 - link_type (a string value which describes the specific way in which an asset is related to another asset)
 
@@ -38,8 +40,8 @@ Possible properties for links between assets:
 Possible asset properties for plan assets include:
 
 - plan_title **
-- primary_geometry
-- primary_flow
+- geometry_file
+- flow_file
 - short_identifier **
 
 Possible asset properties for geom assets include:
