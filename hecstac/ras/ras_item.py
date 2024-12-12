@@ -8,6 +8,7 @@ from typing import Any
 from matplotlib.figure import Figure
 from pyproj import CRS, Transformer
 from pystac import Collection, Item
+from pystac.extensions.projection import ProjectionExtension
 from shapely import Geometry, Polygon, simplify, to_geojson, union_all
 from shapely.ops import transform
 
@@ -43,7 +44,7 @@ class RasModelItem(Item):
         prj_file: str,
         crs: str = "",
         href: str = "",
-        simplify_tolerance: float | None = 0.01,
+        simplify_tolerance: float | None = 0.001,
         collection: str | Collection | None = None,
     ):
         id = ""
@@ -81,7 +82,7 @@ class RasModelItem(Item):
         pyproj_crs = CRS.from_user_input(self.crs)
         wgs_crs = CRS.from_authority("EPSG", "4326")
         if pyproj_crs != wgs_crs:
-            transformer = Transformer.from_crs(pyproj_crs, wgs_crs)
+            transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
             return transform(transformer.transform, geom)
         return geom
 
@@ -113,12 +114,13 @@ class RasModelItem(Item):
                 for geom_asset in self.geometry_files:
                     if isinstance(geom_asset, GeometryHdfAsset):
                         if self.simplify_tolerance:
-                            mesh_areas = simplify(geom_asset.mesh_areas, self.simplify_tolerance)
+                            mesh_areas = simplify(
+                                self._transform_geometry(geom_asset.mesh_areas), self.simplify_tolerance
+                            )
                         else:
-                            mesh_areas = geom_asset.mesh_areas
+                            mesh_areas = self._transform_geometry(geom_asset.mesh_areas)
                         mesh_area_polygons.append(mesh_areas)
-                unioned_geometry = union_all(mesh_area_polygons)
-                self._geometry = self._transform_geometry(unioned_geometry)
+                self._geometry = union_all(mesh_area_polygons)
                 stac_geom = json.loads(to_geojson(self._geometry))
                 return stac_geom
             # if hdf file is not present, get concave hull of cross sections and use as geometry
@@ -127,12 +129,13 @@ class RasModelItem(Item):
                 for geom_asset in self.geometry_files:
                     if isinstance(geom_asset, GeometryAsset):
                         if self.simplify_tolerance:
-                            concave_hull = simplify(geom_asset.concave_hull, self.simplify_tolerance)
+                            concave_hull = simplify(
+                                self._transform_geometry(geom_asset.concave_hull), self.simplify_tolerance
+                            )
                         else:
-                            concave_hull = geom_asset.concave_hull
+                            concave_hull = self._transform_geometry(geom_asset.concave_hull)
                         concave_hull_polygons.append(concave_hull)
-                unioned_geometry = union_all(concave_hull_polygons)
-                self._geometry = self._transform_geometry(unioned_geometry)
+                self._geometry = union_all(concave_hull_polygons)
                 stac_geom = json.loads(to_geojson(self._geometry))
                 return stac_geom
         stac_geom = json.loads(to_geojson(self._geometry))
@@ -223,9 +226,8 @@ class RasModelItem(Item):
         self.extra_fields["ras:datetime_source"] = self._datetime_source
         self.extra_fields["ras:has_1d"] = self.has_1d
         self.extra_fields["ras:has_2d"] = self.has_2d
-        # once all assets are created, populate links between assets
+        # once all assets are created, populate associations between assets
         for asset in self._files_with_associated_assets:
-            print(f"creating link for asset {asset}")
             asset.associate_related_assets(self.assets)
 
     def add_asset(self, url: str) -> None:
@@ -242,6 +244,7 @@ class RasModelItem(Item):
             self._plan_files.append(asset)
             self._files_with_associated_assets.append(asset)
         elif isinstance(asset, (GeometryAsset, GeometryHdfAsset)):
+            self.ensure_projection_schema()
             self._geom_files.append(asset)
             if isinstance(asset, GeometryHdfAsset):
                 self._files_with_associated_assets.append(asset)
@@ -254,6 +257,9 @@ class RasModelItem(Item):
                 self._dts.extend(asset.datetimes)
         elif isinstance(asset, (SteadyFlowAsset, QuasiUnsteadyFlowAsset, UnsteadyFlowAsset)):
             self._flow_files.append(asset)
+
+    def ensure_projection_schema(self) -> None:
+        ProjectionExtension.ensure_has_extension(self, True)
 
     @property
     @lru_cache
