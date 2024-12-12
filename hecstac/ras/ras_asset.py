@@ -60,9 +60,6 @@ class GenericAsset(Asset):
     def name_from_suffix(self, suffix: str) -> str:
         return self.stem + "." + suffix
 
-    def file_path_from_suffix(self, suffix: str) -> str:
-        return self.parent.joinpath(self.stem + "." + suffix).resolve()
-
     @property
     def program_version(self) -> str:
         """The HEC-RAS version last used to modify the file."""
@@ -130,31 +127,31 @@ class ProjectAsset(GenericAsset):
     @lru_cache
     def plan_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Plan File", expect_one=False)
-        return [self.file_path_from_suffix(i) for i in suffixes]
+        return [self.name_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def geometry_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Geom File", expect_one=False)
-        return [self.file_path_from_suffix(i) for i in suffixes]
+        return [self.name_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def steady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Flow File", expect_one=False)
-        return [self.file_path_from_suffix(i) for i in suffixes]
+        return [self.name_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def quasi_unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
-        return [self.file_path_from_suffix(i) for i in suffixes]
+        return [self.name_from_suffix(i) for i in suffixes]
 
     @property
     @lru_cache
     def unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
-        return [self.file_path_from_suffix(i) for i in suffixes]
+        return [self.name_from_suffix(i) for i in suffixes]
 
     def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
         plan_file_list: list[str] = []
@@ -216,12 +213,12 @@ class PlanAsset(GenericAsset):
     @property
     def primary_geometry(self) -> str:
         suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
-        return self.file_path_from_suffix(suffix)
+        return self.name_from_suffix(suffix)
 
     @property
     def primary_flow(self) -> str:
         suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
-        return self.file_path_from_suffix(suffix)
+        return self.name_from_suffix(suffix)
 
     @property
     def short_id(self) -> str:
@@ -248,7 +245,7 @@ class GeometryAsset(GenericAsset):
     PROPERTIES_WITH_GDF = ["reaches", "junctions", "cross_sections", "structures"]
 
     def __init__(self, geom_file: str, crs: str, **kwargs):
-        self.validate_crs(crs)
+        self.pyproj_crs = self.validate_crs(crs)
         media_type = MediaType.TEXT
         roles: list[str] = kwargs.get("roles", [])
         roles.extend(["geometry-file", "ras-file"])
@@ -266,9 +263,9 @@ class GeometryAsset(GenericAsset):
         self.crs = crs
 
     @staticmethod
-    def validate_crs(crs: str) -> None:
+    def validate_crs(crs: str) -> CRS:
         try:
-            CRS.from_user_input(crs)
+            return CRS.from_user_input(crs)
         except Exception as exc:
             raise GeometryAssetInvalidCRSError(*exc.args)
 
@@ -302,9 +299,10 @@ class GeometryAsset(GenericAsset):
         }
 
         self.extra_fields["ras:sa_connections"] = 0
-        proj = ProjectionExtension.ext(self, True)
-        proj.geometry = json.load(to_geojson(self.concave_hull))
+        proj = ProjectionExtension.ext(self)
+        proj.geometry = json.loads(to_geojson(self.concave_hull))
         proj.bbox = self.concave_hull.bounds
+        proj.wkt2 = self.pyproj_crs.to_wkt()
 
     @property
     def geom_title(self) -> str:
@@ -406,7 +404,7 @@ class GeometryAsset(GenericAsset):
             for junction in self.junctions.values():
                 for _, j in junction.gdf.iterrows():
                     polygons.append(self.junction_hull(xs_gdf, j))
-        out_hull = [union_all([make_valid(p) for p in polygons])]
+        out_hull = union_all([make_valid(p) for p in polygons])
         return out_hull
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
