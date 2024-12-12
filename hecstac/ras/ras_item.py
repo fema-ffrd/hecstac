@@ -6,8 +6,19 @@ from functools import lru_cache
 from typing import Any
 
 from matplotlib.figure import Figure
+from pyproj import CRS, Transformer
 from pystac import Collection, Item
-from ras_asset import (
+from shapely import Geometry, Polygon, simplify, to_geojson, union_all
+from shapely.ops import transform
+
+from ..utils.placeholders import (
+    NULL_DATETIME,
+    NULL_GEOMETRY,
+    NULL_STAC_BBOX,
+    NULL_STAC_GEOMETRY,
+)
+from .const import SCHEMA_URI
+from .ras_asset import (
     GeometryAsset,
     GeometryHdfAsset,
     PlanAsset,
@@ -17,16 +28,7 @@ from ras_asset import (
     SteadyFlowAsset,
     UnsteadyFlowAsset,
 )
-from shapely import Polygon, simplify, to_geojson, union_all
-from stac_utils import asset_factory
-
-from ..utils.placeholders import (
-    NULL_DATETIME,
-    NULL_GEOMETRY,
-    NULL_STAC_BBOX,
-    NULL_STAC_GEOMETRY,
-)
-from .const import SCHEMA_URI
+from .stac_utils import asset_factory
 
 
 class ThumbnailParameter(Enum):
@@ -39,6 +41,7 @@ class RasModelItem(Item):
     def __init__(
         self,
         prj_file: str,
+        crs: str = "",
         href: str = "",
         simplify_tolerance: float | None = 0.01,
         collection: str | Collection | None = None,
@@ -46,18 +49,23 @@ class RasModelItem(Item):
         id = ""
         properties = {}
         stac_extensions = [SCHEMA_URI]
+        self._bbox = None
+        self._geometry = None
+        self._datetime = None
+        self._start_datetime = None
+        self._end_datetime = None
         super().__init__(
             id,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
             properties,
-            stac_extensions,
-            href,
-            collection,
+            stac_extensions=stac_extensions,
+            href=href,
+            collection=collection,
         )
         self.prj_file = prj_file
-        self._geometry = NULL_GEOMETRY
+        self.crs = crs
         self._project: ProjectAsset | None = None
         self._plan_files: list[PlanAsset] = []
         self._flow_files: list[SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset] = []
@@ -69,11 +77,26 @@ class RasModelItem(Item):
         self._datetime_source: str | None = None
         self.simplify_tolerance = simplify_tolerance
 
+    def _transform_geometry(self, geom: Geometry) -> Geometry:
+        pyproj_crs = CRS.from_user_input(self.crs)
+        wgs_crs = CRS.from_authority("EPSG", "4326")
+        if pyproj_crs != wgs_crs:
+            transformer = Transformer.from_crs(pyproj_crs, wgs_crs)
+            return transform(transformer.transform, geom)
+        return geom
+
     @property
     def bbox(self) -> tuple[float, float, float, float]:
         if self._geometry == NULL_GEOMETRY:
             return NULL_STAC_BBOX
         return self._geometry.bounds
+
+    @bbox.setter
+    def bbox(self, stac_bbox: tuple[float, float, float, float]):
+        if self._bbox == None:
+            self._bbox = stac_bbox
+        else:
+            raise ValueError("Bounding box is already initialized and should not be set")
 
     @property
     def geometry(self) -> dict[str, Any]:
@@ -95,8 +118,8 @@ class RasModelItem(Item):
                             mesh_areas = geom_asset.mesh_areas
                         mesh_area_polygons.append(mesh_areas)
                 unioned_geometry = union_all(mesh_area_polygons)
-                self._geometry = unioned_geometry
-                stac_geom = json.load(to_geojson(unioned_geometry))
+                self._geometry = self._transform_geometry(unioned_geometry)
+                stac_geom = json.loads(to_geojson(self._geometry))
                 return stac_geom
             # if hdf file is not present, get concave hull of cross sections and use as geometry
             if self.has_1d:
@@ -109,62 +132,106 @@ class RasModelItem(Item):
                             concave_hull = geom_asset.concave_hull
                         concave_hull_polygons.append(concave_hull)
                 unioned_geometry = union_all(concave_hull_polygons)
-                self._geometry = unioned_geometry
-                stac_geom = json.load(to_geojson(unioned_geometry))
+                self._geometry = self._transform_geometry(unioned_geometry)
+                stac_geom = json.loads(to_geojson(self._geometry))
                 return stac_geom
-        stac_geom = json.load(to_geojson(self._geometry))
+        stac_geom = json.loads(to_geojson(self._geometry))
         return stac_geom
 
-    @property
-    @lru_cache
-    def datetime(self) -> dt.datetime:
-        if len(self._dts) == 0:
-            self._datetime_source = "processing_time"
-            self.extra_fields["ras:datetime_source"] = self._datetime_source
-            return dt.datetime.now()
-        self._datetime_source = "model_geometry"
-        self.extra_fields["ras:datetime_source"] = self._datetime_source
-        if len(self._dts) == 1:
-            return self._dts[0]
-        # if has start and end, define datetime as start
-        return self.start_datetime
+    @geometry.setter
+    def geometry(self, stac_geometry: dict) -> None:
+        if self._geometry == None:
+            if stac_geometry["coordinates"][0] == []:
+                self._geometry = Polygon()
+            else:
+                self._geometry = Polygon(stac_geometry["coordinates"][0])
+        else:
+            raise ValueError("Geometry is already initialized and should not be set")
 
     @property
     @lru_cache
-    def start_datetime(self) -> dt.datetime | None:
+    def datetime(self) -> str:
+        if len(self._dts) == 0:
+            self._datetime_source = "processing_time"
+            self._datetime = dt.datetime.now().isoformat()
+            return self._datetime
+        self._datetime_source = "model_geometry"
+        if len(self._dts) == 1:
+            self._datetime = self._dts[0].isoformat()
+        # if has start and end, define datetime as start
+        self._datetime = self._start_datetime
+        return self._datetime
+
+    @datetime.setter
+    def datetime(self, stac_datetime: dt.datetime | None) -> None:
+        if self._datetime == None:
+            self._datetime = stac_datetime
+        else:
+            raise ValueError("Datetime is already initialized and should not be set")
+
+    @property
+    @lru_cache
+    def start_datetime(self) -> str | None:
         if len(self._dts) <= 1:
-            return None
+            self._start_datetime = None
+            return self._start_datetime
         min_dt = min(self._dts)
         max_dt = max(self._dts)
         if min_dt == max_dt:
-            return None
-        return min_dt
+            self._start_datetime = None
+            return self._start_datetime
+        self._start_datetime = min_dt
+        return self._start_datetime.isoformat()
+
+    @start_datetime.setter
+    def start_datetime(self, stac_start_datetime: dt.datetime | None) -> None:
+        if self._start_datetime == None:
+            self._start_datetime = stac_start_datetime
+        else:
+            raise ValueError("Start datetime is already initialized and should not be set")
 
     @property
     @lru_cache
     def end_datetime(self) -> dt.datetime | None:
         if len(self._dts) <= 1:
-            return None
+            self._end_datetime = None
+            return self._end_datetime
         min_dt = min(self._dts)
         max_dt = max(self._dts)
         if min_dt == max_dt:
-            return None
-        return max_dt
+            self._end_datetime = None
+            return self._end_datetime
+        self._end_datetime = max_dt
+        return self._end_datetime.isoformat()
+
+    @end_datetime.setter
+    def end_datetime(self, stac_end_datetime: dt.datetime | None) -> None:
+        if self._end_datetime == None:
+            self._end_datetime = stac_end_datetime
+        else:
+            raise ValueError("End datetime is already initialized and should not be set")
 
     def populate(self) -> None:
         # searches directory of prj file for files to parse as assets associated with project, then adds these as assets, storing the project asset as self.project when found
         parent = os.path.dirname(self.prj_file)
         for entry in os.scandir(parent):
             self.add_asset(entry.path)
+        # explicitly set internal STAC properties dictionary
+        self.properties["datetime"] = self.datetime
+        self.properties["start_datetime"] = self.start_datetime
+        self.properties["end_datetime"] = self.end_datetime
+        self.extra_fields["ras:datetime_source"] = self._datetime_source
+        self.extra_fields["ras:has_1d"] = self.has_1d
+        self.extra_fields["ras:has_2d"] = self.has_2d
         # once all assets are created, populate links between assets
         for asset in self._linkable_files:
+            print(f"creating link for asset {asset}")
             asset.create_links(self.assets)
 
     def add_asset(self, url: str) -> None:
         """Add an asset to the item."""
         # this is where properties derived from singular asset content (self.has_1d, self.has_2d, self._dts) might be populated
-        # should also populate stac properties as they are discovered
-        asset = asset_factory(url)
+        asset = asset_factory(url, self.crs)
         super().add_asset(asset.title, asset)
         if isinstance(asset, ProjectAsset):
             if self._project is not None:
@@ -178,6 +245,13 @@ class RasModelItem(Item):
             self._geom_files.append(asset)
             if isinstance(asset, GeometryHdfAsset):
                 self._linkable_files.append(asset)
+                # TODO: figure out how to determine has_1d, has_2d, and _dts from HDF asset alone
+            if isinstance(asset, GeometryAsset):
+                if self._has_1d == False and asset.has_1d:
+                    self._has_1d = True
+                if self._has_2d == False and asset.has_2d:
+                    self._has_2d = True
+                self._dts.extend(asset.datetimes)
         elif isinstance(asset, (SteadyFlowAsset, QuasiUnsteadyFlowAsset, UnsteadyFlowAsset)):
             self._flow_files.append(asset)
 

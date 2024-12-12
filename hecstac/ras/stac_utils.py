@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from errors import GeometryAssetMissingCRSError
 from pystac import Asset, MediaType
-from ras_asset import (
+
+from .errors import GeometryAssetMissingCRSError
+from .ras_asset import (
     GeometryAsset,
     GeometryHdfAsset,
     PlanAsset,
@@ -16,7 +17,7 @@ from ras_asset import (
     SteadyFlowAsset,
     UnsteadyFlowAsset,
 )
-from ras_utils import is_ras_prj
+from .ras_utils import is_ras_prj
 
 
 @dataclass
@@ -31,7 +32,7 @@ def create_prj_asset(filepath: str) -> ProjectAsset | None:
     return None
 
 
-def asset_factory(filepath: str, crs: str | None = None) -> RasAsset | Asset:
+def asset_factory(filepath: str, crs: str | None = None, defer_computing_properties: bool = False) -> RasAsset | Asset:
     # check if file is geometry asset, then check that crs is provided
     geometry_asset_pattern = re.compile(r".+\.g\d{2}$", re.IGNORECASE)
     if geometry_asset_pattern.match(filepath):
@@ -52,6 +53,8 @@ def asset_factory(filepath: str, crs: str | None = None) -> RasAsset | Asset:
     for pattern, constructor in pattern_ras_constructor_dict.items():
         if pattern.match(filepath):
             asset = constructor(filepath)
+            if not defer_computing_properties:
+                asset.populate()
             return asset
     # associate file patterns with asset label information
     pattern_asset_label_dict: dict[re.Pattern, AssetLabel] = {
@@ -127,7 +130,7 @@ def asset_factory(filepath: str, crs: str | None = None) -> RasAsset | Asset:
             ["run-file", "ras-file", MediaType.TEXT], "Run file for Unsteady Flow."
         ),
         re.compile(r".+\.o\d{2}$", re.IGNORECASE): AssetLabel(
-            ["output-file", "ras-file", MediaType.TEXT], "Output ras which contains all of the computed results."
+            ["output-file", "ras-file", MediaType.TEXT], "Output ras file which contains all of the computed results."
         ),
         re.compile(r".+\.IC\.O\d{2}"): AssetLabel(
             ["initial-conditions-file", "ras-file", MediaType.TEXT], "Initial conditions file for unsteady flow plan."
