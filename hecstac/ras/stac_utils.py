@@ -39,6 +39,8 @@ def asset_factory(filepath: str, crs: str | None = None, defer_computing_propert
         if not crs:
             raise GeometryAssetMissingCRSError
         asset = GeometryAsset(filepath, crs)
+        if not defer_computing_properties:
+            asset.populate()
         return asset
     # associate file patterns with ras asset constructors
     pattern_ras_constructor_dict: dict[re.Pattern, Callable[[str], RasAsset | None]] = {
