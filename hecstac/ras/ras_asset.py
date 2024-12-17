@@ -88,7 +88,6 @@ class ProjectAsset(GenericAsset):
     def populate(self) -> None:
         self.extra_fields["ras:project_title"] = self.project_title
         self.extra_fields["ras:project_units"] = self.project_units
-        self.extra_fields["ras:model_name"] = self.model_name
         self.extra_fields["ras:ras_version"] = self.ras_version
 
     @property
@@ -111,13 +110,9 @@ class ProjectAsset(GenericAsset):
     def plan_current(self) -> str | None:
         try:
             suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
-            return self.file_path_from_suffix(suffix)
+            return self.name_from_suffix(suffix)
         except Exception:
             return None
-
-    @property
-    def model_name(self) -> str:
-        pass
 
     @property
     def ras_version(self) -> str:
@@ -165,7 +160,7 @@ class ProjectAsset(GenericAsset):
         for geom_file in self.geometry_files:
             asset = asset_dict[geom_file]
             geom_file_list.append(asset.href)
-        self.extra_fields["ras:geom_files"] = geom_file_list
+        self.extra_fields["ras:geometry_files"] = geom_file_list
         steady_flow_file_list: list[str] = []
         for steady_flow_file in self.steady_flow_files:
             asset = asset_dict[steady_flow_file]
@@ -202,7 +197,7 @@ class PlanAsset(GenericAsset):
 
     def populate(self) -> None:
         self.extra_fields["ras:plan_title"] = self.plan_title
-        self.extra_fields["ras:short_id"] = self.short_id
+        self.extra_fields["ras:short_identifier"] = self.short_id
 
     @property
     def plan_title(self) -> str:
@@ -226,7 +221,7 @@ class PlanAsset(GenericAsset):
 
     def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
         primary_geometry_asset = asset_dict[self.primary_geometry]
-        self.extra_fields["ras:geom_file"] = primary_geometry_asset.href
+        self.extra_fields["ras:geometry_file"] = primary_geometry_asset.href
         primary_flow_asset = asset_dict[self.primary_flow]
         if isinstance(primary_flow_asset, SteadyFlowAsset):
             property_name = "ras:steady_flow_file"
@@ -270,7 +265,7 @@ class GeometryAsset(GenericAsset):
             raise GeometryAssetInvalidCRSError(*exc.args)
 
     def populate(self) -> None:
-        self.extra_fields["ras:geom_title"] = self.geom_title
+        self.extra_fields["ras:geometry_title"] = self.geom_title
         self.extra_fields["ras:rivers"] = len(self.rivers)
         self.extra_fields["ras:reaches"] = len(self.reaches)
         self.extra_fields["ras:cross_sections"] = {
@@ -299,10 +294,11 @@ class GeometryAsset(GenericAsset):
         }
 
         self.extra_fields["ras:sa_connections"] = 0
-        proj = ProjectionExtension.ext(self)
-        proj.geometry = json.loads(to_geojson(self.concave_hull))
-        proj.bbox = self.concave_hull.bounds
-        proj.wkt2 = self.pyproj_crs.to_wkt()
+        if len(self.cross_sections) > 0:
+            proj = ProjectionExtension.ext(self)
+            proj.geometry = json.loads(to_geojson(self.concave_hull))
+            proj.bbox = self.concave_hull.bounds
+            proj.wkt2 = self.pyproj_crs.to_wkt()
 
     @property
     def geom_title(self) -> str:
@@ -552,19 +548,25 @@ class UnsteadyFlowAsset(GenericAsset):
 
 class HdfAsset(Asset):
     # class to represent stac asset with properties shared between plan hdf and geom hdf
-    def __init__(self, hdf_file: str, hdf_constructor: Callable[[str], RasHdf], **kwargs):
+    def __init__(
+        self,
+        hdf_file: str,
+        hdf_constructor: Callable[[str], RasHdf],
+        title: str | None = None,
+        description: str | None = None,
+        roles: list[str] | None = None,
+        extra_fields: dict[str, Any] | None = None,
+    ):
+        hdf_file_path = Path(hdf_file)
+        self.parent = hdf_file_path.parent
+        self.name = hdf_file_path.name
+        if title == None:
+            title = self.name
         media_type = MediaType.HDF
-        roles: list[str] = kwargs.get("roles", [])
+        if roles == None:
+            roles = []
         roles.append("ras-file")
-        super().__init__(
-            hdf_file,
-            kwargs.get("title"),
-            kwargs.get("description"),
-            media_type,
-            roles,
-            kwargs.get("extra_fields"),
-        )
-        self.parent = Path(hdf_file).parent
+        super().__init__(hdf_file, title, description, media_type, roles, extra_fields)
         self.hdf_object = hdf_constructor(hdf_file)
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
@@ -672,7 +674,7 @@ class HdfAsset(Asset):
 
     @property
     @lru_cache
-    def mesh_areas(self) -> Polygon:
+    def mesh_areas(self) -> Polygon | None:
         pass
 
     @property
@@ -866,6 +868,10 @@ class GeometryHdfAsset(HdfAsset):
         description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
         super().__init__(hdf_file, RasGeomHdf.open_uri, description=description)
         self.hdf_object: RasGeomHdf
+
+    @property
+    def cross_sections(self) -> int | None:
+        pass
 
     def populate(self) -> None:
         # determine optional and required properties

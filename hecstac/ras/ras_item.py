@@ -153,16 +153,14 @@ class RasModelItem(Item):
 
     @property
     @lru_cache
-    def datetime(self) -> str:
+    def datetime(self) -> dt.datetime:
         if len(self._dts) == 0:
-            self._datetime_source = "processing_time"
-            self._datetime = dt.datetime.now().isoformat()
+            self._datetime = dt.datetime.now()
             return self._datetime
-        self._datetime_source = "model_geometry"
         if len(self._dts) == 1:
-            self._datetime = self._dts[0].isoformat()
+            self._datetime = self._dts[0]
         # if has start and end, define datetime as start
-        self._datetime = self._start_datetime
+        self._datetime = self.start_datetime
         return self._datetime
 
     @datetime.setter
@@ -174,7 +172,7 @@ class RasModelItem(Item):
 
     @property
     @lru_cache
-    def start_datetime(self) -> str | None:
+    def start_datetime(self) -> dt.datetime | None:
         if len(self._dts) <= 1:
             self._start_datetime = None
             return self._start_datetime
@@ -184,7 +182,7 @@ class RasModelItem(Item):
             self._start_datetime = None
             return self._start_datetime
         self._start_datetime = min_dt
-        return self._start_datetime.isoformat()
+        return self._start_datetime
 
     @start_datetime.setter
     def start_datetime(self, stac_start_datetime: dt.datetime | None) -> None:
@@ -205,7 +203,7 @@ class RasModelItem(Item):
             self._end_datetime = None
             return self._end_datetime
         self._end_datetime = max_dt
-        return self._end_datetime.isoformat()
+        return self._end_datetime
 
     @end_datetime.setter
     def end_datetime(self, stac_end_datetime: dt.datetime | None) -> None:
@@ -216,16 +214,15 @@ class RasModelItem(Item):
 
     def populate(self) -> None:
         # searches directory of prj file for files to parse as assets associated with project, then adds these as assets, storing the project asset as self.project when found
+        print("populating item")
         parent = os.path.dirname(self.prj_file)
         for entry in os.scandir(parent):
-            self.add_asset(entry.path)
+            if entry.is_file():
+                self.add_asset(entry.path)
         # explicitly set internal STAC properties dictionary
-        self.properties["datetime"] = self.datetime
-        self.properties["start_datetime"] = self.start_datetime
-        self.properties["end_datetime"] = self.end_datetime
-        self.extra_fields["ras:datetime_source"] = self._datetime_source
-        self.extra_fields["ras:has_1d"] = self.has_1d
-        self.extra_fields["ras:has_2d"] = self.has_2d
+        self.properties["ras:datetime_source"] = self.datetime_source
+        self.properties["ras:has_1d"] = self.has_1d
+        self.properties["ras:has_2d"] = self.has_2d
         # once all assets are created, populate associations between assets
         for asset in self._files_with_associated_assets:
             asset.associate_related_assets(self.assets)
@@ -248,7 +245,10 @@ class RasModelItem(Item):
             self._geom_files.append(asset)
             if isinstance(asset, GeometryHdfAsset):
                 self._files_with_associated_assets.append(asset)
-                # TODO: figure out how to determine has_1d, has_2d, and _dts from HDF asset alone
+                if self._has_1d == False and asset.cross_sections != None and asset.cross_sections > 0:
+                    self._has_1d = True
+                if self._has_2d == False and asset.mesh_areas != None:
+                    self._has_2d = True
             if isinstance(asset, GeometryAsset):
                 if self._has_1d == False and asset.has_1d:
                     self._has_1d = True
@@ -294,6 +294,13 @@ class RasModelItem(Item):
 
     @property
     def datetime_source(self) -> str:
+        if self._datetime_source == None:
+            if self._dts == None:
+                self.populate()
+            if len(self._dts) == 0:
+                self._datetime_source = "processing_time"
+            else:
+                self._datetime_source = "model_geometry"
         return self._datetime_source
 
     @property

@@ -5,7 +5,7 @@ from typing import Callable
 
 from pystac import Asset, MediaType
 
-from .errors import GeometryAssetMissingCRSError
+from .errors import GeometryAssetMissingCRSError, GeometryAssetNoXSError
 from .ras_asset import (
     GeometryAsset,
     GeometryHdfAsset,
@@ -40,7 +40,16 @@ def asset_factory(filepath: str, crs: str | None = None, defer_computing_propert
             raise GeometryAssetMissingCRSError
         asset = GeometryAsset(filepath, crs)
         if not defer_computing_properties:
-            asset.populate()
+            try:
+                asset.populate()
+            except GeometryAssetNoXSError:
+                asset = Asset(
+                    filepath,
+                    Path(filepath).name,
+                    "The geometry file which contains geometry data, lacking cross-sectional data required to infer spatial location",
+                    MediaType.TEXT,
+                    ["ras-file"],
+                )
         return asset
     # associate file patterns with ras asset constructors
     pattern_ras_constructor_dict: dict[re.Pattern, Callable[[str], RasAsset | None]] = {
@@ -55,9 +64,10 @@ def asset_factory(filepath: str, crs: str | None = None, defer_computing_propert
     for pattern, constructor in pattern_ras_constructor_dict.items():
         if pattern.match(filepath):
             asset = constructor(filepath)
-            if not defer_computing_properties:
-                asset.populate()
-            return asset
+            if asset:
+                if not defer_computing_properties:
+                    asset.populate()
+                return asset
     # associate file patterns with asset label information
     pattern_asset_label_dict: dict[re.Pattern, AssetLabel] = {
         re.compile(r".+\.r\d{2}$", re.IGNORECASE): AssetLabel(
