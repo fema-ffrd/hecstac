@@ -1,0 +1,634 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "example.com/schema.json",
+    "title": "RAS Extension",
+    "description": "STAC RAS Extension for STAC Items and STAC Collections.",
+    "oneOf": [
+        {
+            "$comment": "This is the schema for STAC Items.",
+            "allOf": [
+                {
+                    "$ref": "#/definitions/stac_extensions"
+                },
+                {
+                    "type": "object",
+                    "required": [
+                        "type",
+                        "properties",
+                        "assets"
+                    ],
+                    "properties": {
+                        "type": {
+                            "const": "Feature"
+                        },
+                        "properties": {
+                            "allOf": [
+                                {
+                                    "$comment": "Required fields for item properties",
+                                    "required": [
+                                        "ras:has_1d",
+                                        "ras:has_2d",
+                                        "ras:datetime_source"
+                                    ]
+                                },
+                                {
+                                    "$ref": "#/definitions/fields"
+                                }
+                            ]
+                        },
+                        "assets": {
+                            "$ref": "#/definitions/assets"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "$comment": "This is the schema for STAC Collections.",
+            "type": "object",
+            "allOf": [
+                {
+                    "required": [
+                        "type"
+                    ],
+                    "properties": {
+                        "type": {
+                            "const": "Collection"
+                        }
+                    }
+                },
+                {
+                    "$ref": "#/definitions/stac_extensions"
+                }
+            ],
+            "anyOf": [
+                {
+                    "$comment": "This validates the fields in Collection Assets, but does not require them.",
+                    "required": [
+                        "assets"
+                    ],
+                    "properties": {
+                        "assets": {
+                            "type": "object",
+                            "not": {
+                                "additionalProperties": {
+                                    "not": {
+                                        "allOf": [
+                                            {
+                                                "$ref": "#/definitions/require_any_field"
+                                            },
+                                            {
+                                                "$ref": "#/definitions/fields"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "$comment": "This is the schema for the fields in Item Asset Definitions. It doesn't require any fields.",
+                    "required": [
+                        "item_assets"
+                    ],
+                    "properties": {
+                        "item_assets": {
+                            "type": "object",
+                            "not": {
+                                "additionalProperties": {
+                                    "not": {
+                                        "allOf": [
+                                            {
+                                                "$ref": "#/definitions/require_any_field"
+                                            },
+                                            {
+                                                "$ref": "#/definitions/fields"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "$comment": "This is the schema for the fields in Summaries. By default, only checks the existence of the properties, but not the schema of the summaries.",
+                    "required": [
+                        "summaries"
+                    ],
+                    "properties": {
+                        "summaries": {
+                            "$ref": "#/definitions/require_any_field"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "definitions": {
+        "plan_filename": {
+            "type": "string",
+            "pattern": ".+\\.[pP]\\d{2}$"
+        },
+        "geometry_filename": {
+            "type": "string",
+            "pattern": ".+\\.[gG]\\d{2}$"
+        },
+        "steady_flow_filename": {
+            "type": "string",
+            "pattern": ".+\\.[fF]\\d{2}$"
+        },
+        "quasi_unsteady_flow_filename": {
+            "type": "string",
+            "pattern": ".+\\.[qQ]\\d{2}$"
+        },
+        "unsteady_flow_filename": {
+            "type": "string",
+            "pattern": ".+\\.[uU]\\d{2}$"
+        },
+        "project": {
+            "type": "object",
+            "required": [
+                "ras:project_title",
+                "ras:ras_version",
+                "ras:project_units",
+                "ras:plan_current",
+                "ras:plan_files",
+                "ras:geometry_files"
+            ],
+            "properties": {
+                "ras:project_title": {
+                    "type": "string"
+                },
+                "ras:ras_version": {
+                    "type": "string"
+                },
+                "ras:project_units": {
+                    "type": "string",
+                    "enum": [
+                        "SI",
+                        "English"
+                    ]
+                },
+                "ras:plan_current": {
+                    "$ref": "#/definitions/plan_filename"
+                },
+                "ras:plan_files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/plan_filename"
+                    }
+                },
+                "ras:geometry_files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/geometry_filename"
+                    }
+                },
+                "ras:steady_flow_files": {
+                    "type": "array",
+                    "item": {
+                        "$ref": "#/definitions/steady_flow_filename"
+                    }
+                },
+                "ras:quasi_unsteady_flow_files": {
+                    "type": "array",
+                    "item": {
+                        "$ref": "#/definitions/quasi_unsteady_flow_filename"
+                    }
+                },
+                "ras:unsteady_flow_files": {
+                    "type": "array",
+                    "item": {
+                        "$ref": "#/definitions/unsteady_flow_filename"
+                    }
+                }
+            },
+            "anyOf": [
+                {
+                    "required": [
+                        "ras:steady_flow_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:quasi_unsteady_flow_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:unsteady_flow_files"
+                    ]
+                }
+            ],
+            "patternProperties": {
+                "^(?!ras:)": {}
+            },
+            "additionalProperties": false
+        },
+        "plan": {
+            "type": "object",
+            "required": [
+                "ras:plan_title",
+                "ras:geometry_file",
+                "ras:short_identifier"
+            ],
+            "properties": {
+                "ras:plan_title": {
+                    "type": "string"
+                },
+                "ras:geometry_file": {
+                    "$ref": "#/definitions/geometry_filename"
+                },
+                "ras:steady_flow_file": {
+                    "$ref": "#/definitions/steady_flow_filename"
+                },
+                "ras:quasi_unsteady_flow_file": {
+                    "$ref": "#/definitions/quasi_unsteady_flow_filename"
+                },
+                "ras:unsteady_flow_file": {
+                    "$ref": "#/definitions/unsteady_flow_filename"
+                },
+                "ras:short_identifier": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "ras:steady_flow_file"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:quasi_unsteady_flow_file"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:unsteady_flow_file"
+                    ]
+                }
+            ],
+            "patternProperties": {
+                "^(?!ras:)": {}
+            },
+            "additionalProperties": false
+        },
+        "geometry": {
+            "type": "object",
+            "required": [
+                "ras:geometry_title",
+                "ras:rivers",
+                "ras:reaches",
+                "ras:cross_sections",
+                "ras:culverts",
+                "ras:bridges",
+                "ras:multiple_openings",
+                "ras:inline_structures",
+                "ras:lateral_structures",
+                "ras:storage_areas",
+                "ras:2d_flow_areas",
+                "ras:sa_connections"
+            ],
+            "properties": {
+                "ras:geometry_title": {
+                    "type": "string"
+                },
+                "ras:rivers": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:reaches": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:cross_sections": {
+                    "type": "object",
+                    "properties": {
+                        "total": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "user_input_xss": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "interpolated": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "ras:culverts": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:bridges": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:multiple_openings": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:inline_structures": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:lateral_structures": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:storage_areas": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ras:2d_flow_areas": {
+                    "type": "object",
+                    "properties": {
+                        "2d_flow_areas": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "total_cells": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    }
+                },
+                "ras:sa_connections": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "patternProperties": {
+                "^(?!ras:)": {}
+            },
+            "additionalProperties": false
+        },
+        "steady_flow": {
+            "type": "object",
+            "required": [
+                "ras:flow_title",
+                "ras:number_of_profiles"
+            ],
+            "properties": {
+                "ras:flow_title": {
+                    "type": "string"
+                },
+                "ras:number_of_profiles": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "quasi_unsteady_flow": {
+            "type": "object",
+            "required": [
+                "ras:flow_title"
+            ],
+            "properties": {
+                "ras:flow_title": {
+                    "type": "string"
+                }
+            }
+        },
+        "unsteady_flow": {
+            "type": "object",
+            "required": [
+                "ras:flow_title"
+            ],
+            "properties": {
+                "ras:flow_title": {
+                    "type": "string"
+                }
+            }
+        },
+        "stac_extensions": {
+            "type": "object",
+            "required": [
+                "stac_extensions"
+            ],
+            "properties": {
+                "stac_extensions": {
+                    "type": "array",
+                    "contains": {
+                        "const": "example.com/schema.json"
+                    }
+                }
+            }
+        },
+        "require_any_field": {
+            "$comment": "Please list all fields here so that we can force the existence of one of them in other parts of the schemas.",
+            "anyOf": [
+                {
+                    "required": [
+                        "ras:project_title"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:ras_version"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:project_units"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:plan_current"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:plan_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:geometry_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:steady_flow_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:quasi_unsteady_flow_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:unsteady_flow_files"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:plan_title"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:geometry_file"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:steady_flow_file"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:quasi_unsteady_flow_file"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:unsteady_flow_file"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:short_identifier"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:geometry_title"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:rivers"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:reaches"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:cross_sections"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:culverts"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:bridges"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:multiple_openings"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:inline_structures"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:lateral_structures"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:storage_areas"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:2d_flow_areas"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:sa_connections"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:flow_title"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:number_of_profiles"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:has_1d"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:has_2d"
+                    ]
+                },
+                {
+                    "required": [
+                        "ras:datetime_source"
+                    ]
+                }
+            ]
+        },
+        "assets": {
+            "type": "object",
+            "patternProperties": {
+                ".+\\.prj$": {
+                    "$ref": "#/definitions/project"
+                },
+                ".+\\.[pP]\\d{2}$": {
+                    "$ref": "#/definitions/plan"
+                },
+                ".+\\.[gG]\\d{2}$": {
+                    "$ref": "#/definitions/geometry"
+                },
+                ".+\\.[fF]\\d{2}$": {
+                    "$ref": "#/definitions/steady_flow"
+                },
+                ".+\\.[qQ]\\d{2}$": {
+                    "$ref": "#/definitions/quasi_unsteady_flow"
+                },
+                ".+\\.[uU]\\d{2}$": {
+                    "$ref": "#/definitions/unsteady_flow"
+                }
+            }
+        },
+        "fields": {
+            "type": "object",
+            "properties": {
+                "ras:has_1d": {
+                    "type": "boolean"
+                },
+                "ras:has_2d": {
+                    "type": "boolean"
+                },
+                "ras:datetime_source": {
+                    "type": "string",
+                    "enum": [
+                        "processing_time",
+                        "model_geometry"
+                    ]
+                }
+            },
+            "patternProperties": {
+                "^(?!ras:)": {}
+            },
+            "additionalProperties": false
+        }
+    }
+}
