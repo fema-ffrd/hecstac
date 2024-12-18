@@ -1,4 +1,5 @@
 import datetime
+import importlib.resources
 import json
 import logging
 import math
@@ -10,9 +11,10 @@ from pathlib import Path
 from typing import Any, Callable, Iterator, TypeAlias
 
 import geopandas as gpd
+import jsonschema
 import pandas as pd
 from pyproj import CRS
-from pystac import Asset, Link, MediaType, RelType
+from pystac import Asset, MediaType
 from pystac.extensions.projection import ProjectionExtension
 from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
 from shapely import (
@@ -34,6 +36,8 @@ from .ras_utils import (
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
+
+RAS_EXTENSION_DICT: dict[str, Any] = json.loads(importlib.resources.read_text("extension", "schema.json"))
 
 
 class GenericAsset(Asset):
@@ -84,11 +88,27 @@ class ProjectAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
+        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["project"]
 
     def populate(self) -> None:
+        # get rid of requirements for properties which are defined after other assets are associated with this asset (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)
+        pre_asset_association_schema = self.ras_schema.copy()
+        required_property_names: list[str] = pre_asset_association_schema["required"]
+        for asset_associated_property in [
+            "ras:plan_current",
+            "ras:plan_files",
+            "ras:geometry_files",
+            "ras:steady_flow_files",
+            "ras:quasi_unsteady_flow_files",
+            "ras:unsteady_flow_files",
+        ]:
+            required_property_names.remove(asset_associated_property)
+        pre_asset_association_schema = required_property_names
         self.extra_fields["ras:project_title"] = self.project_title
         self.extra_fields["ras:project_units"] = self.project_units
         self.extra_fields["ras:ras_version"] = self.ras_version
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, pre_asset_association_schema, jsonschema.Draft7Validator)
 
     @property
     @lru_cache
@@ -148,7 +168,7 @@ class ProjectAsset(GenericAsset):
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
         return [self.name_from_suffix(i) for i in suffixes]
 
-    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
+    def associate_related_plans(self, asset_dict: dict[str, Asset]) -> None:
         plan_file_list: list[str] = []
         for plan_file in self.plan_files:
             asset = asset_dict[plan_file]
@@ -156,25 +176,42 @@ class ProjectAsset(GenericAsset):
                 self.extra_fields["ras:plan_current"] = asset.href
             plan_file_list.append(asset.href)
         self.extra_fields["ras:plan_files"] = plan_file_list
+
+    def associate_related_geometries(self, asset_dict: dict[str, Asset]) -> None:
         geom_file_list: list[str] = []
         for geom_file in self.geometry_files:
             asset = asset_dict[geom_file]
             geom_file_list.append(asset.href)
         self.extra_fields["ras:geometry_files"] = geom_file_list
+
+    def associate_related_steady_flows(self, asset_dict: dict[str, Asset]) -> None:
         steady_flow_file_list: list[str] = []
         for steady_flow_file in self.steady_flow_files:
             asset = asset_dict[steady_flow_file]
             steady_flow_file_list.append(asset.href)
         self.extra_fields["ras:steady_flow_files"] = steady_flow_file_list
+
+    def associate_related_quasi_unsteady_flows(self, asset_dict: dict[str, Asset]) -> None:
         quasi_unsteady_flow_file_list: list[str] = []
         for quasi_unsteady_flow_file in self.quasi_unsteady_flow_files:
             asset = asset_dict[quasi_unsteady_flow_file]
             quasi_unsteady_flow_file_list.append(asset.href)
         self.extra_fields["ras:quasi_unsteady_flow_files"] = quasi_unsteady_flow_file_list
+
+    def associate_related_unsteady_flows(self, asset_dict: dict[str, Asset]) -> None:
         unsteady_flow_file_list: list[str] = []
         for unsteady_file in self.unsteady_flow_files:
             asset = asset_dict[unsteady_file]
         self.extra_fields["ras:unsteady_flow_files"] = unsteady_flow_file_list
+
+    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
+        self.associate_related_plans(asset_dict)
+        self.associate_related_geometries(asset_dict)
+        self.associate_related_steady_flows(asset_dict)
+        self.associate_related_quasi_unsteady_flows(asset_dict)
+        self.associate_related_unsteady_flows(asset_dict)
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
 
 class PlanAsset(GenericAsset):
@@ -194,10 +231,19 @@ class PlanAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
+        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["plan"]
 
     def populate(self) -> None:
+        # get rid of requirements for properties which are defined after other assets are associated with this asset (primary_geometry, primary_flow)
+        pre_asset_association_schema = self.ras_schema.copy()
+        required_property_names: list[str] = pre_asset_association_schema["required"]
+        for asset_associated_property in ["ras:primary_geometry", "ras:primary_flow"]:
+            required_property_names.remove(asset_associated_property)
+        pre_asset_association_schema = required_property_names
         self.extra_fields["ras:plan_title"] = self.plan_title
-        self.extra_fields["ras:short_identifier"] = self.short_id
+        self.extra_fields["ras:short_identifier"] = self.short_identifier
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, pre_asset_association_schema, jsonschema.Draft7Validator)
 
     @property
     def plan_title(self) -> str:
@@ -216,8 +262,8 @@ class PlanAsset(GenericAsset):
         return self.name_from_suffix(suffix)
 
     @property
-    def short_id(self) -> str:
-        return search_contents(self.file_lines, "Short Identifier")
+    def short_identifier(self) -> str:
+        return search_contents(self.file_lines, "Short Identifier", expect_one=True)
 
     def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
         primary_geometry_asset = asset_dict[self.primary_geometry]
@@ -234,6 +280,8 @@ class PlanAsset(GenericAsset):
                 f"Asset being linked to plan asset {self.plan_title} is not one of the following: ['SteadyFlowAsset', 'QuasiUnsteadyFlowAsset', 'UnsteadyFlowAsset']; cannot provide a link type for the link object being created"
             )
         self.extra_fields[property_name] = primary_flow_asset.href
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
 
 class GeometryAsset(GenericAsset):
@@ -256,6 +304,7 @@ class GeometryAsset(GenericAsset):
             kwargs.get("extra_fields"),
         )
         self.crs = crs
+        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["geometry"]
 
     @staticmethod
     def validate_crs(crs: str) -> CRS:
@@ -292,8 +341,11 @@ class GeometryAsset(GenericAsset):
             "2d_flow_areas": 0,
             "total_cells": 0,
         }
-
         self.extra_fields["ras:sa_connections"] = 0
+
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
+
         if len(self.cross_sections) > 0:
             proj = ProjectionExtension.ext(self)
             proj.geometry = json.loads(to_geojson(self.concave_hull))
@@ -481,10 +533,13 @@ class SteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
+        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["steady_flow"]
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
         self.extra_fields["ras:number_of_profiles"] = self.n_profiles
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
     @property
     def flow_title(self) -> str:
@@ -509,9 +564,12 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
+        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["quasi_unsteady_flow"]
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
     @property
     def flow_title(self) -> str:
@@ -537,9 +595,12 @@ class UnsteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
+        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["unsteady_flow"]
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
+        as_dict = self.to_dict()
+        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
     @property
     def flow_title(self) -> str:
