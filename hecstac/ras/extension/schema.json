@@ -421,7 +421,7 @@
             }
         },
         "require_any_field": {
-            "$comment": "Please list all fields here so that we can force the existence of one of them in other parts of the schemas.",
+            "$comment": "Please list all fields here so that we can force the existence of one of them in other parts of the schemas. -- I am not sure that the asset level properties should go in this list, as this would mean items with one of these values as properties would theoretically pass, but actually fail because the item will only have fields in the #/definitions/fields section",
             "anyOf": [
                 {
                     "required": [
