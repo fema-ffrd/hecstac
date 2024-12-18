@@ -214,7 +214,6 @@ class RasModelItem(Item):
 
     def populate(self) -> None:
         # searches directory of prj file for files to parse as assets associated with project, then adds these as assets, storing the project asset as self.project when found
-        print("populating item")
         parent = os.path.dirname(self.prj_file)
         for entry in os.scandir(parent):
             if entry.is_file():
@@ -226,6 +225,7 @@ class RasModelItem(Item):
         # once all assets are created, populate associations between assets
         for asset in self._files_with_associated_assets:
             asset.associate_related_assets(self.assets)
+        self.validate()
 
     def add_asset(self, url: str) -> None:
         """Add an asset to the item."""
