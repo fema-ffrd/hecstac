@@ -24,7 +24,7 @@
                         "properties": {
                             "allOf": [
                                 {
-                                    "$comment": "Required fields for item properties",
+                                    "$comment": "Required fields for item properties -- I think maybe these should not be required to allow for the use of this schema when generating other types of items to which you want to attach RAS assets",
                                     "required": [
                                         "ras:has_1d",
                                         "ras:has_2d",
