@@ -1,8 +1,8 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "example.com/schema.json",
+    "$id": "https://raw.githubusercontent.com/fema-ffrd/hecstac/refs/heads/port-ras-stac/hecstac/ras/extension/schema.json",
     "title": "RAS Extension",
-    "description": "STAC RAS Extension for STAC Items and STAC Collections.",
+    "description": "STAC RAS Extension for STAC Items and STAC Collections with Asset-specific validation",
     "oneOf": [
         {
             "$comment": "This is the schema for STAC Items.",
@@ -382,7 +382,11 @@
                     "type": "integer",
                     "minimum": 0
                 }
-            }
+            },
+            "patternProperties": {
+                "^(?!ras:)": {}
+            },
+            "additionalProperties": false
         },
         "quasi_unsteady_flow": {
             "type": "object",
@@ -404,7 +408,11 @@
                 "ras:flow_title": {
                     "type": "string"
                 }
-            }
+            },
+            "patternProperties": {
+                "^(?!ras:)": {}
+            },
+            "additionalProperties": false
         },
         "stac_extensions": {
             "type": "object",
@@ -415,13 +423,13 @@
                 "stac_extensions": {
                     "type": "array",
                     "contains": {
-                        "const": "example.com/schema.json"
+                        "const": "https://raw.githubusercontent.com/fema-ffrd/hecstac/refs/heads/port-ras-stac/hecstac/ras/extension/schema.json"
                     }
                 }
             }
         },
         "require_any_field": {
-            "$comment": "Please list all fields here so that we can force the existence of one of them in other parts of the schemas. -- I am not sure that the asset level properties should go in this list, as this would mean items with one of these values as properties would theoretically pass, but actually fail because the item will only have fields in the #/definitions/fields section",
+            "$comment": "Please list all fields here so that we can force the existence of one of them in other parts of the schemas.",
             "anyOf": [
                 {
                     "required": [
