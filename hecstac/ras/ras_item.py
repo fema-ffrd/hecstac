@@ -17,6 +17,7 @@ from ..utils.placeholders import (
     NULL_GEOMETRY,
     NULL_STAC_BBOX,
     NULL_STAC_GEOMETRY,
+    PLACEHOLDER_ID,
 )
 from .const import SCHEMA_URI
 from .ras_asset import (
@@ -47,7 +48,7 @@ class RasModelItem(Item):
         simplify_tolerance: float | None = 0.001,
         collection: str | Collection | None = None,
     ):
-        id = ""
+        id = PLACEHOLDER_ID
         properties = {}
         stac_extensions = [SCHEMA_URI]
         self._bbox = None
