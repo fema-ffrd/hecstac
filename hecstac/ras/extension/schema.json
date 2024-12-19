@@ -151,14 +151,17 @@
                 "ras:project_units",
                 "ras:plan_current",
                 "ras:plan_files",
-                "ras:geometry_files"
+                "ras:geometry_files",
+                "ras:steady_flow_files",
+                "ras:quasi_unsteady_flow_files",
+                "ras:unsteady_flow_files"
             ],
             "properties": {
                 "ras:project_title": {
                     "type": "string"
                 },
                 "ras:ras_version": {
-                    "type": "string"
+                    "type": ["string", "null"]
                 },
                 "ras:project_units": {
                     "type": "string",
@@ -201,23 +204,6 @@
                     }
                 }
             },
-            "anyOf": [
-                {
-                    "required": [
-                        "ras:steady_flow_files"
-                    ]
-                },
-                {
-                    "required": [
-                        "ras:quasi_unsteady_flow_files"
-                    ]
-                },
-                {
-                    "required": [
-                        "ras:unsteady_flow_files"
-                    ]
-                }
-            ],
             "patternProperties": {
                 "^(?!ras:)": {}
             },
@@ -232,7 +218,7 @@
             ],
             "properties": {
                 "ras:plan_title": {
-                    "type": "string"
+                    "type": ["string", "null"]
                 },
                 "ras:geometry_file": {
                     "$ref": "#/definitions/geometry_filename"
