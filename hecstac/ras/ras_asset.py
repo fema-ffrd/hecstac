@@ -1,8 +1,8 @@
 import datetime
-import importlib.resources
 import json
 import logging
 import math
+import os
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from enum import Enum
@@ -37,7 +37,19 @@ from .ras_utils import (
     text_block_from_start_str_to_empty_line,
 )
 
-RAS_EXTENSION_DICT: dict[str, Any] = json.loads(importlib.resources.read_text("extension", "schema.json"))
+RAS_EXTENSION_PATH = os.path.join(os.path.dirname(__file__), "extension/schema.json")
+with open(RAS_EXTENSION_PATH, "r") as f:
+    data = json.load(f)
+RAS_EXTENSION_DICT: dict[str, Any] = data
+
+
+def flip_schema(definition_name: str) -> dict[str, Any]:
+    # pulls out specific definition of interest as dictionary, inserting the remainder of definitions into the dictionary in order to maintain integrity of definition links
+    definitions: dict = RAS_EXTENSION_DICT["definitions"]
+    ras_schema = definitions[definition_name]
+    del definitions[definition_name]
+    ras_schema["definitions"] = definitions
+    return ras_schema
 
 
 class GenericAsset(Asset):
@@ -88,12 +100,13 @@ class ProjectAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["project"]
+        self.ras_schema = flip_schema("project")
 
     def populate(self) -> None:
         # get rid of requirements for properties which are defined after other assets are associated with this asset (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)
         pre_asset_association_schema = self.ras_schema.copy()
         required_property_names: list[str] = pre_asset_association_schema["required"]
+        print(required_property_names)
         for asset_associated_property in [
             "ras:plan_current",
             "ras:plan_files",
@@ -103,7 +116,7 @@ class ProjectAsset(GenericAsset):
             "ras:unsteady_flow_files",
         ]:
             required_property_names.remove(asset_associated_property)
-        pre_asset_association_schema = required_property_names
+        pre_asset_association_schema["required"] = required_property_names
         self.extra_fields["ras:project_title"] = self.project_title
         self.extra_fields["ras:project_units"] = self.project_units
         self.extra_fields["ras:ras_version"] = self.ras_version
@@ -135,8 +148,11 @@ class ProjectAsset(GenericAsset):
             return None
 
     @property
-    def ras_version(self) -> str:
-        pass
+    def ras_version(self) -> str | None:
+        try:
+            return search_contents(self.file_lines, "Program Version", expect_one=True)
+        except ValueError:
+            return None
 
     @property
     @lru_cache
@@ -231,15 +247,16 @@ class PlanAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["plan"]
+        self.ras_schema = flip_schema("plan")
 
     def populate(self) -> None:
-        # get rid of requirements for properties which are defined after other assets are associated with this asset (primary_geometry, primary_flow)
+        # get rid of requirements for properties which are defined after other assets are associated with this asset (geometry_file, one of [steady_flow_file, quasi_unsteady_flow_file, unsteady_flow_file])
         pre_asset_association_schema = self.ras_schema.copy()
         required_property_names: list[str] = pre_asset_association_schema["required"]
-        for asset_associated_property in ["ras:primary_geometry", "ras:primary_flow"]:
+        for asset_associated_property in ["ras:geometry_file"]:
             required_property_names.remove(asset_associated_property)
-        pre_asset_association_schema = required_property_names
+        pre_asset_association_schema["required"] = required_property_names
+        del pre_asset_association_schema["oneOf"]
         self.extra_fields["ras:plan_title"] = self.plan_title
         self.extra_fields["ras:short_identifier"] = self.short_identifier
         as_dict = self.to_dict()
@@ -252,12 +269,12 @@ class PlanAsset(GenericAsset):
         self.extra_fields["ras:plan_title"] = title
 
     @property
-    def primary_geometry(self) -> str:
+    def geometry_file(self) -> str:
         suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
         return self.name_from_suffix(suffix)
 
     @property
-    def primary_flow(self) -> str:
+    def flow_file(self) -> str:
         suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
         return self.name_from_suffix(suffix)
 
@@ -266,9 +283,9 @@ class PlanAsset(GenericAsset):
         return search_contents(self.file_lines, "Short Identifier", expect_one=True)
 
     def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
-        primary_geometry_asset = asset_dict[self.primary_geometry]
+        primary_geometry_asset = asset_dict[self.geometry_file]
         self.extra_fields["ras:geometry_file"] = primary_geometry_asset.href
-        primary_flow_asset = asset_dict[self.primary_flow]
+        primary_flow_asset = asset_dict[self.flow_file]
         if isinstance(primary_flow_asset, SteadyFlowAsset):
             property_name = "ras:steady_flow_file"
         elif isinstance(primary_flow_asset, QuasiUnsteadyFlowAsset):
@@ -304,7 +321,7 @@ class GeometryAsset(GenericAsset):
             kwargs.get("extra_fields"),
         )
         self.crs = crs
-        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"]["geometry"]
+        self.ras_schema = flip_schema("geometry")
 
     @staticmethod
     def validate_crs(crs: str) -> CRS:
