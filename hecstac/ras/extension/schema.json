@@ -171,7 +171,10 @@
                     "description": "Title of the HEC-RAS project."
                 },
                 "ras:ras_version": {
-                    "type": ["string", "null"],
+                    "type": [
+                        "string",
+                        "null"
+                    ],
                     "description": "The version of HEC-RAS used by the project."
                 },
                 "ras:project_units": {
@@ -184,8 +187,12 @@
                 },
                 "ras:plan_current": {
                     "allOf": [
-                        {"description": "The plan file which is the currently active plan for the HEC-RAS project."},
-                        {"$ref": "#/definitions/plan_filename"}
+                        {
+                            "description": "The plan file which is the currently active plan for the HEC-RAS project."
+                        },
+                        {
+                            "$ref": "#/definitions/plan_filename"
+                        }
                     ]
                 },
                 "ras:plan_files": {
@@ -238,31 +245,50 @@
             ],
             "properties": {
                 "ras:plan_title": {
-                    "type": ["string", "null"],
+                    "type": [
+                        "string",
+                        "null"
+                    ],
                     "description": "The title of the HEC-RAS plan. Can be null."
                 },
                 "ras:geometry_file": {
                     "allOf": [
-                        {"description": "The geometry file linked to the HEC-RAS plan."},
-                        {"$ref": "#/definitions/geometry_filename"}
+                        {
+                            "description": "The geometry file linked to the HEC-RAS plan."
+                        },
+                        {
+                            "$ref": "#/definitions/geometry_filename"
+                        }
                     ]
                 },
                 "ras:steady_flow_file": {
                     "allOf": [
-                        {"description": "The steady flow file linked to the HEC-RAS plan"},
-                        {"$ref": "#/definitions/steady_flow_filename"}
+                        {
+                            "description": "The steady flow file linked to the HEC-RAS plan"
+                        },
+                        {
+                            "$ref": "#/definitions/steady_flow_filename"
+                        }
                     ]
                 },
                 "ras:quasi_unsteady_flow_file": {
                     "allOf": [
-                        {"description": "The quasi-unsteady flow file linked to the HEC-RAS plan"},
-                        {"$ref": "#/definitions/quasi_unsteady_flow_filename"}
+                        {
+                            "description": "The quasi-unsteady flow file linked to the HEC-RAS plan"
+                        },
+                        {
+                            "$ref": "#/definitions/quasi_unsteady_flow_filename"
+                        }
                     ]
                 },
                 "ras:unsteady_flow_file": {
                     "allOf": [
-                        {"description": "The unsteady flow file linked to the HEC-RAS plan"},
-                        {"$ref": "#/definitions/unsteady_flow_filename"}
+                        {
+                            "description": "The unsteady flow file linked to the HEC-RAS plan"
+                        },
+                        {
+                            "$ref": "#/definitions/unsteady_flow_filename"
+                        }
                     ]
                 },
                 "ras:short_identifier": {
@@ -409,7 +435,14 @@
             ],
             "properties": {
                 "ras:flow_title": {
-                    "$ref": "#/definitions/flow_title"
+                    "allOf": [
+                        {
+                            "description": "Title of steady flow file."
+                        },
+                        {
+                            "$ref": "#/definitions/flow_title"
+                        }
+                    ]
                 },
                 "ras:number_of_profiles": {
                     "type": "integer",
@@ -429,7 +462,14 @@
             ],
             "properties": {
                 "ras:flow_title": {
-                    "$ref": "#/definitions/flow_title"
+                    "allOf": [
+                        {
+                            "description": "Title of quasi-unsteady flow file."
+                        },
+                        {
+                            "$ref": "#/definitions/flow_title"
+                        }
+                    ]
                 }
             }
         },
@@ -440,7 +480,14 @@
             ],
             "properties": {
                 "ras:flow_title": {
-                    "$ref": "#/definitions/flow_title"
+                    "allOf": [
+                        {
+                            "description": "Title of unsteady flow file."
+                        },
+                        {
+                            "$ref": "#/definitions/flow_title"
+                        }
+                    ]
                 }
             },
             "patternProperties": {
