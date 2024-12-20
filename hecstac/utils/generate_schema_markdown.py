@@ -37,7 +37,7 @@ ASSET_SPECIFIC_META_SCHEMA = {
 @dataclass
 class Field:
     field_name: str
-    type: str
+    type: str | list[str]
     description: str
     required: bool | None
 
@@ -46,6 +46,10 @@ class Field:
             self.table_description = f"**REQUIRED** {self.description}"
         else:
             self.table_description = self.description
+        if isinstance(self.type, list):
+            self.type_str = " \| ".join(self.type)
+        else:
+            self.type_str = self.type
 
 
 @dataclass
@@ -86,10 +90,10 @@ class ExtensionSchema:
         self.identifier = schema_url
         self.field_usability = field_usability
         self._schema_str = read_schema_text_from_url(schema_url)
-        self.schema = json.load(self._schema_str)
+        self.schema = json.loads(self._schema_str)
         self.validate_schema()
         self._prefix = prefix
-        self._not_common_definition_names: list[str] = ["fields", "stac_extensions", "require_any_fields"]
+        self._not_common_definition_names: list[str] = ["fields", "stac_extensions", "require_any_field"]
         self._required_item_properties: list[str] | None = None
 
     def validate_schema(self) -> None:
@@ -161,7 +165,7 @@ class ExtensionSchema:
         # summarize field usability
         markdown_str += f"## Fields\n\nThe fields in the table below can be used in these parts of STAC documents:\n\n"
         markdown_str += f"- [{self.field_usability.catalog_str}] Catalogs\n"
-        markdown_str += "- [{self.field_usability.collection_properties_str}] Collection Properties\n"
+        markdown_str += f"- [{self.field_usability.collection_properties_str}] Collection Properties\n"
         markdown_str += f"- [{self.field_usability.collection_item_assets_str}] Collection Item Assets\n"
         markdown_str += f"- [{self.field_usability.item_properties_str}] Item Properties\n"
         markdown_str += f"- [{self.field_usability.item_assets_str}] Item Assets\n"
@@ -169,7 +173,7 @@ class ExtensionSchema:
         # overview of fields
         fields_table = self._fields_to_table(self.item_property_definitions)
         markdown_str += fields_table
-        markdown_str += "\n\n### Additional Field Information\n"
+        markdown_str += "\n\n### Additional Field Information\n\n"
         # common definitions
         common_table = self._fields_to_table(self.common_definitions)
         markdown_str += common_table
@@ -186,16 +190,17 @@ class ExtensionSchema:
         for field in fields:
             if len(field.field_name) > max_field_name_length:
                 max_field_name_length = len(field.field_name)
-            if len(field.type) > max_type_length:
-                max_type_length = len(field.type)
+            if len(field.type_str) > max_type_length:
+                max_type_length = len(field.type_str)
             if len(field.table_description) > max_description_length:
                 max_description_length = len(field.table_description)
         field_name_header = "Field Name".ljust(max_field_name_length)
         type_header = "Type".ljust(max_type_length)
         description_header = "Description".ljust(max_description_length)
         table = f"| {field_name_header} | {type_header} | {description_header} |"
+        table += f"\n| {'-' * len(field_name_header)} | {'-' * len(type_header)} | {'-' * len(description_header)} |"
         for field in fields:
-            row = f"\n| {field.field_name.ljust(max_field_name_length)} | {field.type.ljust(max_type_length)} | {field.table_description.ljust(max_description_length)} |"
+            row = f"\n| {field.field_name.ljust(max_field_name_length)} | {field.type_str.ljust(max_type_length)} | {field.table_description.ljust(max_description_length)} |"
             table += row
         return table
 
@@ -245,6 +250,7 @@ class ExtensionSchemaAssetSpecific(ExtensionSchema):
     def __init__(self, schema_url, field_usability: FieldUsability, prefix=None):
         super().__init__(schema_url, field_usability, prefix)
         self.pattern_definition_dict = self.get_pattern_definition_dict()
+        self._not_common_definition_names.append("assets")
         self._not_common_definition_names.extend(self.pattern_definition_dict.values())
 
     def get_pattern_definition_dict(self) -> dict[str, str]:
@@ -252,7 +258,7 @@ class ExtensionSchemaAssetSpecific(ExtensionSchema):
         self.validate_asset_metadata_schema()
         asset_definitions = self.schema["definitions"]["assets"]
         for pattern, ref in asset_definitions["patternProperties"].items():
-            pattern_to_definition_name_dict[pattern] = ref.lstrip("#/definitions/")
+            pattern_to_definition_name_dict[pattern] = ref["$ref"].replace("#/definitions/", "", 1)
         return pattern_to_definition_name_dict
 
     def validate_asset_metadata_schema(self) -> None:
@@ -270,30 +276,66 @@ class ExtensionSchemaAssetSpecific(ExtensionSchema):
 
     @property
     def asset_definitions(self) -> Iterator[tuple[str, list[Field]]]:
-        definition_schema = {"type": "object", "required": ["type", "description"]}
-        for pattern, definition_name in self.pattern_definition_dict:
+        no_ref_definition_schema = {"type": "object", "required": ["type", "description"]}
+        with_ref_definition_schema = {
+            "type": "object",
+            "required": ["allOf"],
+            "properties": {
+                "allOf": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {"type": "object", "required": ["description"]},
+                            {"type": "object", "required": ["$ref"]},
+                        ]
+                    },
+                }
+            },
+        }
+        for pattern, definition_name in self.pattern_definition_dict.items():
             field_list: list[Field] = []
             meta_definition = self.schema["definitions"][definition_name]
             required_properties: list[str] = meta_definition.get("required", [])
             for asset_property_definition_name, asset_property_definition_value in meta_definition[
                 "properties"
             ].items():
-                jsonschema.validate(asset_property_definition_value, definition_schema, jsonschema.Draft7Validator)
-                field = Field(
-                    asset_property_definition_name,
-                    asset_property_definition_value["type"],
-                    asset_property_definition_value["description"],
-                    asset_property_definition_name in required_properties,
-                )
-                field_list.append(field)
+                try:
+                    jsonschema.validate(
+                        asset_property_definition_value, no_ref_definition_schema, jsonschema.Draft7Validator
+                    )
+                    field = Field(
+                        asset_property_definition_name,
+                        asset_property_definition_value["type"],
+                        asset_property_definition_value["description"],
+                        asset_property_definition_name in required_properties,
+                    )
+                    field_list.append(field)
+                except jsonschema.ValidationError:
+                    jsonschema.validate(
+                        asset_property_definition_value, with_ref_definition_schema, jsonschema.Draft7Validator
+                    )
+                    asset_property_definition_description = None
+                    asset_property_definition_type = None
+                    for all_of_property in asset_property_definition_value["allOf"]:
+                        if "description" in all_of_property:
+                            asset_property_definition_description = all_of_property["description"]
+                        elif "$ref" in all_of_property:
+                            asset_property_definition_type = all_of_property["$ref"]
+                    field = Field(
+                        asset_property_definition_name,
+                        asset_property_definition_type,
+                        asset_property_definition_description,
+                        asset_property_definition_name in required_properties,
+                    )
+                    field_list.append(field)
             yield pattern, field_list
 
     def to_markdown(self, path: str | None) -> str:
         markdown_str = super().to_markdown(None)
-        markdown_str += "\n\n### Asset Properties with Pattern Matching\n\n"
+        markdown_str += "\n\n## Asset Properties with Pattern Matching\n\n"
         markdown_str += "This section describes the pattern used to match against the asset title along with the expected structure of that asset\n"
         for pattern, field_list in self.asset_definitions:
-            markdown_str += f"\n#### {pattern}\n\n"
+            markdown_str += f"\n### {pattern}\n\n"
             properties_table = self._fields_to_table(field_list)
             markdown_str += f"{properties_table}\n"
         if path:
