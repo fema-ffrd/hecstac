@@ -1,6 +1,6 @@
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 import jsonschema
@@ -40,6 +40,8 @@ class Field:
     type: str | list[str]
     description: str
     required: bool | None
+    table_description: str = field(init=False)
+    type_str: str = field(init=False)
 
     def __post_init__(self) -> None:
         if self.required:
@@ -47,9 +49,22 @@ class Field:
         else:
             self.table_description = self.description
         if isinstance(self.type, list):
-            self.type_str = " \| ".join(self.type)
+            modified_type_list = [self.modify_link(t) for t in self.type]
+            self.type_str = " \| ".join(modified_type_list)
         else:
-            self.type_str = self.type
+            self.type_str = self.modify_link(self.type)
+
+    @staticmethod
+    def modify_link(potential_link: str) -> str:
+        # modify definitions link to internal markdown link, else returns input without modification
+        if "#/definitions/" in potential_link:
+            internal_link = potential_link.replace("#/definitions/", "#")
+            link_name = potential_link.replace("#/definitions/", "")
+            link_name = link_name.replace("_", " ")
+            linked = f"[{link_name}]({internal_link})"
+            return linked
+        else:
+            return potential_link
 
 
 @dataclass
@@ -60,6 +75,12 @@ class FieldUsability:
     item_properties: bool
     item_assets: bool
     links: bool
+    catalog_str: str = field(init=False)
+    collection_properties_str: str = field(init=False)
+    collection_item_assets_str: str = field(init=False)
+    item_properties_str: str = field(init=False)
+    item_assets_str: str = field(init=False)
+    links_str: str = field(init=False)
 
     def __post_init__(self):
         self.catalog_str = " "
@@ -113,7 +134,8 @@ class ExtensionSchema:
         return self._prefix
 
     @property
-    def item_property_definitions(self) -> Iterator[Field]:
+    def item_property_definitions(self) -> list[Field]:
+        field_list: list[Field] = []
         definition_schema = {"type": "object", "required": ["type", "description"]}
         for definition_key, definition_value in self.schema["definitions"]["fields"]["properties"].items():
             jsonschema.validate(definition_value, definition_schema, jsonschema.Draft7Validator)
@@ -123,16 +145,19 @@ class ExtensionSchema:
                 definition_value["description"],
                 definition_key in self.required_item_properties,
             )
-            yield field
+            field_list.append(field)
+        return field_list
 
     @property
-    def common_definitions(self) -> Iterator[Field]:
+    def common_definitions(self) -> list[Field]:
+        field_list: list[Field] = []
         definition_schema = {"type": "object", "required": ["type", "description"]}
         for definition_key, definition_value in self.schema["definitions"].items():
             if definition_key not in self._not_common_definition_names:
                 jsonschema.validate(definition_value, definition_schema, jsonschema.Draft7Validator)
                 field = Field(definition_key, definition_value["type"], definition_value["description"], None)
-                yield field
+                field_list.append(field)
+        return field_list
 
     def get_item_meta_schema(self) -> dict[str, Any]:
         for stac_type_subschema in self.schema["oneOf"]:
@@ -175,12 +200,22 @@ class ExtensionSchema:
         markdown_str += fields_table
         markdown_str += "\n\n### Additional Field Information\n\n"
         # common definitions
-        common_table = self._fields_to_table(self.common_definitions)
-        markdown_str += common_table
+        for field in self.common_definitions:
+            subsection = self._field_to_subsection(field)
+            markdown_str += subsection
         if path:
             with open(path, "w") as f:
                 f.write(markdown_str)
         return markdown_str
+
+    @staticmethod
+    def _field_to_subsection(field: Field) -> str:
+        subsection = f"\n#### {field.field_name}\n\n"
+        if field.type_str == "object":
+            raise ValueError
+        subsection += f"- Type: {field.type_str}\n"
+        subsection += f"- Description: {field.description}\n"
+        return subsection
 
     @staticmethod
     def _fields_to_table(fields: list[Field]) -> str:
