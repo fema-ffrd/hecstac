@@ -143,6 +143,10 @@
             "type": "string",
             "pattern": ".+\\.[uU]\\d{2}$"
         },
+        "flow_title": {
+            "type": "string",
+            "description": "The title of the HEC-RAS flow file."
+        },
         "project": {
             "type": "object",
             "required": [
@@ -158,47 +162,57 @@
             ],
             "properties": {
                 "ras:project_title": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Title of the HEC-RAS project."
                 },
                 "ras:ras_version": {
                     "type": ["string", "null"]
                 },
                 "ras:project_units": {
                     "type": "string",
+                    "description": "Units of HEC-RAS project. Valid values: ['SI', 'English']",
                     "enum": [
                         "SI",
                         "English"
                     ]
                 },
                 "ras:plan_current": {
-                    "$ref": "#/definitions/plan_filename"
+                    "allOf": [
+                        {"description": "The plan file which is the currently active plan for the HEC-RAS project."},
+                        {"$ref": "#/definitions/plan_filename"}
+                    ]
                 },
                 "ras:plan_files": {
                     "type": "array",
+                    "description": "All plan files linked to the HEC-RAS project.",
                     "items": {
                         "$ref": "#/definitions/plan_filename"
                     }
                 },
                 "ras:geometry_files": {
                     "type": "array",
+                    "description": "All geometry files linked to the HEC-RAS project.",
                     "items": {
                         "$ref": "#/definitions/geometry_filename"
                     }
                 },
                 "ras:steady_flow_files": {
                     "type": "array",
+                    "description": "All steady flow files linked to the HEC-RAS project.",
                     "item": {
                         "$ref": "#/definitions/steady_flow_filename"
                     }
                 },
                 "ras:quasi_unsteady_flow_files": {
                     "type": "array",
+                    "description": "All quasi-unsteady flow files linked to the HEC-RAS project.",
                     "item": {
                         "$ref": "#/definitions/quasi_unsteady_flow_filename"
                     }
                 },
                 "ras:unsteady_flow_files": {
                     "type": "array",
+                    "description": "All unsteady files linked to the HEC-RAS project.",
                     "item": {
                         "$ref": "#/definitions/unsteady_flow_filename"
                     }
@@ -218,22 +232,36 @@
             ],
             "properties": {
                 "ras:plan_title": {
-                    "type": ["string", "null"]
+                    "type": ["string", "null"],
+                    "description": "The title of the HEC-RAS plan. Can be null."
                 },
                 "ras:geometry_file": {
-                    "$ref": "#/definitions/geometry_filename"
+                    "allOf": [
+                        {"description": "The geometry file linked to the HEC-RAS plan."},
+                        {"$ref": "#/definitions/geometry_filename"}
+                    ]
                 },
                 "ras:steady_flow_file": {
-                    "$ref": "#/definitions/steady_flow_filename"
+                    "allOf": [
+                        {"description": "The steady flow file linked to the HEC-RAS plan"},
+                        {"$ref": "#/definitions/steady_flow_filename"}
+                    ]
                 },
                 "ras:quasi_unsteady_flow_file": {
-                    "$ref": "#/definitions/quasi_unsteady_flow_filename"
+                    "allOf": [
+                        {"description": "The quasi-unsteady flow file linked to the HEC-RAS plan"},
+                        {"$ref": "#/definitions/quasi_unsteady_flow_filename"}
+                    ]
                 },
                 "ras:unsteady_flow_file": {
-                    "$ref": "#/definitions/unsteady_flow_filename"
+                    "allOf": [
+                        {"description": "The unsteady flow file linked to the HEC-RAS plan"},
+                        {"$ref": "#/definitions/unsteady_flow_filename"}
+                    ]
                 },
                 "ras:short_identifier": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Short identifier for HEC-RAS plan"
                 }
             },
             "oneOf": [
@@ -276,72 +304,89 @@
             ],
             "properties": {
                 "ras:geometry_title": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "The title of the HEC-RAS geometry."
                 },
                 "ras:rivers": {
                     "type": "integer",
+                    "description": "The number of rivers contained in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:reaches": {
                     "type": "integer",
+                    "description": "The number of reaches contained in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:cross_sections": {
                     "type": "object",
+                    "description": "A breakdown of the total number of cross sections in the HEC-RAS geometry, split into 'user input' and 'interpolated'.",
                     "properties": {
                         "total": {
                             "type": "integer",
+                            "description": "The number of total cross sections in the HEC-RAS geometry.",
                             "minimum": 0
                         },
                         "user_input_xss": {
                             "type": "integer",
+                            "description": "The number of user input cross sections in the HEC-RAS geometry.",
                             "minimum": 0
                         },
                         "interpolated": {
                             "type": "integer",
+                            "description": "The number of interpolated input cross sections in the HEC-RAS geometry.",
                             "minimum": 0
                         }
                     }
                 },
                 "ras:culverts": {
                     "type": "integer",
+                    "description": "The number of culverts in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:bridges": {
                     "type": "integer",
+                    "description": "The number of bridges in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:multiple_openings": {
                     "type": "integer",
+                    "description": "The number of multiple openings in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:inline_structures": {
                     "type": "integer",
+                    "description": "The number of inline structures in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:lateral_structures": {
                     "type": "integer",
+                    "description": "The number of lateral structures in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:storage_areas": {
                     "type": "integer",
+                    "description": "The number of storage areas in the HEC-RAS geometry.",
                     "minimum": 0
                 },
                 "ras:2d_flow_areas": {
                     "type": "object",
+                    "description": "A summary of 2D flow areas in the HEC-RAS geometry.",
                     "properties": {
                         "2d_flow_areas": {
+                            "description": "The number of 2D flow areas in the HEC-RAS geometry.",
                             "type": "integer",
                             "minimum": 0
                         },
                         "total_cells": {
                             "type": "integer",
+                            "description": "The number of total 2D flow area cells in the HEC-RAS geometry.",
                             "minimum": 0
                         }
                     }
                 },
                 "ras:sa_connections": {
                     "type": "integer",
+                    "description": "The number of SA/2D connections in the HEC-RAS geometry.",
                     "minimum": 0
                 }
             },
@@ -358,10 +403,11 @@
             ],
             "properties": {
                 "ras:flow_title": {
-                    "type": "string"
+                    "$ref": "#/definitions/flow_title"
                 },
                 "ras:number_of_profiles": {
                     "type": "integer",
+                    "description": "The number of profiles listed in the flow file",
                     "minimum": 0
                 }
             },
@@ -377,7 +423,7 @@
             ],
             "properties": {
                 "ras:flow_title": {
-                    "type": "string"
+                    "$ref": "#/definitions/flow_title"
                 }
             }
         },
@@ -388,7 +434,7 @@
             ],
             "properties": {
                 "ras:flow_title": {
-                    "type": "string"
+                    "$ref": "#/definitions/flow_title"
                 }
             },
             "patternProperties": {
@@ -602,13 +648,16 @@
             "type": "object",
             "properties": {
                 "ras:has_1d": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "Indicator that model contains 1D elements."
                 },
                 "ras:has_2d": {
-                    "type": "boolean"
+                    "type": "boolean",
+                    "description": "Indicator that model contains 2D elements."
                 },
                 "ras:datetime_source": {
                     "type": "string",
+                    "description": "The source of the datetime that was used to populate the datetime property of the STAC object. Valid values: {'processing_time': indicates that the datetime is the time at which the object was created, 'model_geometry': indicates that the datetime was calculated using datetime information attached to model geometry files}",
                     "enum": [
                         "processing_time",
                         "model_geometry"
