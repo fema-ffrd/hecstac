@@ -171,7 +171,8 @@
                     "description": "Title of the HEC-RAS project."
                 },
                 "ras:ras_version": {
-                    "type": ["string", "null"]
+                    "type": ["string", "null"],
+                    "description": "The version of HEC-RAS used by the project."
                 },
                 "ras:project_units": {
                     "type": "string",
