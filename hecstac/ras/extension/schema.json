@@ -125,22 +125,27 @@
     "definitions": {
         "plan_filename": {
             "type": "string",
+            "description": "File matching pattern for HEC-RAS plan files.",
             "pattern": ".+\\.[pP]\\d{2}$"
         },
         "geometry_filename": {
             "type": "string",
+            "description": "File matching pattern for HEC-RAS geometry files.",
             "pattern": ".+\\.[gG]\\d{2}$"
         },
         "steady_flow_filename": {
             "type": "string",
+            "description": "File matching pattern for HEC-RAS steady flow files.",
             "pattern": ".+\\.[fF]\\d{2}$"
         },
         "quasi_unsteady_flow_filename": {
             "type": "string",
+            "description": "File matching pattern for HEC-RAS quasi-unsteady flow files.",
             "pattern": ".+\\.[qQ]\\d{2}$"
         },
         "unsteady_flow_filename": {
             "type": "string",
+            "description": "File matching pattern for HEC-RAS unsteady flow files.",
             "pattern": ".+\\.[uU]\\d{2}$"
         },
         "flow_title": {
