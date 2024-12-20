@@ -710,7 +710,7 @@
                 },
                 "ras:datetime_source": {
                     "type": "string",
-                    "description": "The source of the datetime that was used to populate the datetime property of the STAC object. Valid values: {'processing_time': indicates that the datetime is the time at which the object was created, 'model_geometry': indicates that the datetime was calculated using datetime information attached to model geometry files}",
+                    "description": "The source of the datetime that was used to populate the datetime property of the STAC object. Valid values: {'processing_time', 'model_geometry'}",
                     "enum": [
                         "processing_time",
                         "model_geometry"
