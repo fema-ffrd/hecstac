@@ -920,155 +920,239 @@ class PlanHdfAsset(HdfAsset):
         # then use key for the property in the dictionary of attributes to retrieve the property
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("base_output_interval")
+        return self._plan_info_attrs.get("Base Output Interval")
 
     @property
     def plan_information_computation_time_step_base(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Computation Time Step Base")
 
     @property
     def plan_information_flow_filename(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Flow Filename")
 
     @property
     def plan_information_geometry_filename(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Geometry Filename")
 
     @property
     def plan_information_plan_filename(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Plan Filename")
 
     @property
     def plan_information_plan_name(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Plan Name")
 
     @property
     def plan_information_project_filename(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Project Filename")
 
     @property
     def plan_information_project_title(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Project Title")
 
     @property
     def plan_information_simulation_end_time(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Simulation End Time")
 
     @property
     def plan_information_simulation_start_time(self):
-        pass
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Simulation Start Time")
 
     @property
     def plan_parameters_1d_flow_tolerance(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Flow Tolerance")
 
     @property
     def plan_parameters_1d_maximum_iterations(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Maximum Iterations")
 
     @property
     def plan_parameters_1d_maximum_iterations_without_improvement(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get(
+            "1D Maximum Iterations Without Improvement"
+        )
 
     @property
     def plan_parameters_1d_maximum_water_surface_error_to_abort(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get(
+            "1D Maximum Water Surface Error To Abort"
+        )
 
     @property
     def plan_parameters_1d_storage_area_elevation_tolerance(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Storage Area Elevation Tolerance")
 
     @property
     def plan_parameters_1d_theta(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Theta")
 
     @property
     def plan_parameters_1d_theta_warmup(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Theta Warmup")
 
     @property
     def plan_parameters_1d_water_surface_elevation_tolerance(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Water Surface Elevation Tolerance")
 
     @property
     def plan_parameters_1d2d_gate_flow_submergence_decay_exponent(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get(
+            "1D-2D Gate Flow Submergence Decay Exponent"
+        )
 
     @property
     def plan_parameters_1d2d_is_stablity_factor(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D IS Stablity Factor")
 
     @property
     def plan_parameters_1d2d_ls_stablity_factor(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D LS Stablity Factor")
 
     @property
     def plan_parameters_1d2d_maximum_number_of_time_slices(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Maximum Number of Time Slices")
 
     @property
     def plan_parameters_1d2d_minimum_time_step_for_slicinghours(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get(
+            "1D-2D Minimum Time Step for Slicing(hours)"
+        )
 
     @property
     def plan_parameters_1d2d_number_of_warmup_steps(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Number of Warmup Steps")
 
     @property
     def plan_parameters_1d2d_warmup_time_step_hours(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Warmup Time Step (hours)")
 
     @property
     def plan_parameters_1d2d_weir_flow_submergence_decay_exponent(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get(
+            "1D-2D Weir Flow Submergence Decay Exponent"
+        )
 
     @property
     def plan_parameters_1d2d_maxiter(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D2D MaxIter")
 
     @property
     def plan_parameters_2d_equation_set(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Equation Set")
 
     @property
     def plan_parameters_2d_names(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Names")
 
     @property
     def plan_parameters_2d_volume_tolerance(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Volume Tolerance")
 
     @property
     def plan_parameters_2d_water_surface_tolerance(self):
-        pass
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Water Surface Tolerance")
 
     @property
     def meteorology_dss_filename(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("DSS Filename")
 
     @property
     def meteorology_dss_pathname(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("DSS Pathname")
 
     @property
     def meteorology_data_type(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Data Type")
 
     @property
     def meteorology_mode(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Mode")
 
     @property
     def meteorology_raster_cellsize(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Raster Cellsize")
 
     @property
     def meteorology_source(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Source")
 
     @property
     def meteorology_units(self):
-        pass
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Units")
 
 
 class GeometryHdfAsset(HdfAsset):
