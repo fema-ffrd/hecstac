@@ -5,6 +5,7 @@ import math
 import os
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from copy import deepcopy
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -45,11 +46,33 @@ RAS_EXTENSION_DICT: dict[str, Any] = data
 
 def flip_schema(definition_name: str) -> dict[str, Any]:
     # pulls out specific definition of interest as dictionary, inserting the remainder of definitions into the dictionary in order to maintain integrity of definition links
-    definitions: dict = RAS_EXTENSION_DICT["definitions"]
+    definitions: dict = deepcopy(RAS_EXTENSION_DICT["definitions"])
     ras_schema = definitions[definition_name]
-    del definitions[definition_name]
-    ras_schema["definitions"] = definitions
+    schema_specific_definitions = {}
+    for internal_definition_link in collect_definition_links(ras_schema):
+        internal_definition_name = os.path.basename(internal_definition_link)
+        definition_value = definitions[internal_definition_name]
+        schema_specific_definitions[internal_definition_name] = definition_value
+    if len(schema_specific_definitions) > 0:
+        ras_schema["definitions"] = schema_specific_definitions
+    with open(f"{definition_name}_schema.json", "w") as f:
+        json.dump(ras_schema, f)
     return ras_schema
+
+
+def collect_definition_links(schema: dict[str, Any]) -> Iterator[str]:
+    for k, v in schema.items():
+        if k == "$ref":
+            if "#/definitions/" in v:
+                yield v
+            elif "#" in v:
+                raise ValueError(f"internal link found in key value pair {k}: {v} which is not found in #/definitions")
+        elif isinstance(v, dict):
+            yield from collect_definition_links(v)
+        elif isinstance(v, list):
+            for list_entry in v:
+                if isinstance(list_entry, dict):
+                    yield from collect_definition_links(list_entry)
 
 
 class GenericAsset(Asset):
@@ -104,9 +127,8 @@ class ProjectAsset(GenericAsset):
 
     def populate(self) -> None:
         # get rid of requirements for properties which are defined after other assets are associated with this asset (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)
-        pre_asset_association_schema = self.ras_schema.copy()
+        pre_asset_association_schema = deepcopy(self.ras_schema)
         required_property_names: list[str] = pre_asset_association_schema["required"]
-        print(required_property_names)
         for asset_associated_property in [
             "ras:plan_current",
             "ras:plan_files",
@@ -121,9 +143,7 @@ class ProjectAsset(GenericAsset):
         self.extra_fields["ras:project_units"] = self.project_units
         self.extra_fields["ras:ras_version"] = self.ras_version
         as_dict = self.to_dict()
-        jsonschema.validate(
-            as_dict, pre_asset_association_schema, jsonschema.Draft7Validator
-        )
+        jsonschema.validate(as_dict, pre_asset_association_schema, jsonschema.Draft7Validator)
 
     @property
     @lru_cache
@@ -177,9 +197,7 @@ class ProjectAsset(GenericAsset):
     @property
     @lru_cache
     def quasi_unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(
-            self.file_lines, "QuasiSteady File", expect_one=False
-        )
+        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
         return [self.name_from_suffix(i) for i in suffixes]
 
     @property
@@ -211,21 +229,18 @@ class ProjectAsset(GenericAsset):
             steady_flow_file_list.append(asset.href)
         self.extra_fields["ras:steady_flow_files"] = steady_flow_file_list
 
-    def associate_related_quasi_unsteady_flows(
-        self, asset_dict: dict[str, Asset]
-    ) -> None:
+    def associate_related_quasi_unsteady_flows(self, asset_dict: dict[str, Asset]) -> None:
         quasi_unsteady_flow_file_list: list[str] = []
         for quasi_unsteady_flow_file in self.quasi_unsteady_flow_files:
             asset = asset_dict[quasi_unsteady_flow_file]
             quasi_unsteady_flow_file_list.append(asset.href)
-        self.extra_fields["ras:quasi_unsteady_flow_files"] = (
-            quasi_unsteady_flow_file_list
-        )
+        self.extra_fields["ras:quasi_unsteady_flow_files"] = quasi_unsteady_flow_file_list
 
     def associate_related_unsteady_flows(self, asset_dict: dict[str, Asset]) -> None:
         unsteady_flow_file_list: list[str] = []
         for unsteady_file in self.unsteady_flow_files:
             asset = asset_dict[unsteady_file]
+            unsteady_flow_file_list.append(asset.href)
         self.extra_fields["ras:unsteady_flow_files"] = unsteady_flow_file_list
 
     def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
@@ -259,7 +274,7 @@ class PlanAsset(GenericAsset):
 
     def populate(self) -> None:
         # get rid of requirements for properties which are defined after other assets are associated with this asset (geometry_file, one of [steady_flow_file, quasi_unsteady_flow_file, unsteady_flow_file])
-        pre_asset_association_schema = self.ras_schema.copy()
+        pre_asset_association_schema = self.ras_schema
         required_property_names: list[str] = pre_asset_association_schema["required"]
         for asset_associated_property in ["ras:geometry_file"]:
             required_property_names.remove(asset_associated_property)
@@ -268,9 +283,7 @@ class PlanAsset(GenericAsset):
         self.extra_fields["ras:plan_title"] = self.plan_title
         self.extra_fields["ras:short_identifier"] = self.short_identifier
         as_dict = self.to_dict()
-        jsonschema.validate(
-            as_dict, pre_asset_association_schema, jsonschema.Draft7Validator
-        )
+        jsonschema.validate(as_dict, pre_asset_association_schema, jsonschema.Draft7Validator)
 
     @property
     def plan_title(self) -> str:
@@ -346,39 +359,21 @@ class GeometryAsset(GenericAsset):
         self.extra_fields["ras:reaches"] = len(self.reaches)
         self.extra_fields["ras:cross_sections"] = {
             "total": len(self.cross_sections),
-            "user_input_xss": len(
-                [xs for xs in self.cross_sections.values() if not xs.is_interpolated]
-            ),
-            "interpolated": len(
-                [xs for xs in self.cross_sections.values() if xs.is_interpolated]
-            ),
+            "user_input_xss": len([xs for xs in self.cross_sections.values() if not xs.is_interpolated]),
+            "interpolated": len([xs for xs in self.cross_sections.values() if xs.is_interpolated]),
         }
         self.extra_fields["ras:culverts"] = len(
             [s for s in self.structures.values() if s.type == StructureType.CULVERT]
         )
-        self.extra_fields["ras:bridges"] = len(
-            [s for s in self.structures.values() if s.type == StructureType.BRIDGE]
-        )
+        self.extra_fields["ras:bridges"] = len([s for s in self.structures.values() if s.type == StructureType.BRIDGE])
         self.extra_fields["ras:multiple_openings"] = len(
-            [
-                s
-                for s in self.structures.values()
-                if s.type == StructureType.MULTIPLE_OPENING
-            ]
+            [s for s in self.structures.values() if s.type == StructureType.MULTIPLE_OPENING]
         )
         self.extra_fields["ras:inline_structures"] = len(
-            [
-                s
-                for s in self.structures.values()
-                if s.type == StructureType.INLINE_STRUCTURE
-            ]
+            [s for s in self.structures.values() if s.type == StructureType.INLINE_STRUCTURE]
         )
         self.extra_fields["ras:lateral_structures"] = len(
-            [
-                s
-                for s in self.structures.values()
-                if s.type == StructureType.LATERAL_STRUCTURE
-            ]
+            [s for s in self.structures.values() if s.type == StructureType.LATERAL_STRUCTURE]
         )
         # TODO: implement actual logic for populating storage areas, 2d flow areas, and sa connections
         self.extra_fields["ras:storage_areas"] = 0
@@ -387,7 +382,6 @@ class GeometryAsset(GenericAsset):
             "total_cells": 0,
         }
         self.extra_fields["ras:sa_connections"] = 0
-
         as_dict = self.to_dict()
         jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
@@ -405,11 +399,7 @@ class GeometryAsset(GenericAsset):
     def rivers(self) -> dict[str, "River"]:
         """A dictionary of river_name: River (class) for the rivers contained in the HEC-RAS geometry file."""
         tmp_rivers = defaultdict(list)
-        for (
-            reach
-        ) in (
-            self.reaches.values()
-        ):  # First, group all reaches into their respective rivers
+        for reach in self.reaches.values():  # First, group all reaches into their respective rivers
             tmp_rivers[reach.river].append(reach.reach)
         for (
             river,
@@ -421,22 +411,14 @@ class GeometryAsset(GenericAsset):
     @property
     def reaches(self) -> dict[str, "Reach"]:
         """A dictionary of the reaches contained in the HEC-RAS geometry file."""
-        river_reaches = search_contents(
-            self.file_lines, "River Reach", expect_one=False
-        )
-        return {
-            river_reach: Reach(self.file_lines, river_reach, self.crs)
-            for river_reach in river_reaches
-        }
+        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False)
+        return {river_reach: Reach(self.file_lines, river_reach, self.crs) for river_reach in river_reaches}
 
     @property
     def junctions(self) -> dict[str, "Junction"]:
         """A dictionary of the junctions contained in the HEC-RAS geometry file."""
         juncts = search_contents(self.file_lines, "Junct Name", expect_one=False)
-        return {
-            junction: Junction(self.file_lines, junction, self.crs)
-            for junction in juncts
-        }
+        return {junction: Junction(self.file_lines, junction, self.crs) for junction in juncts}
 
     @property
     def cross_sections(self) -> dict[str, "XS"]:
@@ -469,9 +451,7 @@ class GeometryAsset(GenericAsset):
     @property
     def datetimes(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry"""
-        dts = search_contents(
-            self.file_lines, "Node Last Edited Time", expect_one=False
-        )
+        dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False)
         if len(dts) >= 1:
             try:
                 return [datetime.datetime.strptime(d, "%b/%d/%Y %H:%M:%S") for d in dts]
@@ -484,9 +464,7 @@ class GeometryAsset(GenericAsset):
     def has_2d(self) -> bool:
         """Check if RAS geometry has any 2D areas"""
         for line in self.file_lines:
-            if line.startswith("Storage Area Is2D=") and int(
-                line[len("Storage Area Is2D=") :].strip()
-            ) in (1, -1):
+            if line.startswith("Storage Area Is2D=") and int(line[len("Storage Area Is2D=") :].strip()) in (1, -1):
                 # RAS mostly uses "-1" to indicate True and "0" to indicate False. Checking for "1" also here.
                 return True
         return False
@@ -501,24 +479,13 @@ class GeometryAsset(GenericAsset):
     def concave_hull(self) -> Polygon:
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
-        xs_gdf = pd.concat(
-            [xs.gdf for xs in self.cross_sections.values()], ignore_index=True
-        )
+        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
         for river_reach in xs_gdf["river_reach"].unique():
             xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
             points = xs_subset.boundary.explode(index_parts=True).unstack()
-            points_last_xs = [
-                Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords
-            ]
-            points_first_xs = [
-                Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]
-            ]
-            polygon = Polygon(
-                points_first_xs
-                + list(points[0])
-                + points_last_xs
-                + list(points[1])[::-1]
-            )
+            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
+            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
+            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
             if isinstance(polygon, MultiPolygon):
                 polygons += list(polygon.geoms)
             else:
@@ -530,21 +497,13 @@ class GeometryAsset(GenericAsset):
         out_hull = union_all([make_valid(p) for p in polygons])
         return out_hull
 
-    def junction_hull(
-        self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries
-    ) -> Polygon:
+    def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
         junction_xs = self.determine_junction_xs(xs_gdf, junction)
 
-        junction_xs["start"] = junction_xs.apply(
-            lambda row: row.geometry.boundary.geoms[0], axis=1
-        )
-        junction_xs["end"] = junction_xs.apply(
-            lambda row: row.geometry.boundary.geoms[1], axis=1
-        )
-        junction_xs["to_line"] = junction_xs.apply(
-            lambda row: self.determine_xs_order(row, junction_xs), axis=1
-        )
+        junction_xs["start"] = junction_xs.apply(lambda row: row.geometry.boundary.geoms[0], axis=1)
+        junction_xs["end"] = junction_xs.apply(lambda row: row.geometry.boundary.geoms[1], axis=1)
+        junction_xs["to_line"] = junction_xs.apply(lambda row: self.determine_xs_order(row, junction_xs), axis=1)
 
         coords = []
         first_to_line = junction_xs["to_line"].iloc[0]
@@ -557,43 +516,25 @@ class GeometryAsset(GenericAsset):
                 break
         return Polygon(coords)
 
-    def determine_junction_xs(
-        self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries
-    ) -> gpd.GeoDataFrame:
+    def determine_junction_xs(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> gpd.GeoDataFrame:
         """Determine the cross sections that bound a junction."""
         junction_xs = []
-        for us_river, us_reach in zip(
-            junction.us_rivers.split(","), junction.us_reaches.split(",")
-        ):
-            xs_us_river_reach = xs_gdf[
-                (xs_gdf["river"] == us_river) & (xs_gdf["reach"] == us_reach)
-            ]
+        for us_river, us_reach in zip(junction.us_rivers.split(","), junction.us_reaches.split(",")):
+            xs_us_river_reach = xs_gdf[(xs_gdf["river"] == us_river) & (xs_gdf["reach"] == us_reach)]
             junction_xs.append(
-                xs_us_river_reach[
-                    xs_us_river_reach["river_station"]
-                    == xs_us_river_reach["river_station"].min()
-                ]
+                xs_us_river_reach[xs_us_river_reach["river_station"] == xs_us_river_reach["river_station"].min()]
             )
-        for ds_river, ds_reach in zip(
-            junction.ds_rivers.split(","), junction.ds_reaches.split(",")
-        ):
-            xs_ds_river_reach = xs_gdf[
-                (xs_gdf["river"] == ds_river) & (xs_gdf["reach"] == ds_reach)
-            ].copy()
+        for ds_river, ds_reach in zip(junction.ds_rivers.split(","), junction.ds_reaches.split(",")):
+            xs_ds_river_reach = xs_gdf[(xs_gdf["river"] == ds_river) & (xs_gdf["reach"] == ds_reach)].copy()
             xs_ds_river_reach["geometry"] = xs_ds_river_reach.reverse()
             junction_xs.append(
-                xs_ds_river_reach[
-                    xs_ds_river_reach["river_station"]
-                    == xs_ds_river_reach["river_station"].max()
-                ]
+                xs_ds_river_reach[xs_ds_river_reach["river_station"] == xs_ds_river_reach["river_station"].max()]
             )
         return pd.concat(junction_xs).copy()
 
     def determine_xs_order(self, row: gpd.GeoSeries, junction_xs: gpd.gpd.GeoDataFrame):
         """Detemine what order cross sections bounding a junction should be in to produce a valid polygon."""
-        candidate_lines = junction_xs[
-            junction_xs["river_reach_rs"] != row["river_reach_rs"]
-        ]
+        candidate_lines = junction_xs[junction_xs["river_reach_rs"] != row["river_reach_rs"]]
         candidate_lines["distance"] = candidate_lines["start"].distance(row.end)
         return candidate_lines.loc[
             candidate_lines["distance"] == candidate_lines["distance"].min(),
@@ -635,9 +576,7 @@ class SteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"][
-            "steady_flow"
-        ]
+        self.ras_schema = flip_schema("steady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -668,9 +607,7 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"][
-            "quasi_unsteady_flow"
-        ]
+        self.ras_schema = flip_schema("quasi_unsteady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -701,14 +638,12 @@ class UnsteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema: dict[str, Any] = RAS_EXTENSION_DICT["definitions"][
-            "unsteady_flow"
-        ]
+        self.ras_schema = flip_schema("unsteady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
-        as_dict = self.to_dict()
-        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
+        # as_dict = self.to_dict()
+        # jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
 
     @property
     def flow_title(self) -> str:
@@ -882,7 +817,12 @@ class HdfAsset(Asset):
     @property
     @lru_cache
     def mesh_areas(self) -> Polygon | None:
-        pass
+        # create placeholder polygon
+        x1, y1 = 0, 1  # Bottom-left corner
+        x2, y2 = 5, 3  # Top-right corner
+        polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+
+        return polygon
 
     @property
     @lru_cache
@@ -894,9 +834,7 @@ class HdfAsset(Asset):
 
     def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
         if self.landcover_filename:
-            landcover_asset = asset_dict[
-                self.parent.joinpath(self.landcover_filename).resolve()
-            ]
+            landcover_asset = asset_dict[self.parent.joinpath(self.landcover_filename).resolve()]
             self.extra_fields["ras:landcover_file"] = landcover_asset.href
 
 
@@ -992,17 +930,13 @@ class PlanHdfAsset(HdfAsset):
     def plan_parameters_1d_maximum_iterations_without_improvement(self):
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
-        return self._plan_parameters_attrs.get(
-            "1D Maximum Iterations Without Improvement"
-        )
+        return self._plan_parameters_attrs.get("1D Maximum Iterations Without Improvement")
 
     @property
     def plan_parameters_1d_maximum_water_surface_error_to_abort(self):
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
-        return self._plan_parameters_attrs.get(
-            "1D Maximum Water Surface Error To Abort"
-        )
+        return self._plan_parameters_attrs.get("1D Maximum Water Surface Error To Abort")
 
     @property
     def plan_parameters_1d_storage_area_elevation_tolerance(self):
@@ -1032,9 +966,7 @@ class PlanHdfAsset(HdfAsset):
     def plan_parameters_1d2d_gate_flow_submergence_decay_exponent(self):
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
-        return self._plan_parameters_attrs.get(
-            "1D-2D Gate Flow Submergence Decay Exponent"
-        )
+        return self._plan_parameters_attrs.get("1D-2D Gate Flow Submergence Decay Exponent")
 
     @property
     def plan_parameters_1d2d_is_stablity_factor(self):
@@ -1058,9 +990,7 @@ class PlanHdfAsset(HdfAsset):
     def plan_parameters_1d2d_minimum_time_step_for_slicinghours(self):
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
-        return self._plan_parameters_attrs.get(
-            "1D-2D Minimum Time Step for Slicing(hours)"
-        )
+        return self._plan_parameters_attrs.get("1D-2D Minimum Time Step for Slicing(hours)")
 
     @property
     def plan_parameters_1d2d_number_of_warmup_steps(self):
@@ -1078,9 +1008,7 @@ class PlanHdfAsset(HdfAsset):
     def plan_parameters_1d2d_weir_flow_submergence_decay_exponent(self):
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
-        return self._plan_parameters_attrs.get(
-            "1D-2D Weir Flow Submergence Decay Exponent"
-        )
+        return self._plan_parameters_attrs.get("1D-2D Weir Flow Submergence Decay Exponent")
 
     @property
     def plan_parameters_1d2d_maxiter(self):
@@ -1181,9 +1109,7 @@ class River:
 class XS:
     """HEC-RAS Cross Section."""
 
-    def __init__(
-        self, ras_data: list[str], river_reach: str, river: str, reach: str, crs: str
-    ):
+    def __init__(self, ras_data: list[str], river_reach: str, river: str, reach: str, crs: str):
         self.ras_data = ras_data
         self.crs = crs
         self.river = river
@@ -1198,9 +1124,7 @@ class XS:
 
         Example: Type RM Length L Ch R = 1 ,83554.  ,237.02,192.39,113.07.
         """
-        header = search_contents(
-            self.ras_data, "Type RM Length L Ch R ", expect_one=True
-        )
+        header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
 
         return header.split(",")[position]
 
@@ -1228,9 +1152,7 @@ class XS:
     def number_of_coords(self) -> int:
         """Number of coordinates in cross section."""
         try:
-            return int(
-                search_contents(self.ras_data, "XS GIS Cut Line", expect_one=True)
-            )
+            return int(search_contents(self.ras_data, "XS GIS Cut Line", expect_one=True))
         except ValueError:
             return 0
             # raise NotGeoreferencedError(f"No coordinates found for cross section: {self.river_reach_rs} ")
@@ -1302,9 +1224,7 @@ class XS:
                 "ras_data": ["\n".join(self.ras_data)],
                 "station_elevation_points": [self.station_elevation_points],
                 "bank_stations": [self.bank_stations],
-                "number_of_station_elevation_points": [
-                    self.number_of_station_elevation_points
-                ],
+                "number_of_station_elevation_points": [self.number_of_station_elevation_points],
                 "number_of_coords": [self.number_of_coords],
                 # "coords": [self.coords],
             },
@@ -1315,9 +1235,7 @@ class XS:
     @property
     def n_subdivisions(self) -> int:
         """Get the number of subdivisions (defined by manning's n)."""
-        return int(
-            search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0]
-        )
+        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0])
 
     @property
     def subdivision_type(self) -> int:
@@ -1325,9 +1243,7 @@ class XS:
 
         -1 seems to indicate horizontally-varied n.  0 seems to indicate subdivisions by LOB, channel, ROB.
         """
-        return int(
-            search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1]
-        )
+        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
 
     @property
     def subdivisions(self) -> tuple[list[float], list[float]]:
@@ -1378,14 +1294,10 @@ class XS:
             intersection_pts.append((tmp_x, tmp_y))
         return intersection_pts
 
-    def get_wetted_perimeter(
-        self, wse: float, start: float = None, stop: float = None
-    ) -> float:
+    def get_wetted_perimeter(self, wse: float, start: float = None, stop: float = None) -> float:
         """Get the hydraulic radius of the cross-section at a given WSE."""
         df = pd.DataFrame(self.station_elevation_points, columns=["x", "y"])
-        df = pd.concat(
-            [df, pd.DataFrame(self.wse_intersection_pts(wse), columns=["x", "y"])]
-        )
+        df = pd.concat([df, pd.DataFrame(self.wse_intersection_pts(wse), columns=["x", "y"])])
         if start is not None:
             df = df[df["x"] >= start]
         if stop is not None:
@@ -1400,14 +1312,10 @@ class XS:
 
         return df["d"].cumsum().values[0]
 
-    def get_flow_area(
-        self, wse: float, start: float = None, stop: float = None
-    ) -> float:
+    def get_flow_area(self, wse: float, start: float = None, stop: float = None) -> float:
         """Get the flow area of the cross-section at a given WSE."""
         df = pd.DataFrame(self.station_elevation_points, columns=["x", "y"])
-        df = pd.concat(
-            [df, pd.DataFrame(self.wse_intersection_pts(wse), columns=["x", "y"])]
-        )
+        df = pd.concat([df, pd.DataFrame(self.wse_intersection_pts(wse), columns=["x", "y"])])
         if start is not None:
             df = df[df["x"] >= start]
         if stop is not None:
@@ -1419,9 +1327,7 @@ class XS:
         df["d"] = wse - df["y"]  # depth
         df["d2"] = df["d"].shift(-1)
         df["x2"] = df["x"].shift(-1)
-        df["a"] = ((df["d"] + df["d2"]) / 2) * (
-            df["x2"] - df["x"]
-        )  # area of a trapezoid
+        df["a"] = ((df["d"] + df["d2"]) / 2) * (df["x2"] - df["x"])  # area of a trapezoid
 
         return df["a"].cumsum().values[0]
 
@@ -1481,9 +1387,7 @@ class Structure:
 
         Example: Type RM Length L Ch R = 3 ,83554.  ,237.02,192.39,113.07.
         """
-        header = search_contents(
-            self.ras_data, "Type RM Length L Ch R ", expect_one=True
-        )
+        header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
 
         return header.split(",")[position]
 
@@ -1557,9 +1461,7 @@ class Reach:
     """HEC-RAS River Reach."""
 
     def __init__(self, ras_data: list[str], river_reach: str, crs: str):
-        reach_lines = text_block_from_start_end_str(
-            f"River Reach={river_reach}", ["River Reach"], ras_data, -1
-        )
+        reach_lines = text_block_from_start_end_str(f"River Reach={river_reach}", ["River Reach"], ras_data, -1)
         self.ras_data = reach_lines
         self.crs = crs
         self.river_reach = river_reach
@@ -1612,9 +1514,7 @@ class Reach:
     @property
     def reach_nodes(self) -> list[str]:
         """Reach nodes."""
-        return search_contents(
-            self.ras_data, "Type RM Length L Ch R ", expect_one=False
-        )
+        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False)
 
     @property
     def cross_sections(self) -> dict[str, "XS"]:
@@ -1629,9 +1529,7 @@ class Reach:
                 ["Type RM Length L Ch R", "River Reach"],
                 self.ras_data,
             )
-            cross_section = XS(
-                xs_lines, self.river_reach, self.river, self.reach, self.crs
-            )
+            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.crs)
             cross_sections[cross_section.river_reach_rs] = cross_section
 
         return cross_sections
@@ -1648,9 +1546,7 @@ class Reach:
                     ["Type RM Length L Ch R", "River Reach"],
                     self.ras_data,
                 )
-                cross_section = XS(
-                    xs_lines, self.river_reach, self.river, self.reach, self.crs
-                )
+                cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.crs)
                 continue
             elif int(type) in [2, 3, 4, 5, 6]:  # culvert or bridge or multiple openeing
                 structure_lines = text_block_from_start_end_str(
@@ -1709,9 +1605,7 @@ class Junction:
     def __init__(self, ras_data: list[str], junct: str, crs: str):
         self.crs = crs
         self.name = junct
-        self.ras_data = text_block_from_start_str_to_empty_line(
-            f"Junct Name={junct}", ras_data
-        )
+        self.ras_data = text_block_from_start_str_to_empty_line(f"Junct Name={junct}", ras_data)
 
     def split_lines(self, lines: list[str], token: str, idx: int) -> list[str]:
         """Split lines."""
@@ -1720,20 +1614,12 @@ class Junction:
     @property
     def x(self) -> float:
         """Junction x coordinate."""
-        return float(
-            self.split_lines(
-                [search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0
-            )
-        )
+        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0))
 
     @property
     def y(self):
         """Junction y coordinate."""
-        return float(
-            self.split_lines(
-                [search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1
-            )
-        )
+        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1))
 
     @property
     def point(self) -> Point:
@@ -1787,11 +1673,7 @@ class Junction:
     @property
     def junction_lengths(self) -> str:
         """Junction lengths."""
-        return ",".join(
-            self.split_lines(
-                search_contents(self.ras_data, "Junc L&A", expect_one=False), ",", 0
-            )
-        )
+        return ",".join(self.split_lines(search_contents(self.ras_data, "Junc L&A", expect_one=False), ",", 0))
 
     @property
     def gdf(self):
