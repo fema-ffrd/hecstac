@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import logging
 import os
 from enum import Enum
 from functools import lru_cache
@@ -111,6 +112,7 @@ class RasModelItem(Item):
         if self._geometry == NULL_GEOMETRY:
             # if hdf file is present, get mesh areas from model, simplify, and use as geometry
             if self.has_2d:
+                logging.info("Creating geometry using hdf file mesh areas")
                 mesh_area_polygons: list[Polygon] = []
                 for geom_asset in self.geometry_files:
                     if isinstance(geom_asset, GeometryHdfAsset):
@@ -126,6 +128,7 @@ class RasModelItem(Item):
                 return stac_geom
             # if hdf file is not present, get concave hull of cross sections and use as geometry
             if self.has_1d:
+                logging.info("Creating geometry using gNN file cross sections")
                 concave_hull_polygons: list[Polygon] = []
                 for geom_asset in self.geometry_files:
                     if isinstance(geom_asset, GeometryAsset):

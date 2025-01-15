@@ -1,3 +1,4 @@
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,7 @@ def asset_factory(filepath: str, crs: str | None = None, defer_computing_propert
     if geometry_asset_pattern.match(filepath):
         if not crs:
             raise GeometryAssetMissingCRSError
+        logging.info(f"Creating asset for {filepath} using constructor {GeometryAsset}")
         asset = GeometryAsset(filepath, crs)
         if not defer_computing_properties:
             try:
@@ -63,6 +65,7 @@ def asset_factory(filepath: str, crs: str | None = None, defer_computing_propert
     }
     for pattern, constructor in pattern_ras_constructor_dict.items():
         if pattern.match(filepath):
+            logging.info(f"Creating asset for {filepath} using constructor {constructor}")
             asset = constructor(filepath)
             if asset:
                 if not defer_computing_properties:
