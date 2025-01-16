@@ -2,11 +2,17 @@ import datetime as dt
 import json
 import logging
 import os
+import io
 from enum import Enum
+import contextily as ctx
 from functools import lru_cache
 from typing import Any
-
+import geopandas as gpd
+import pandas as pd
+from matplotlib.lines import Line2D
 from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import dataretrieval.nwis as nwis
 from pyproj import CRS, Transformer
 from pystac import Collection, Item
 from pystac.extensions.projection import ProjectionExtension
@@ -20,6 +26,7 @@ from ..utils.placeholders import (
     NULL_STAC_GEOMETRY,
     PLACEHOLDER_ID,
 )
+
 from .const import SCHEMA_URI
 from .ras_asset import (
     GeometryAsset,
@@ -30,6 +37,7 @@ from .ras_asset import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
+    GenericAsset,
 )
 from .stac_utils import asset_factory
 
@@ -69,6 +77,7 @@ class RasModelItem(Item):
         )
         self.prj_file = prj_file
         self.crs = crs
+        self.href = href
         self._project: ProjectAsset | None = None
         self._plan_files: list[PlanAsset] = []
         self._flow_files: list[SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset] = []
@@ -118,7 +127,8 @@ class RasModelItem(Item):
                     if isinstance(geom_asset, GeometryHdfAsset):
                         if self.simplify_tolerance:
                             mesh_areas = simplify(
-                                self._transform_geometry(geom_asset.mesh_areas), self.simplify_tolerance
+                                self._transform_geometry(geom_asset.mesh_areas),
+                                self.simplify_tolerance,
                             )
                         else:
                             mesh_areas = self._transform_geometry(geom_asset.mesh_areas)
@@ -134,7 +144,8 @@ class RasModelItem(Item):
                     if isinstance(geom_asset, GeometryAsset):
                         if self.simplify_tolerance:
                             concave_hull = simplify(
-                                self._transform_geometry(geom_asset.concave_hull), self.simplify_tolerance
+                                self._transform_geometry(geom_asset.concave_hull),
+                                self.simplify_tolerance,
                             )
                         else:
                             concave_hull = self._transform_geometry(geom_asset.concave_hull)
@@ -291,7 +302,9 @@ class RasModelItem(Item):
         return self._geom_files
 
     @property
-    def flow_files(self) -> list[SteadyFlowAsset | QuasiUnsteadyFlowAsset | UnsteadyFlowAsset]:
+    def flow_files(
+        self,
+    ) -> list[SteadyFlowAsset | QuasiUnsteadyFlowAsset | UnsteadyFlowAsset]:
         if self._project == None:
             self.populate()
         return self._flow_files
@@ -315,14 +328,281 @@ class RasModelItem(Item):
     def has_2d(self) -> bool:
         return self._has_2d
 
+    def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list:
+        """
+        Plots mesh areas on the given axes.
+        """
+        mesh_polygons.plot(
+            ax=ax,
+            edgecolor="silver",
+            facecolor="none",
+            linestyle="-",
+            alpha=0.7,
+            label="Mesh Polygons",
+        )
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color="silver",
+                linestyle="-",
+                linewidth=2,
+                label="Mesh Polygons",
+            )
+        ]
+        return legend_handle
+
+    def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list:
+        """
+        Plots breaklines on the given axes.
+        """
+        breaklines.plot(ax=ax, edgecolor="red", linestyle="-", alpha=0.3, label="Breaklines")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color="red",
+                linestyle="-",
+                alpha=0.4,
+                linewidth=2,
+                label="Breaklines",
+            )
+        ]
+        return legend_handle
+
+    def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list:
+        """
+        Plots boundary condition lines on the given axes.
+        """
+        legend_handles = [
+            Line2D([0], [0], color="none", linestyle="None", label="BC Lines"),
+        ]
+        colors = plt.cm.get_cmap("Dark2", len(bc_lines))
+
+        for bc_line, color in zip(bc_lines.itertuples(), colors.colors):
+            x_coords, y_coords = bc_line.geometry.xy
+            ax.plot(
+                x_coords,
+                y_coords,
+                color=color,
+                linestyle="-",
+                linewidth=2,
+                label=bc_line.name,
+            )
+            legend_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    color=color,
+                    linestyle="-",
+                    linewidth=2,
+                    label=bc_line.name,
+                )
+            )
+        return legend_handles
+
+    def _plot_usgs_gages(self, ax, usgs_gages: gpd.GeoDataFrame) -> list:
+        legend_handles = [Line2D([0], [0], color="none", linestyle="None", label="USGS Gages")]
+        gage_colors = plt.cm.get_cmap("Set1", len(usgs_gages))
+
+        for gage, color in zip(usgs_gages.itertuples(), gage_colors.colors):
+            ax.plot(
+                gage.geometry.x,
+                gage.geometry.y,
+                color=color,
+                marker="*",
+                markersize=15,
+                label=gage.site_no,
+            )
+            legend_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    color=color,
+                    marker="*",
+                    markersize=15,
+                    linestyle="None",
+                    label=gage.site_no,
+                )
+            )
+        return legend_handles
+
+    def add_thumbnail_asset(self, filepath: str) -> None:
+        if filepath.startswith("s3://"):
+            media_type = "image/png"
+        else:
+            # Ensure the file exists before adding as an asset
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
+
+            media_type = "image/png"
+
+        self.assets["thumbnail"] = GenericAsset(
+            href=filepath,
+            title="Model Thumbnail",
+            description="Thumbnail image for the model",
+            media_type=media_type,
+            roles=["thumbnail"],
+            extra_fields=None,
+        )
+
+    def get_primary_geom(self):
+
+        geom_hdf_assets = [asset for asset in self._geom_files if isinstance(asset, GeometryHdfAsset)]
+        if len(geom_hdf_assets) == 0:
+            raise FileNotFoundError("No 2D geometry found")
+        elif len(geom_hdf_assets) > 1:
+            primary_geom_hdf_asset = next(asset for asset in geom_hdf_assets if ".g01" in asset.hdf_file)
+        else:
+            primary_geom_hdf_asset = geom_hdf_assets[0]
+        return primary_geom_hdf_asset
+
     def thumbnail(
-        self, add_asset: bool, write: bool, parameter: ThumbnailParameter = ThumbnailParameter.MESH_2D
+        self,
+        add_asset: bool,
+        write: bool,
+        parameters: list,
+        title: str = "Model Thumbnail",
     ) -> Figure:
         # create thumbnail figure
         # if add_asset or write is true, save asset to filepath relative to item href and add thumbnail asset to asset dict
-        pass
+        if self._has_2d:
+            primary_geom_hdf_asset = self.get_primary_geom()
 
-    # def get_usgs_data(self, add_properties: bool) -> GeoDataFrame:
-    #     # retrieve USGS gages using model reference lines from HDF asset, if available, else raise exception
-    #     # if add_properties is true, create USGS metadata JSON item for each gage and add it to array property
-    #     pass
+            fig, ax = plt.subplots(figsize=(12, 12))
+            legend_handles = []
+
+            for parameter in parameters:
+                if parameter == "usgs_gages":
+                    gages_gdf = self.get_usgs_data(False)
+                    gages_gdf_geo = gages_gdf.to_crs(self.crs)
+                    legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
+                else:
+                    if not hasattr(primary_geom_hdf_asset, parameter):
+                        raise AttributeError(f"Parameter {parameter} not found in {primary_geom_hdf_asset.hdf_file}")
+
+                    if parameter == "mesh_areas":
+                        parameter_data = primary_geom_hdf_asset.mesh_areas(return_gdf=True)
+                    else:
+                        parameter_data = getattr(primary_geom_hdf_asset, parameter)
+                    parameter_data_geo = parameter_data.to_crs(self.crs)
+
+                    if parameter == "mesh_areas":
+                        legend_handles += self._plot_mesh_areas(ax, parameter_data_geo)
+                    elif parameter == "breaklines":
+                        legend_handles += self._plot_breaklines(ax, parameter_data_geo)
+                    elif parameter == "bc_lines":
+                        legend_handles += self._plot_bc_lines(ax, parameter_data_geo)
+
+            # Add OpenStreetMap basemap
+            ctx.add_basemap(
+                ax,
+                crs=f"EPSG:{self.crs}",
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                alpha=0.4,
+            )
+            ax.set_title(title, fontsize=15)
+            ax.set_xlabel("Longitude")
+            ax.set_ylabel("Latitude")
+            ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
+            if add_asset or write:
+                filepath = self.href.rsplit("/", 1)[0] + "/thumbnail.png"
+                if filepath.startswith("s3://"):
+                    img_data = io.BytesIO()
+                    fig.savefig(img_data, format="png", bbox_inches="tight")
+                    img_data.seek(0)
+                    save_bytes_s3(img_data, filepath)
+
+                else:
+                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    fig.savefig(filepath, dpi=80, bbox_inches="tight")
+
+                if add_asset:
+                    self.add_thumbnail_asset(filepath)
+
+    def add_usgs_properties(self, usgs_gages: gpd.GeoDataFrame) -> None:
+        """
+        Adds USGS metadata to the STAC item properties.
+        """
+
+        usgs_metadata_list = []
+        for _, gage in usgs_gages.iterrows():
+            gage_metadata = {
+                "site_no": gage["site_no"],
+                "name": gage["station_nm"],
+                "latitude": gage["dec_lat_va"],
+                "longitude": gage["dec_long_va"],
+                "associated_ref_line": gage["refln_name"],
+            }
+            usgs_metadata_list.append(gage_metadata)
+
+        self.properties["usgs_gages"] = usgs_metadata_list
+
+    def get_usgs_data(
+        self,
+        add_properties: bool,
+        buffer_increase=0.0001,
+        max_buffer=0.01,
+    ) -> gpd.GeoDataFrame:
+        # retrieve USGS gages using model reference lines from HDF asset, if available, else raise exception
+        # if add_properties is true, create USGS metadata JSON item for each gage and add it to array property
+        primary_geom_hdf_asset = self.get_primary_geom()
+        ref_line = primary_geom_hdf_asset.reference_lines
+        ref_line = ref_line.to_crs(self.crs)
+        all_usgs_gages = pd.DataFrame()
+
+        for _, row in ref_line.iterrows():
+            buffer_increment = 0  # Start with no buffer
+
+            while True:
+                try:
+                    if buffer_increment == 0:
+                        bbox = [*row.geometry.bounds]
+                    else:
+                        bbox = [*row.geometry.buffer(buffer_increment).bounds]
+
+                    # bbox must be rounded to work with usgs data retrieval
+                    rounded_bbox = [round(coord, 7) for coord in bbox]
+
+                    usgs_data = nwis.what_sites(bBox=rounded_bbox)
+
+                    usgs_gages = usgs_data[0]
+                    # Filter out any gages where 'site_no' has more than 8 digits, assuming those are invalid
+                    valid_gages = usgs_gages[usgs_gages["site_no"].str.len() == 8]
+                    valid_gages["refln_name"] = row.refln_name
+
+                    # If there are valid gages, append them to all_usgs_gages and break the loop
+                    if not valid_gages.empty:
+                        logging.debug(f"Found gage for reference line {row.refln_name}.")
+                        all_usgs_gages = pd.concat([all_usgs_gages, valid_gages], ignore_index=True)
+                        break
+
+                    logging.debug(
+                        f"No valid gages found. Increasing buffer by {buffer_increase} for reference line {row.refln_name}."
+                    )
+                    buffer_increment += buffer_increase
+
+                    if buffer_increment > max_buffer:
+                        logging.debug(
+                            f"Max buffer of {max_buffer} reached. No gages found for reference line {row.refln_name}."
+                        )
+                        break
+                except ValueError:
+                    logging.debug(
+                        f"No gages found. Increasing buffer by {buffer_increase} for reference line {row.refln_name}."
+                    )
+                    buffer_increment += buffer_increase
+
+                    if buffer_increment > max_buffer:
+                        logging.warning(
+                            f"Max buffer of {max_buffer} reached. No gages found for reference line {row.refln_name}."
+                        )
+                        break
+
+        # Remove duplicate gages
+        all_usgs_gages = all_usgs_gages.drop_duplicates(subset="site_no").reset_index(drop=True)
+        logging.info(f"Found {len(all_usgs_gages)} unique gages.")
+
+        if add_properties:
+            self.add_usgs_properties(all_usgs_gages)
+        return all_usgs_gages
