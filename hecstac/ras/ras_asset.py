@@ -10,7 +10,7 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeAlias
-
+from shapely.ops import unary_union
 import geopandas as gpd
 import jsonschema
 import pandas as pd
@@ -92,8 +92,10 @@ class GenericAsset(Asset):
         self.stem = href_path.stem
         if title == None:
             title = self.name
-        with open(href) as f:
-            self.file_lines = f.read().splitlines()
+        # Avoid reading binary files like PNGs
+        if not href.lower().endswith((".png", ".jpg", ".jpeg")):
+            with open(href) as f:
+                self.file_lines = f.read().splitlines()
         super().__init__(href, title, description, media_type, roles, extra_fields)
 
     def name_from_suffix(self, suffix: str) -> str:
@@ -816,13 +818,46 @@ class HdfAsset(Asset):
 
     @property
     @lru_cache
-    def mesh_areas(self) -> Polygon | None:
+    def mesh_areas(self) -> Polygon | MultiPolygon | None:
         # create placeholder polygon
-        x1, y1 = 0, 1  # Bottom-left corner
-        x2, y2 = 5, 3  # Top-right corner
-        polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+        # x1, y1 = 0, 1  # Bottom-left corner
+        # x2, y2 = 5, 3  # Top-right corner
+        # polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
 
-        return polygon
+        mesh_areas = self.hdf_object.mesh_cell_polygons()
+        if mesh_areas is None or mesh_areas.empty:
+            raise ValueError("No mesh areas found.")
+        # TODO: Discuss turning this property into a method with a return_gdf parameter to return a GeoDataFrame instead of a Polygon
+        # if return_gdf:
+        #     return mesh_areas
+        # else:
+        geometries = mesh_areas["geometry"]
+        return unary_union(geometries)
+
+    # @property
+    # @lru_cache
+    # def mesh_areas_plot(self) -> gpd.GeoDataFrame | None:
+    #     return self.hdf_object.mesh_cell_polygons()
+
+    @property
+    @lru_cache
+    def breaklines(self) -> gpd.GeoDataFrame | None:
+        breaklines = self.hdf_object.breaklines()
+
+        if breaklines is None or breaklines.empty:
+            raise ValueError("No breaklines found.")
+        else:
+            return breaklines
+
+    @property
+    @lru_cache
+    def bc_lines(self) -> gpd.GeoDataFrame | None:
+        bc_lines = self.hdf_object.bc_lines()
+
+        if bc_lines is None or bc_lines.empty:
+            raise ValueError("No boundary condition lines found.")
+        else:
+            return bc_lines
 
     @property
     @lru_cache
@@ -1089,10 +1124,22 @@ class GeometryHdfAsset(HdfAsset):
         description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
         super().__init__(hdf_file, RasGeomHdf.open_uri, description=description)
         self.hdf_object: RasGeomHdf
+        self.hdf_file = hdf_file
 
     @property
     def cross_sections(self) -> int | None:
         pass
+
+    @property
+    @lru_cache
+    def reference_lines(self) -> gpd.GeoDataFrame | None:
+
+        ref_lines = self.hdf_object.reference_lines()
+
+        if ref_lines is None or ref_lines.empty:
+            raise ValueError("No reference lines found.")
+        else:
+            return ref_lines
 
     def populate(self) -> None:
         # determine optional and required properties
