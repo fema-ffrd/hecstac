@@ -127,11 +127,11 @@ class RasModelItem(Item):
                     if isinstance(geom_asset, GeometryHdfAsset):
                         if self.simplify_tolerance:
                             mesh_areas = simplify(
-                                self._transform_geometry(geom_asset.mesh_areas),
+                                self._transform_geometry(geom_asset.mesh_areas()),
                                 self.simplify_tolerance,
                             )
                         else:
-                            mesh_areas = self._transform_geometry(geom_asset.mesh_areas)
+                            mesh_areas = self._transform_geometry(geom_asset.mesh_areas())
                         mesh_area_polygons.append(mesh_areas)
                 self._geometry = union_all(mesh_area_polygons)
                 stac_geom = json.loads(to_geojson(self._geometry))
@@ -328,7 +328,7 @@ class RasModelItem(Item):
     def has_2d(self) -> bool:
         return self._has_2d
 
-    def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list:
+    def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """
         Plots mesh areas on the given axes.
         """
@@ -352,7 +352,7 @@ class RasModelItem(Item):
         ]
         return legend_handle
 
-    def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list:
+    def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list[Line2D]:
         """
         Plots breaklines on the given axes.
         """
@@ -370,7 +370,7 @@ class RasModelItem(Item):
         ]
         return legend_handle
 
-    def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list:
+    def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list[Line2D]:
         """
         Plots boundary condition lines on the given axes.
         """
@@ -401,7 +401,7 @@ class RasModelItem(Item):
             )
         return legend_handles
 
-    def _plot_usgs_gages(self, ax, usgs_gages: gpd.GeoDataFrame) -> list:
+    def _plot_usgs_gages(self, ax, usgs_gages: gpd.GeoDataFrame) -> list[Line2D]:
         legend_handles = [Line2D([0], [0], color="none", linestyle="None", label="USGS Gages")]
         gage_colors = plt.cm.get_cmap("Set1", len(usgs_gages))
 
@@ -427,7 +427,7 @@ class RasModelItem(Item):
             )
         return legend_handles
 
-    def add_thumbnail_asset(self, filepath: str) -> None:
+    def _add_thumbnail_asset(self, filepath: str) -> None:
         if filepath.startswith("s3://"):
             media_type = "image/png"
         else:
@@ -447,7 +447,7 @@ class RasModelItem(Item):
         )
 
     def get_primary_geom(self):
-
+        # TODO: This functions should probably be more robust and check for the primary geometry file based on some criteria
         geom_hdf_assets = [asset for asset in self._geom_files if isinstance(asset, GeometryHdfAsset)]
         if len(geom_hdf_assets) == 0:
             raise FileNotFoundError("No 2D geometry found")
@@ -457,42 +457,52 @@ class RasModelItem(Item):
             primary_geom_hdf_asset = geom_hdf_assets[0]
         return primary_geom_hdf_asset
 
-    def thumbnail(
-        self,
-        add_asset: bool,
-        write: bool,
-        parameters: list,
-        title: str = "Model Thumbnail",
-    ) -> Figure:
-        # create thumbnail figure
-        # if add_asset or write is true, save asset to filepath relative to item href and add thumbnail asset to asset dict
+    def thumbnail(self, add_asset: bool, write: bool, layers: list, title: str = "Model Thumbnail"):
+        """This function creates a thumbnail figure of the model, including
+        various geospatial layers such as USGS gages, mesh areas,
+        breaklines, and boundary condition (BC) lines. If `add_asset` or `write`
+        is `True`, the function saves the thumbnail to a file and optionally
+        adds it as an asset.
+
+        Parameters
+        ----------
+        add_asset : bool
+            Whether to add the thumbnail as an asset in the asset dictionary. If true then it also writes the thumbnail to a file.
+        write : bool
+            Whether to save the thumbnail image to a file.
+        layers : list
+            A list of model layers to include in the thumbnail plot.
+            Options include "usgs_gages", "mesh_areas", "breaklines", and "bc_lines".
+        title : str, optional
+            Title of the figure, by default "Model Thumbnail".
+        """
         if self._has_2d:
             primary_geom_hdf_asset = self.get_primary_geom()
 
             fig, ax = plt.subplots(figsize=(12, 12))
             legend_handles = []
 
-            for parameter in parameters:
-                if parameter == "usgs_gages":
+            for layer in layers:
+                if layer == "usgs_gages":
                     gages_gdf = self.get_usgs_data(False)
                     gages_gdf_geo = gages_gdf.to_crs(self.crs)
                     legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
                 else:
-                    if not hasattr(primary_geom_hdf_asset, parameter):
-                        raise AttributeError(f"Parameter {parameter} not found in {primary_geom_hdf_asset.hdf_file}")
+                    if not hasattr(primary_geom_hdf_asset, layer):
+                        raise AttributeError(f"layer {layer} not found in {primary_geom_hdf_asset.hdf_file}")
 
-                    if parameter == "mesh_areas":
-                        parameter_data = primary_geom_hdf_asset.mesh_areas(return_gdf=True)
+                    if layer == "mesh_areas":
+                        layer_data = primary_geom_hdf_asset.mesh_areas(return_gdf=True)
                     else:
-                        parameter_data = getattr(primary_geom_hdf_asset, parameter)
-                    parameter_data_geo = parameter_data.to_crs(self.crs)
+                        layer_data = getattr(primary_geom_hdf_asset, layer)
+                    layer_data_geo = layer_data.to_crs(self.crs)
 
-                    if parameter == "mesh_areas":
-                        legend_handles += self._plot_mesh_areas(ax, parameter_data_geo)
-                    elif parameter == "breaklines":
-                        legend_handles += self._plot_breaklines(ax, parameter_data_geo)
-                    elif parameter == "bc_lines":
-                        legend_handles += self._plot_bc_lines(ax, parameter_data_geo)
+                    if layer == "mesh_areas":
+                        legend_handles += self._plot_mesh_areas(ax, layer_data_geo)
+                    elif layer == "breaklines":
+                        legend_handles += self._plot_breaklines(ax, layer_data_geo)
+                    elif layer == "bc_lines":
+                        legend_handles += self._plot_bc_lines(ax, layer_data_geo)
 
             # Add OpenStreetMap basemap
             ctx.add_basemap(
@@ -518,7 +528,7 @@ class RasModelItem(Item):
                     fig.savefig(filepath, dpi=80, bbox_inches="tight")
 
                 if add_asset:
-                    self.add_thumbnail_asset(filepath)
+                    self._add_thumbnail_asset(filepath)
 
     def add_usgs_properties(self, usgs_gages: gpd.GeoDataFrame) -> None:
         """
@@ -544,8 +554,27 @@ class RasModelItem(Item):
         buffer_increase=0.0001,
         max_buffer=0.01,
     ) -> gpd.GeoDataFrame:
-        # retrieve USGS gages using model reference lines from HDF asset, if available, else raise exception
-        # if add_properties is true, create USGS metadata JSON item for each gage and add it to array property
+        """Retrieve USGS gage data from the model reference lines in the RAS HDF dataset.
+
+        Retrieves USGS gage data for each reference line in the primary HEC-RAS geometry HDF file.
+        Each reference line is buffered to attempt gage data retrieval, and the buffer expands incrementally
+        until a maximum buffer distance is reached or a gage is found.
+
+        Parameters
+        ----------
+        add_properties : bool
+            Used to determine if USGS metadata should be added to the STAC item properties.
+        buffer_increase : float, optional
+            Buffer distance to expand search area for gages. Distance units are based on the CRS. Defaults to 0.0001 degrees for EPSG:4326.
+        max_buffer : float, optional
+            Maximum buffer distance before stopping gage search. Distance units are based on the CRS. Defaults to 0.01 degrees for EPSG:4326.
+
+        Returns
+        -------
+        gpd.GeoDataFrame
+            GeoDataFrame of unique gages and their atributes found for each reference line.
+        """
+
         primary_geom_hdf_asset = self.get_primary_geom()
         ref_line = primary_geom_hdf_asset.reference_lines
         ref_line = ref_line.to_crs(self.crs)
