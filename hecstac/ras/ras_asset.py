@@ -816,9 +816,8 @@ class HdfAsset(Asset):
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return self._2d_flow_attrs.get("Cell Minimum Size")
 
-    @property
     @lru_cache
-    def mesh_areas(self) -> Polygon | MultiPolygon | None:
+    def mesh_areas(self, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon | None:
         # create placeholder polygon
         # x1, y1 = 0, 1  # Bottom-left corner
         # x2, y2 = 5, 3  # Top-right corner
@@ -827,12 +826,12 @@ class HdfAsset(Asset):
         mesh_areas = self.hdf_object.mesh_cell_polygons()
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
-        # TODO: Discuss turning this property into a method with a return_gdf parameter to return a GeoDataFrame instead of a Polygon
-        # if return_gdf:
-        #     return mesh_areas
-        # else:
-        geometries = mesh_areas["geometry"]
-        return unary_union(geometries)
+
+        if return_gdf:
+            return mesh_areas
+        else:
+            geometries = mesh_areas["geometry"]
+            return unary_union(geometries)
 
     # @property
     # @lru_cache
