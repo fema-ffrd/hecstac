@@ -817,26 +817,20 @@ class HdfAsset(Asset):
         return self._2d_flow_attrs.get("Cell Minimum Size")
 
     @lru_cache
-    def mesh_areas(self, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon | None:
-        # create placeholder polygon
-        # x1, y1 = 0, 1  # Bottom-left corner
-        # x2, y2 = 5, 3  # Top-right corner
-        # polygon = Polygon([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
+    def mesh_areas(self, crs, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
 
         mesh_areas = self.hdf_object.mesh_cell_polygons()
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
+
+        if mesh_areas.crs != crs:
+            mesh_areas = mesh_areas.to_crs(crs)
 
         if return_gdf:
             return mesh_areas
         else:
             geometries = mesh_areas["geometry"]
             return unary_union(geometries)
-
-    # @property
-    # @lru_cache
-    # def mesh_areas_plot(self) -> gpd.GeoDataFrame | None:
-    #     return self.hdf_object.mesh_cell_polygons()
 
     @property
     @lru_cache
