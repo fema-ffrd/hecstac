@@ -19,13 +19,18 @@ from pystac.extensions.projection import ProjectionExtension
 from shapely import Geometry, Polygon, simplify, to_geojson, union_all
 from shapely.ops import transform
 
-from ..utils.placeholders import (
-    NULL_DATETIME,
-    NULL_GEOMETRY,
-    NULL_STAC_BBOX,
-    NULL_STAC_GEOMETRY,
-    PLACEHOLDER_ID,
-)
+import datetime
+import json
+
+from shapely import Polygon, box, to_geojson
+
+NULL_DATETIME = datetime.datetime(9999, 9, 9)
+NULL_GEOMETRY = Polygon()
+NULL_STAC_GEOMETRY = json.loads(to_geojson(NULL_GEOMETRY))
+NULL_BBOX = box(0, 0, 0, 0)
+NULL_STAC_BBOX = NULL_BBOX.bounds
+PLACEHOLDER_ID = "id"
+
 
 from .const import SCHEMA_URI
 from .ras_asset import (
@@ -127,11 +132,11 @@ class RasModelItem(Item):
                     if isinstance(geom_asset, GeometryHdfAsset):
                         if self.simplify_tolerance:
                             mesh_areas = simplify(
-                                self._transform_geometry(geom_asset.mesh_areas()),
+                                self._transform_geometry(geom_asset.mesh_areas(self.crs)),
                                 self.simplify_tolerance,
                             )
                         else:
-                            mesh_areas = self._transform_geometry(geom_asset.mesh_areas())
+                            mesh_areas = self._transform_geometry(geom_asset.mesh_areas(self.crs))
                         mesh_area_polygons.append(mesh_areas)
                 self._geometry = union_all(mesh_area_polygons)
                 stac_geom = json.loads(to_geojson(self._geometry))
@@ -428,17 +433,19 @@ class RasModelItem(Item):
         return legend_handles
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
+        """Add the thumbnail image as an asset with a relative href."""
+
+        filename = os.path.basename(filepath)
+
         if filepath.startswith("s3://"):
             media_type = "image/png"
         else:
-            # Ensure the file exists before adding as an asset
             if not os.path.exists(filepath):
                 raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
-
             media_type = "image/png"
 
         self.assets["thumbnail"] = GenericAsset(
-            href=filepath,
+            href=filename,
             title="Model Thumbnail",
             description="Thumbnail image for the model",
             media_type=media_type,
@@ -457,8 +464,8 @@ class RasModelItem(Item):
             primary_geom_hdf_asset = geom_hdf_assets[0]
         return primary_geom_hdf_asset
 
-    def thumbnail(self, add_asset: bool, write: bool, layers: list, title: str = "Model Thumbnail"):
-        """This function creates a thumbnail figure of the model, including
+    def thumbnail(self, add_asset: bool, write: bool, layers: list, title: str = "Model_Thumbnail"):
+        """Create a thumbnail figure for each geometry hdf file, including
         various geospatial layers such as USGS gages, mesh areas,
         breaklines, and boundary condition (BC) lines. If `add_asset` or `write`
         is `True`, the function saves the thumbnail to a file and optionally
@@ -477,54 +484,68 @@ class RasModelItem(Item):
             Title of the figure, by default "Model Thumbnail".
         """
         if self._has_2d:
-            primary_geom_hdf_asset = self.get_primary_geom()
+            geom_hdf_assets = [asset for asset in self._geom_files if isinstance(asset, GeometryHdfAsset)]
 
-            fig, ax = plt.subplots(figsize=(12, 12))
-            legend_handles = []
+            if not geom_hdf_assets:
+                raise FileNotFoundError("No 2D geometry files found")
 
-            for layer in layers:
-                if layer == "usgs_gages":
-                    gages_gdf = self.get_usgs_data(False)
-                    gages_gdf_geo = gages_gdf.to_crs(self.crs)
-                    legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
-                else:
-                    if not hasattr(primary_geom_hdf_asset, layer):
-                        raise AttributeError(f"layer {layer} not found in {primary_geom_hdf_asset.hdf_file}")
+            for geom_asset in geom_hdf_assets:
+                fig, ax = plt.subplots(figsize=(12, 12))
+                legend_handles = []
 
-                    if layer == "mesh_areas":
-                        layer_data = primary_geom_hdf_asset.mesh_areas(return_gdf=True)
-                    else:
-                        layer_data = getattr(primary_geom_hdf_asset, layer)
-                    layer_data_geo = layer_data.to_crs(self.crs)
+                for layer in layers:
+                    try:
+                        if layer == "usgs_gages":
+                            gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
+                            gages_gdf_geo = gages_gdf.to_crs(self.crs)
+                            legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
+                        else:
+                            if not hasattr(geom_asset, layer):
+                                raise AttributeError(f"Layer {layer} not found in {geom_asset.hdf_file}")
 
-                    if layer == "mesh_areas":
-                        legend_handles += self._plot_mesh_areas(ax, layer_data_geo)
-                    elif layer == "breaklines":
-                        legend_handles += self._plot_breaklines(ax, layer_data_geo)
-                    elif layer == "bc_lines":
-                        legend_handles += self._plot_bc_lines(ax, layer_data_geo)
+                            if layer == "mesh_areas":
+                                layer_data = geom_asset.mesh_areas(self.crs, return_gdf=True)
+                            else:
+                                layer_data = getattr(geom_asset, layer)
 
-            # Add OpenStreetMap basemap
-            ctx.add_basemap(
-                ax,
-                crs=f"EPSG:{self.crs}",
-                source=ctx.providers.OpenStreetMap.Mapnik,
-                alpha=0.4,
-            )
-            ax.set_title(title, fontsize=15)
-            ax.set_xlabel("Longitude")
-            ax.set_ylabel("Latitude")
-            ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
+                            if layer_data.crs is None:
+                                layer_data.set_crs(self.crs, inplace=True)
+                            layer_data_geo = layer_data.to_crs(self.crs)
+
+                            if layer == "mesh_areas":
+                                legend_handles += self._plot_mesh_areas(ax, layer_data_geo)
+                            elif layer == "breaklines":
+                                legend_handles += self._plot_breaklines(ax, layer_data_geo)
+                            elif layer == "bc_lines":
+                                legend_handles += self._plot_bc_lines(ax, layer_data_geo)
+                    except Exception as e:
+                        logging.warning(f"Warning: Failed to process layer '{layer}' for {geom_asset.hdf_file}: {e}")
+
+                # Add OpenStreetMap basemap
+                ctx.add_basemap(
+                    ax,
+                    crs=self.crs,
+                    source=ctx.providers.OpenStreetMap.Mapnik,
+                    alpha=0.4,
+                )
+                ax.set_title(f"{title} - {os.path.basename(geom_asset.hdf_file)}", fontsize=15)
+                ax.set_xlabel("Longitude")
+                ax.set_ylabel("Latitude")
+                ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
+
             if add_asset or write:
-                filepath = self.href.rsplit("/", 1)[0] + "/thumbnail.png"
+                hdf_ext = os.path.basename(geom_asset.hdf_file).split(".")[-2]
+                filename = f"thumbnail_{hdf_ext}.png"
+                base_dir = os.path.dirname(self.href)  # Ensure the correct directory level
+                filepath = os.path.join(base_dir, filename)
+
                 if filepath.startswith("s3://"):
                     img_data = io.BytesIO()
                     fig.savefig(img_data, format="png", bbox_inches="tight")
                     img_data.seek(0)
                     save_bytes_s3(img_data, filepath)
-
                 else:
-                    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                    os.makedirs(base_dir, exist_ok=True)
                     fig.savefig(filepath, dpi=80, bbox_inches="tight")
 
                 if add_asset:
@@ -553,6 +574,7 @@ class RasModelItem(Item):
         add_properties: bool,
         buffer_increase=0.0001,
         max_buffer=0.01,
+        geom_asset: GeometryHdfAsset | None = None,
     ) -> gpd.GeoDataFrame:
         """Retrieve USGS gage data from the model reference lines in the RAS HDF dataset.
 
@@ -568,20 +590,26 @@ class RasModelItem(Item):
             Buffer distance to expand search area for gages. Distance units are based on the CRS. Defaults to 0.0001 degrees for EPSG:4326.
         max_buffer : float, optional
             Maximum buffer distance before stopping gage search. Distance units are based on the CRS. Defaults to 0.01 degrees for EPSG:4326.
+        geom_asset : GeometryHdfAsset, optional
+            The geometry HDF asset to use for gage data retrieval. If not provided, the primary geometry (.g01) HDF asset is used.
 
         Returns
         -------
         gpd.GeoDataFrame
             GeoDataFrame of unique gages and their atributes found for each reference line.
         """
+        if geom_asset is None:
+            primary_geom_hdf_asset = self.get_primary_geom()
+        else:
+            primary_geom_hdf_asset = geom_asset
 
-        primary_geom_hdf_asset = self.get_primary_geom()
         ref_line = primary_geom_hdf_asset.reference_lines
         ref_line = ref_line.to_crs(self.crs)
+
         all_usgs_gages = pd.DataFrame()
 
         for _, row in ref_line.iterrows():
-            buffer_increment = 0  # Start with no buffer
+            buffer_increment = 0
 
             while True:
                 try:
@@ -596,11 +624,9 @@ class RasModelItem(Item):
                     usgs_data = nwis.what_sites(bBox=rounded_bbox)
 
                     usgs_gages = usgs_data[0]
-                    # Filter out any gages where 'site_no' has more than 8 digits, assuming those are invalid
                     valid_gages = usgs_gages[usgs_gages["site_no"].str.len() == 8]
                     valid_gages["refln_name"] = row.refln_name
 
-                    # If there are valid gages, append them to all_usgs_gages and break the loop
                     if not valid_gages.empty:
                         logging.debug(f"Found gage for reference line {row.refln_name}.")
                         all_usgs_gages = pd.concat([all_usgs_gages, valid_gages], ignore_index=True)
@@ -624,7 +650,7 @@ class RasModelItem(Item):
 
                     if buffer_increment > max_buffer:
                         logging.warning(
-                            f"Max buffer of {max_buffer} reached. No gages found for reference line {row.refln_name}."
+                            f"Max buffer of {max_buffer} reached. No USGS gages found for reference line {row.refln_name}."
                         )
                         break
 
