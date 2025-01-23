@@ -57,12 +57,14 @@ class RasModelItem(Item):
     def __init__(
         self,
         prj_file: str,
+        id: str = "",
         crs: str = "",
         href: str = "",
         simplify_tolerance: float | None = 0.001,
         collection: str | Collection | None = None,
     ):
-        id = PLACEHOLDER_ID
+        if not id:
+            id = PLACEHOLDER_ID
         properties = {}
         stac_extensions = [SCHEMA_URI]
         self._bbox = None
@@ -464,7 +466,14 @@ class RasModelItem(Item):
             primary_geom_hdf_asset = geom_hdf_assets[0]
         return primary_geom_hdf_asset
 
-    def thumbnail(self, add_asset: bool, write: bool, layers: list, title: str = "Model_Thumbnail"):
+    def thumbnail(
+        self,
+        add_asset: bool,
+        write: bool,
+        layers: list,
+        title: str = "Model_Thumbnail",
+        add_usgs_properties: bool = False,
+    ):
         """Create a thumbnail figure for each geometry hdf file, including
         various geospatial layers such as USGS gages, mesh areas,
         breaklines, and boundary condition (BC) lines. If `add_asset` or `write`
@@ -482,6 +491,8 @@ class RasModelItem(Item):
             Options include "usgs_gages", "mesh_areas", "breaklines", and "bc_lines".
         title : str, optional
             Title of the figure, by default "Model Thumbnail".
+        add_usgs_properties : bool, optional
+            If usgs_gages is included in layers, adds USGS metadata to the STAC item properties. Defaults to false.
         """
         if self._has_2d:
             geom_hdf_assets = [asset for asset in self._geom_files if isinstance(asset, GeometryHdfAsset)]
@@ -496,7 +507,10 @@ class RasModelItem(Item):
                 for layer in layers:
                     try:
                         if layer == "usgs_gages":
-                            gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
+                            if add_usgs_properties:
+                                gages_gdf = self.get_usgs_data(True, geom_asset=geom_asset)
+                            else:
+                                gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
                             gages_gdf_geo = gages_gdf.to_crs(self.crs)
                             legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
                         else:
@@ -556,18 +570,14 @@ class RasModelItem(Item):
         Adds USGS metadata to the STAC item properties.
         """
 
-        usgs_metadata_list = []
         for _, gage in usgs_gages.iterrows():
-            gage_metadata = {
-                "site_no": gage["site_no"],
+            gage_key = f"usgs_gages:{gage['site_no']}"
+            self.properties[gage_key] = {
                 "name": gage["station_nm"],
                 "latitude": gage["dec_lat_va"],
                 "longitude": gage["dec_long_va"],
                 "associated_ref_line": gage["refln_name"],
             }
-            usgs_metadata_list.append(gage_metadata)
-
-        self.properties["usgs_gages"] = usgs_metadata_list
 
     def get_usgs_data(
         self,

@@ -823,7 +823,7 @@ class HdfAsset(Asset):
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
 
-        if mesh_areas.crs != crs:
+        if mesh_areas.crs and mesh_areas.crs != crs:
             mesh_areas = mesh_areas.to_crs(crs)
 
         if return_gdf:
