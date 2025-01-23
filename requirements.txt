@@ -1,0 +1,13 @@
+geopandas
+pystac
+numpy
+shapely
+pathlib
+boto3
+botocore
+fiona
+pandas
+pyproj
+contextily
+numpy
+requests
