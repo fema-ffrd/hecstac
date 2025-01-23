@@ -1,0 +1,169 @@
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+
+import contextily as ctx
+import matplotlib.pyplot as plt
+import numpy as np
+import requests
+from pystac import Item
+from pystac.extensions.projection import ProjectionExtension
+from pystac.extensions.storage import StorageExtension
+from shapely import to_geojson, union_all
+
+from hms.assets import ProjectAsset, asset_factory
+from hms.parser import BasinFile, ProjectFile
+
+
+class HMSItem(Item):
+    """An object representation of a HEC-HMS model."""
+
+    def __init__(self, hms_project_file, href: str) -> None:
+
+        self._project = None
+        self.assets = {}
+        self.links = []
+        self.thumbnail_paths = []
+        self.geojson_paths = []
+        self.extra_fields = {}
+        self.stac_extensions = None
+        self._href = href
+        self.hms_project_file = hms_project_file
+
+        self.pf = ProjectFile(self.hms_project_file, assert_uniform_version=False)
+
+        super().__init__(
+            Path(self.hms_project_file).stem,
+            self._geometry,
+            self._bbox,
+            self._datetime,
+            self._properties,
+            href=self._href,
+        )
+
+        self._check_files_exists(self.pf.files + self.pf.rasters)
+        self.make_thumbnails(self.pf.basins)
+        self.write_element_geojsons(self.pf.basins[0])
+        for fpath in self.thumbnail_paths + self.geojson_paths + self.pf.files + self.pf.rasters:
+            self.add_hms_asset(fpath)
+
+        self._register_extensions()
+
+    def _register_extensions(self) -> None:
+        ProjectionExtension.add_to(self)
+        StorageExtension.add_to(self)
+
+    @property
+    def _properties(self):
+        """Properties for the HMS STAC item."""
+        properties = {}
+        properties["hms:project"] = f"{self.pf.name}.hms"
+        properties["hms:project_title"] = self.pf.name
+
+        # TODO probably fine 99% of the time but we grab this info from the first basin file only
+        properties["hms:unit system"] = self.pf.basins[0].attrs["Unit System"]
+        properties["hms:gages"] = self.pf.basins[0].gages
+        properties["projection:code"] = self.pf.basins[0].epsg
+        return properties
+
+    def _check_files_exists(self, files: list[str]):
+        """Ensure the files exists. If they don't rasie an error."""
+        for file in files:
+            if not os.path.exists(file):
+                raise FileNotFoundError(f"Could not find HMS model file: {file}")
+
+    def make_thumbnails(self, basins: list[BasinFile]):
+        """Create a png for each basin."""
+        for bf in basins:
+            fig = self.make_thumbnail(bf.hms_schematic_2_gdfs)
+            thumbnail_path = os.path.join(self.item_dir, f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
+            fig.savefig(thumbnail_path)
+            fig.clf()
+            self.thumbnail_paths.append(thumbnail_path)
+
+    def write_element_geojsons(self, basins: list[BasinFile]):
+        """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
+        for element_type in basins.elements.element_types:
+            path = os.path.join(self.item_dir, f"{element_type}.geojson")
+            self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326).to_file(path)
+            self.geojson_paths.append(path)
+
+    @property
+    def item_dir(self):
+        """Directory of the HMS STAC item."""
+        directory = os.path.dirname(self._href)
+        os.makedirs(directory, exist_ok=True)
+        return directory
+
+    def add_hms_asset(self, fpath: str) -> None:
+        """Add an asset to the HMS STAC item."""
+        fpath = fpath.replace(" ", "_").replace("-", "_")
+        if os.path.exists(fpath):
+            asset = asset_factory(fpath)
+            if asset is not None:
+                if fpath in self.pf.result_files:
+                    asset.roles.append("results")
+                self.add_asset(asset.title, asset)
+                if isinstance(asset, ProjectAsset):
+                    if self._project is not None:
+                        f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
+                    self._project = asset
+
+    @property
+    def _bbox(self) -> list[float]:
+        """Bounding box of the HMS STAC item."""
+        if len(self.pf.basins) == 0:
+            return [0, 0, 0, 0]
+        else:
+            bboxes = np.array([i.bbox(4326) for i in self.pf.basins])
+            bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
+            return [float(i) for i in bboxes]
+
+    @property
+    def _geometry(self) -> dict | None:
+        """Geometry of the HMS STAC item. Union of all basins in the HMS model."""
+        return json.loads(to_geojson(union_all([b.basin_geom for b in self.pf.basins])))
+
+    @property
+    def _datetime(self) -> datetime:
+        """The datetime for the HMS STAC item."""
+        date = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
+        time = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
+        return datetime.combine(date, time)
+
+    def make_thumbnail(self, gdfs: dict):
+        """Create a png from the geodataframes (values of the dictionary).
+        The dictionary keys are used to label the layers in the legend."""
+        cdict = {
+            "Subbasin": "black",
+            "Reach": "blue",
+            "Junction": "red",
+            "Source": "black",
+            "Sink": "green",
+            "Reservoir": "cyan",
+            "Diversion": "black",
+        }
+        crs = gdfs["Subbasin"].crs
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+        # Add data
+        for layer in gdfs.keys():
+            if layer in cdict.keys():
+                if layer == "Subbasin":
+                    gdfs[layer].plot(ax=ax, edgecolor=cdict[layer], linewidth=1, label=layer, facecolor="none")
+                else:
+                    gdfs[layer].plot(ax=ax, color=cdict[layer], linewidth=1, label=layer, markersize=5)
+        try:
+            ctx.add_basemap(ax, crs=crs, source=ctx.providers.USGS.USTopo)
+        except requests.exceptions.HTTPError:
+            try:
+                ctx.add_basemap(ax, crs=crs, source=ctx.providers.Esri.WorldStreetMap)
+            except requests.exceptions.HTTPError:
+                ctx.add_basemap(ax, crs=crs, source=ctx.providers.OpenStreetMap.Mapnik)
+
+        # Format
+        ax.legend()
+        ax.set_xticks([])
+        ax.set_yticks([])
+        fig.tight_layout()
+        return fig
