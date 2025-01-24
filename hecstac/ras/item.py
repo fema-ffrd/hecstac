@@ -28,6 +28,7 @@ NULL_BBOX = box(0, 0, 0, 0)
 NULL_STAC_BBOX = NULL_BBOX.bounds
 PLACEHOLDER_ID = "id"
 
+from hecstac.common.asset_factory import AssetFactory
 
 from .assets import (
     GenericAsset,
@@ -39,6 +40,7 @@ from .assets import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
+    RAS_EXTENSION_MAPPING
 )
 from .consts import SCHEMA_URI
 from .stac_utils import asset_factory
@@ -92,6 +94,7 @@ class RasModelItem(Item):
         self._dts: list[dt.datetime] = []
         self._datetime_source: str | None = None
         self.simplify_tolerance = simplify_tolerance
+        self.factory = AssetFactory(RAS_EXTENSION_MAPPING)
 
     def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
         pyproj_crs = CRS.from_user_input(self.crs)
@@ -251,7 +254,7 @@ class RasModelItem(Item):
     def add_asset(self, url: str) -> None:
         """Add an asset to the item and categorize it based on its type."""
 
-        asset = asset_factory(url, self.crs)
+        asset = self.factory.create_asset(url)
         super().add_asset(asset.title, asset)
         if isinstance(asset, ProjectAsset):
             if self._project is not None:
