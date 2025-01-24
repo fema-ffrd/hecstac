@@ -3,3 +3,10 @@ pystac
 numpy
 shapely
 rashdf
+boto3
+jsonschema
+matplotlib
+fsspec
+contextily
+dataretrieval
+mypy_boto3_s3
