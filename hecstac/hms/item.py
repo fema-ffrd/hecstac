@@ -1,6 +1,6 @@
 import json
+import logging
 import os
-import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -13,7 +13,8 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
 
-from hecstac.hms.assets import ProjectAsset, asset_factory
+from hecstac.common.asset_factory import AssetFactory
+from hecstac.hms.assets import HMS_EXTENSION_MAPPING, ProjectAsset
 from hecstac.hms.parser import BasinFile, ProjectFile
 
 
@@ -33,7 +34,7 @@ class HMSItem(Item):
         self.hms_project_file = hms_project_file
 
         self.pf = ProjectFile(self.hms_project_file, assert_uniform_version=False)
-
+        self.factory = AssetFactory(HMS_EXTENSION_MAPPING)
         super().__init__(
             Path(self.hms_project_file).stem,
             self._geometry,
@@ -72,7 +73,7 @@ class HMSItem(Item):
         """Ensure the files exists. If they don't rasie an error."""
         for file in files:
             if not os.path.exists(file):
-                warnings.warn(f"Could not find HMS model file: {file}")
+                logging.warning(f"Could not find HMS model file: {file}")
 
     def make_thumbnails(self, basins: list[BasinFile]):
         """Create a png for each basin."""
@@ -105,7 +106,7 @@ class HMSItem(Item):
         """Add an asset to the HMS STAC item."""
         # fpath = fpath.replace(" ", "_").replace("-", "_")
         if os.path.exists(fpath):
-            asset = asset_factory(fpath)
+            asset = self.factory.create_asset(fpath)
             if asset is not None:
                 if fpath in self.pf.result_files:
                     asset.roles.append("results")
@@ -167,7 +168,7 @@ class HMSItem(Item):
                 ctx.add_basemap(ax, crs=crs, source=ctx.providers.OpenStreetMap.Mapnik)
 
         # Format
-        ax.legend()
+        # ax.legend()
         ax.set_xticks([])
         ax.set_yticks([])
         fig.tight_layout()

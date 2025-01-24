@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import os
 from abc import ABC
@@ -75,8 +76,8 @@ class BaseTextFile(ABC):
             try:
                 response = self.client.get_object(Bucket=self.bucket, Key=self.path)
                 self.content = response["Body"].read().decode()
-            except Exception as E:
-                print(E)
+            except Exception as e:
+                logging.error(e)
                 raise FileNotFoundError(f"could not find {self.path} locally nor on s3")
 
     def parse_header(self):
@@ -101,7 +102,7 @@ class BaseTextFile(ABC):
     def write(self, path=None, s3=False, new_file=False):
         if not path:
             path = self.path
-        print(f"writing: {path}")
+        logging.info(f"writing: {path}")
         if not new_file:
             if os.path.exists(path):
                 with open(path, "w") as f:
@@ -895,7 +896,7 @@ class BasinFile(BaseTextFile):
         for junction in self.junctions:
             us_point = junction.geom
             if "Downstream" not in junction.attrs:
-                print(f"Warning no downstream element for junction {junction.name}")
+                logging.warning(f"Warning no downstream element for junction {junction.name}")
                 continue
             ds_element = self.elements[junction.attrs["Downstream"]]
             if ds_element in self.reaches:
@@ -936,7 +937,7 @@ class BasinFile(BaseTextFile):
             )
         else:
             dest_file = os.path.join(dest_directory, f"{element_type}.shp")
-        print(f"writing {dest_file}")
+        logging.info(f"writing {dest_file}")
         os.makedirs(os.path.dirname(dest_file), exist_ok=True)
         if self.elements.get_element_type(element_type):
             self.feature_2_gdf(element_type).to_file(dest_file, engine=GPD_WRITE_ENGINE)
@@ -969,7 +970,7 @@ class BasinFile(BaseTextFile):
         os.makedirs(dest_directory, exist_ok=True)
         for layer, gdf in self.hms_schematic_2_gdfs().items():
             dest_file = os.path.join(dest_directory, f"{layer}.shp")
-            print(f"writing {dest_file}")
+            logging.info(f"writing {dest_file}")
             gdf.to_file(dest_file, engine=GPD_WRITE_ENGINE)
 
     def hms_schematic_2_geopackage(self, dest_directory: str = ""):
@@ -980,7 +981,7 @@ class BasinFile(BaseTextFile):
         os.makedirs(dest_directory, exist_ok=True)
         for layer, gdf in self.hms_schematic_2_gdfs().items():
             dest_file = os.path.join(dest_directory, "schematic_v2.gpkg")
-            print(f"writing {layer} to {dest_file}")
+            logging.info(f"writing {layer} to {dest_file}")
             gdf.to_file(dest_file, layer=layer, engine=GPD_WRITE_ENGINE)
 
     def subbasin_bc_lines(self):
@@ -1281,9 +1282,8 @@ class PairedDataFile(BaseTextFile):
             try:
                 response = client.get_object(Bucket=bucket, Key=path)
                 self.content = response["Body"].read().decode()
-            except Exception as E:
-                print(E)
-                print("No Paired Data File found: creating empty Paired Data File")
+            except Exception as e:
+                logging.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
                 self.create_pdata(path)
         super().__init__(path, client=client, bucket=bucket)
         self.elements = ElementSet()
