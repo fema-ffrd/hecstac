@@ -18,7 +18,7 @@ from hecstac.hms.assets import HMS_EXTENSION_MAPPING, ProjectAsset
 from hecstac.hms.parser import BasinFile, ProjectFile
 
 
-class HMSItem(Item):
+class HMSModelItem(Item):
     """An object representation of a HEC-HMS model."""
 
     def __init__(self, hms_project_file, href: str) -> None:

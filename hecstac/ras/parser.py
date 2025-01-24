@@ -1,10 +1,8 @@
-import geopandas as gpd
 from enum import Enum
-from shapely import (
-    LineString,
-    Point,
-)
 
+import geopandas as gpd
+from shapely import LineString, Point
+from 
 
 class River:
 

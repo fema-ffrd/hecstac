@@ -1,28 +1,25 @@
+import datetime
 import datetime as dt
+import io
 import json
 import logging
 import os
-import io
 from enum import Enum
-import contextily as ctx
 from functools import lru_cache
 from typing import Any
-import geopandas as gpd
-import pandas as pd
-from matplotlib.lines import Line2D
-from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
+
+import contextily as ctx
 import dataretrieval.nwis as nwis
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from pyproj import CRS, Transformer
 from pystac import Collection, Item
 from pystac.extensions.projection import ProjectionExtension
-from shapely import Geometry, Polygon, simplify, to_geojson, union_all
+from shapely import Geometry, Polygon, box, simplify, to_geojson, union_all
 from shapely.ops import transform
-
-import datetime
-import json
-
-from shapely import Polygon, box, to_geojson
 
 NULL_DATETIME = datetime.datetime(9999, 9, 9)
 NULL_GEOMETRY = Polygon()
@@ -32,8 +29,8 @@ NULL_STAC_BBOX = NULL_BBOX.bounds
 PLACEHOLDER_ID = "id"
 
 
-from .const import SCHEMA_URI
-from .ras_asset import (
+from .assets import (
+    GenericAsset,
     GeometryAsset,
     GeometryHdfAsset,
     PlanAsset,
@@ -42,8 +39,8 @@ from .ras_asset import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
-    GenericAsset,
 )
+from .consts import SCHEMA_URI
 from .stac_utils import asset_factory
 
 
@@ -342,6 +339,6 @@ class RasModelItem(Item):
         for geom in self._geom_files:
             if isinstance(geom, GeometryHdfAsset):
                 if add_asset:
-                    self.assets["thumbnail"] = geom.thumbnail(add_asset=add_asset, write=write, layers=layers, title=title, thumbnail_dest = self.href)
-
-
+                    self.assets["thumbnail"] = geom.thumbnail(
+                        add_asset=add_asset, write=write, layers=layers, title=title, thumbnail_dest=self.href
+                    )

@@ -9,17 +9,16 @@ from copy import deepcopy
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
-from matplotlib.lines import Line2D
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-import contextily as ctx
-import numpy as np
 from typing import Any, Callable, Iterator, TypeAlias
-from shapely.ops import unary_union
+
+import contextily as ctx
 import geopandas as gpd
 import jsonschema
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
-import geopandas as gpd
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from pyproj import CRS
 from pystac import Asset, MediaType
 from pystac.extensions.projection import ProjectionExtension
@@ -33,9 +32,11 @@ from shapely import (
     to_geojson,
     union_all,
 )
+from shapely.ops import unary_union
 
 from .errors import GeometryAssetInvalidCRSError
-from .ras_utils import (
+from .parser import XS, Connection, Junction, Reach, River, StorageArea, Structure
+from .utils import (
     data_pairs_from_text_block,
     delimited_pairs_to_lists,
     search_contents,
@@ -43,48 +44,12 @@ from .ras_utils import (
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
-from .text_utils import River, XS, Structure, Reach, Junction, StorageArea, Connection
-
-RAS_EXTENSION_PATH = os.path.join(os.path.dirname(__file__), "extension/schema.json")
-with open(RAS_EXTENSION_PATH, "r") as f:
-    data = json.load(f)
-RAS_EXTENSION_DICT: dict[str, Any] = data
-
-
-def extract_schema_definition(definition_name: str) -> dict[str, Any]:
-    """Extract asset specific schema from ras extension schema"""
-
-    definitions: dict = deepcopy(RAS_EXTENSION_DICT["definitions"])
-    ras_schema = definitions[definition_name]
-    schema_specific_definitions = {}
-    for internal_definition_link in collect_definition_links(ras_schema):
-        internal_definition_name = os.path.basename(internal_definition_link)
-        definition_value = definitions[internal_definition_name]
-        schema_specific_definitions[internal_definition_name] = definition_value
-    if len(schema_specific_definitions) > 0:
-        ras_schema["definitions"] = schema_specific_definitions
-    with open(f"{definition_name}_schema.json", "w") as f:
-        json.dump(ras_schema, f)
-    return ras_schema
-
-
-def collect_definition_links(schema: dict[str, Any]) -> Iterator[str]:
-    for k, v in schema.items():
-        if k == "$ref":
-            if "#/definitions/" in v:
-                yield v
-            elif "#" in v:
-                raise ValueError(f"internal link found in key value pair {k}: {v} which is not found in #/definitions")
-        elif isinstance(v, dict):
-            yield from collect_definition_links(v)
-        elif isinstance(v, list):
-            for list_entry in v:
-                if isinstance(list_entry, dict):
-                    yield from collect_definition_links(list_entry)
 
 
 class GenericAsset(Asset):
+    # TODO: Import from common
     """A class to handle text-based assets."""
+
     def __init__(
         self,
         href: str,
@@ -120,7 +85,7 @@ class GenericAsset(Asset):
         return {"title": self.ras_title, "file": str(self.name)}
 
 
-class ProjectAsset(GenericAsset):
+class ProjectAssetOld(GenericAsset):
 
     def __init__(self, project_file: str, **kwargs):
         media_type = MediaType.TEXT
@@ -134,11 +99,20 @@ class ProjectAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema = extract_schema_definition("project")
+        # self.ras_schema = extract_schema_definition("project")
+
+
+class ProjectAsset(GenericAsset):
+    def __init__(self, href: str, *args, **kwargs):
+        roles = ["project-file", "ras-file", MediaType.TEXT]
+        description = "The HEC-RAS project file."
+        # TODO: populate extra fields
+        super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
     def populate(self) -> None:
         """Populate project asset properties and get rid of requirements for properties which are defined after other assets are associated with this asset
-        (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)"""
+        (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)
+        """
 
         pre_asset_association_schema = deepcopy(self.ras_schema)
         required_property_names: list[str] = pre_asset_association_schema["required"]
@@ -1170,13 +1144,13 @@ class GeometryHdfAsset(HdfAsset):
             "Structures:Connection Count": "connections",
             "Structures:Inline_Structure_Count": "inline_structures",
             "Structures:Lateral_Structure_Count": "lateral_structures",
-            "File_Version":"file_version",
-            "Units_System":"units_system",
-            "Geometry_Time":"geometry_time",
-            "File_Version":"file_version",
+            "File_Version": "file_version",
+            "Units_System": "units_system",
+            "Geometry_Time": "geometry_time",
+            "File_Version": "file_version",
             "Landcover_Filename": "landcover_filename",
-            "Terrain_Filename":"terrain_filename",
-            "Geometry_Version": "geometry_version"
+            "Terrain_Filename": "terrain_filename",
+            "Geometry_Version": "geometry_version",
         }
         super().populate(geom_hdf_properties, {})
 
@@ -1292,8 +1266,8 @@ class GeometryHdfAsset(HdfAsset):
         layers: list,
         title: str = "Model_Thumbnail",
         add_usgs_properties: bool = False,
-        crs = "EPSG:4326",
-        thumbnail_dest: str =  None,
+        crs="EPSG:4326",
+        thumbnail_dest: str = None,
     ):
         """Create a thumbnail figure for each geometry hdf file, including
         various geospatial layers such as USGS gages, mesh areas,
@@ -1332,26 +1306,26 @@ class GeometryHdfAsset(HdfAsset):
                 #     if not hasattr(geom_asset, layer):
                 #         raise AttributeError(f"Layer {layer} not found in {geom_asset.hdf_file}")
 
-                    # if layer == "mesh_areas":
-                    #     layer_data = geom_asset.mesh_areas(self.crs, return_gdf=True)
-                    # else:
-                    #     layer_data = getattr(geom_asset, layer)
+                # if layer == "mesh_areas":
+                #     layer_data = geom_asset.mesh_areas(self.crs, return_gdf=True)
+                # else:
+                #     layer_data = getattr(geom_asset, layer)
 
-                    # if layer_data.crs is None:
-                    #     layer_data.set_crs(self.crs, inplace=True)
-                    # layer_data_geo = layer_data.to_crs(self.crs)
+                # if layer_data.crs is None:
+                #     layer_data.set_crs(self.crs, inplace=True)
+                # layer_data_geo = layer_data.to_crs(self.crs)
 
-                    if layer == "mesh_areas":
-                        mesh_areas_data = self.mesh_areas(crs, return_gdf=True)
-                        legend_handles += self._plot_mesh_areas(ax, mesh_areas_data)
-                    elif layer == "breaklines":
-                        breaklines_data = self.breaklines
-                        breaklines_data_geo = breaklines_data.to_crs(crs)
-                        legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
-                    elif layer == "bc_lines":
-                        bc_lines_data = self.bc_lines
-                        bc_lines_data_geo = bc_lines_data.to_crs(crs)
-                        legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
+                if layer == "mesh_areas":
+                    mesh_areas_data = self.mesh_areas(crs, return_gdf=True)
+                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_data)
+                elif layer == "breaklines":
+                    breaklines_data = self.breaklines
+                    breaklines_data_geo = breaklines_data.to_crs(crs)
+                    legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
+                elif layer == "bc_lines":
+                    bc_lines_data = self.bc_lines
+                    bc_lines_data_geo = bc_lines_data.to_crs(crs)
+                    legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:
                 logging.warning(f"Warning: Failed to process layer '{layer}' for {self.hdf_file}: {e}")
 
@@ -1366,7 +1340,6 @@ class GeometryHdfAsset(HdfAsset):
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
         ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
-
 
         if add_asset or write:
             hdf_ext = os.path.basename(self.hdf_file).split(".")[-2]
@@ -1386,6 +1359,8 @@ class GeometryHdfAsset(HdfAsset):
             if add_asset:
                 return self._add_thumbnail_asset(filepath)
 
+
+# TODO: Convert to dictionary of classes
 RasAsset: TypeAlias = (
     GenericAsset
     | GeometryAsset
@@ -1398,4 +1373,5 @@ RasAsset: TypeAlias = (
     | UnsteadyFlowAsset
 )
 
+# TODO: Add to dictionary of classes or similar using the new factory approach
 RasGeometryClass: TypeAlias = Reach | Junction | XS | Structure

@@ -1,9 +1,10 @@
-from ras.const import SCHEMA_URI as RAS_SCHEMA_URI
 from utils.generate_schema_markdown import (
     ExtensionSchema,
     ExtensionSchemaAssetSpecific,
     FieldUsability,
 )
+
+from hecstac.ras.consts import SCHEMA_URI as RAS_SCHEMA_URI
 
 
 def ras_schema_to_markdown(path: str) -> None:
