@@ -1,5 +1,6 @@
 import json
 import os
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -71,7 +72,7 @@ class HMSItem(Item):
         """Ensure the files exists. If they don't rasie an error."""
         for file in files:
             if not os.path.exists(file):
-                raise FileNotFoundError(f"Could not find HMS model file: {file}")
+                warnings.warn(f"Could not find HMS model file: {file}")
 
     def make_thumbnails(self, basins: list[BasinFile]):
         """Create a png for each basin."""
@@ -92,13 +93,17 @@ class HMSItem(Item):
     @property
     def item_dir(self):
         """Directory of the HMS STAC item."""
-        directory = os.path.dirname(self._href)
-        os.makedirs(directory, exist_ok=True)
-        return directory
+        if "\\" in self._href or "/" in self._href:
+            # check if a path was provided or if a relative file was provided; no directory to create if the latter
+            directory = os.path.dirname(self._href)
+            os.makedirs(directory, exist_ok=True)
+            return directory
+        else:
+            return ""
 
     def add_hms_asset(self, fpath: str) -> None:
         """Add an asset to the HMS STAC item."""
-        fpath = fpath.replace(" ", "_").replace("-", "_")
+        # fpath = fpath.replace(" ", "_").replace("-", "_")
         if os.path.exists(fpath):
             asset = asset_factory(fpath)
             if asset is not None:
