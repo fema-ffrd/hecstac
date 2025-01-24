@@ -9,11 +9,17 @@ from copy import deepcopy
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from matplotlib.lines import Line2D
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+import contextily as ctx
+import numpy as np
 from typing import Any, Callable, Iterator, TypeAlias
 from shapely.ops import unary_union
 import geopandas as gpd
 import jsonschema
 import pandas as pd
+import geopandas as gpd
 from pyproj import CRS
 from pystac import Asset, MediaType
 from pystac.extensions.projection import ProjectionExtension
@@ -37,6 +43,7 @@ from .ras_utils import (
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
+from .text_utils import River, XS, Structure, Reach, Junction, StorageArea, Connection
 
 RAS_EXTENSION_PATH = os.path.join(os.path.dirname(__file__), "extension/schema.json")
 with open(RAS_EXTENSION_PATH, "r") as f:
@@ -44,8 +51,9 @@ with open(RAS_EXTENSION_PATH, "r") as f:
 RAS_EXTENSION_DICT: dict[str, Any] = data
 
 
-def flip_schema(definition_name: str) -> dict[str, Any]:
-    # pulls out specific definition of interest as dictionary, inserting the remainder of definitions into the dictionary in order to maintain integrity of definition links
+def extract_schema_definition(definition_name: str) -> dict[str, Any]:
+    """Extract asset specific schema from ras extension schema"""
+
     definitions: dict = deepcopy(RAS_EXTENSION_DICT["definitions"])
     ras_schema = definitions[definition_name]
     schema_specific_definitions = {}
@@ -76,6 +84,7 @@ def collect_definition_links(schema: dict[str, Any]) -> Iterator[str]:
 
 
 class GenericAsset(Asset):
+    """A class to handle text-based assets."""
     def __init__(
         self,
         href: str,
@@ -125,10 +134,12 @@ class ProjectAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema = flip_schema("project")
+        self.ras_schema = extract_schema_definition("project")
 
     def populate(self) -> None:
-        # get rid of requirements for properties which are defined after other assets are associated with this asset (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)
+        """Populate project asset properties and get rid of requirements for properties which are defined after other assets are associated with this asset
+        (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)"""
+
         pre_asset_association_schema = deepcopy(self.ras_schema)
         required_property_names: list[str] = pre_asset_association_schema["required"]
         for asset_associated_property in [
@@ -169,6 +180,7 @@ class ProjectAsset(GenericAsset):
             suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
             return self.name_from_suffix(suffix)
         except Exception:
+            logging.warning("Ras model has no current plan")
             return None
 
     @property
@@ -272,7 +284,7 @@ class PlanAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema = flip_schema("plan")
+        self.ras_schema = extract_schema_definition("plan")
 
     def populate(self) -> None:
         # get rid of requirements for properties which are defined after other assets are associated with this asset (geometry_file, one of [steady_flow_file, quasi_unsteady_flow_file, unsteady_flow_file])
@@ -346,7 +358,7 @@ class GeometryAsset(GenericAsset):
             kwargs.get("extra_fields"),
         )
         self.crs = crs
-        self.ras_schema = flip_schema("geometry")
+        self.ras_schema = extract_schema_definition("geometry")
 
     @staticmethod
     def validate_crs(crs: str) -> CRS:
@@ -578,7 +590,7 @@ class SteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema = flip_schema("steady_flow")
+        self.ras_schema = extract_schema_definition("steady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -609,7 +621,7 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema = flip_schema("quasi_unsteady_flow")
+        self.ras_schema = extract_schema_definition("quasi_unsteady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -640,7 +652,7 @@ class UnsteadyFlowAsset(GenericAsset):
             roles,
             kwargs.get("extra_fields"),
         )
-        self.ras_schema = flip_schema("unsteady_flow")
+        self.ras_schema = extract_schema_definition("unsteady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -712,7 +724,7 @@ class HdfAsset(Asset):
     def geometry_time(self) -> datetime.datetime | None:
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
-        return self._geom_attrs.get("Geometry Time")
+        return self._geom_attrs.get("Geometry Time").isoformat()
 
     @property
     def landcover_date_last_modified(self) -> datetime.datetime | None:
@@ -736,7 +748,7 @@ class HdfAsset(Asset):
     def rasmapperlibdll_date(self) -> datetime.datetime | None:
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
-        return self._geom_attrs.get("RasMapperLib.dll Date")
+        return self._geom_attrs.get("RasMapperLib.dll Date").isoformat()
 
     @property
     def si_units(self) -> bool | None:
@@ -748,7 +760,7 @@ class HdfAsset(Asset):
     def terrain_file_date(self) -> datetime.datetime | None:
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
-        return self._geom_attrs.get("Terrain File Date")
+        return self._geom_attrs.get("Terrain File Date").isoformat()
 
     @property
     def terrain_filename(self) -> str | None:
@@ -796,7 +808,7 @@ class HdfAsset(Asset):
     def two_d_flow_cell_average_size(self) -> float | None:
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
-        return self._2d_flow_attrs.get("Cell Average Size")
+        return int(np.sqrt(self._2d_flow_attrs.get("Cell Average Size")))
 
     @property
     def two_d_flow_cell_maximum_index(self) -> int | None:
@@ -808,13 +820,13 @@ class HdfAsset(Asset):
     def two_d_flow_cell_maximum_size(self) -> int | None:
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
-        return self._2d_flow_attrs.get("Cell Maximum Size")
+        return int(np.sqrt(self._2d_flow_attrs.get("Cell Maximum Size")))
 
     @property
     def two_d_flow_cell_minimum_size(self) -> int | None:
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
-        return self._2d_flow_attrs.get("Cell Minimum Size")
+        return int(np.sqrt(self._2d_flow_attrs.get("Cell Minimum Size")))
 
     @lru_cache
     def mesh_areas(self, crs, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
@@ -877,8 +889,22 @@ class PlanHdfAsset(HdfAsset):
         self._meteorology_attrs = None
 
     def populate(self) -> None:
-        # determine optional vs required properties
-        super().populate({}, {})
+        plan_hdf_properties = {
+            "plan_information:Base_Output_Interval": "plan_information_base_output_interval",
+            "plan_information:Computation_Time_Step_Base": "plan_information_computation_time_step_base",
+            "plan_information:Flow_Filename": "plan_information_flow_filename",
+            "plan_information:Geometry_Filename": "plan_information_geometry_filename",
+            "plan_information:Plan_Filename": "plan_information_plan_filename",
+            "plan_information:Plan_Name": "plan_information_plan_name",
+            "plan_information:Project_Filename": "plan_information_project_filename",
+            "plan_information:Simulation_End_Time": "plan_information_simulation_end_time",
+            "plan_information:Simulation_Start_Time": "plan_information_simulation_start_time",
+            "plan_parameters:1D_Flow_Tolerance": "plan_parameters_1d_flow_tolerance",
+            "plan_parameters:2D_Equation_Set": "plan_parameters_2d_equation_set",
+            "meteorology:DSS_Filename": "meteorology_dss_filename",
+            "meteorology:Mode": "meteorology_mode",
+        }
+        super().populate(plan_hdf_properties, {})
 
     @property
     def plan_information_base_output_interval(self) -> str | None:
@@ -934,13 +960,13 @@ class PlanHdfAsset(HdfAsset):
     def plan_information_simulation_end_time(self):
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("Simulation End Time")
+        return self._plan_info_attrs.get("Simulation End Time").isoformat()
 
     @property
     def plan_information_simulation_start_time(self):
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("Simulation Start Time")
+        return self._plan_info_attrs.get("Simulation Start Time").isoformat()
 
     @property
     def plan_parameters_1d_flow_tolerance(self):
@@ -1136,618 +1162,229 @@ class GeometryHdfAsset(HdfAsset):
 
     def populate(self) -> None:
         # determine optional and required properties
-        super().populate({}, {})
+        geom_hdf_properties = {
+            "2D_Flow_Areas:Cell_Average_Size": "two_d_flow_cell_average_size",
+            "2D_Flow_Areas:Cell_Maximum_Size": "two_d_flow_cell_maximum_size",
+            "2D_Flow_Areas:Cell_Minimum_Size": "two_d_flow_cell_minimum_size",
+            "Structures:Bridge_Culvert_Count": "bridges_culverts",
+            "Structures:Connection Count": "connections",
+            "Structures:Inline_Structure_Count": "inline_structures",
+            "Structures:Lateral_Structure_Count": "lateral_structures",
+            "File_Version":"file_version",
+            "Units_System":"units_system",
+            "Geometry_Time":"geometry_time",
+            "File_Version":"file_version",
+            "Landcover_Filename": "landcover_filename",
+            "Terrain_Filename":"terrain_filename",
+            "Geometry_Version": "geometry_version"
+        }
+        super().populate(geom_hdf_properties, {})
 
-
-class River:
-
-    def __init__(self, river: str, reaches: list[str] = []):
-        self.river = river
-        self.reaches = reaches
-
-
-class XS:
-    """HEC-RAS Cross Section."""
-
-    def __init__(self, ras_data: list[str], river_reach: str, river: str, reach: str, crs: str):
-        self.ras_data = ras_data
-        self.crs = crs
-        self.river = river
-        self.reach = reach
-        self.river_reach = river_reach
-        self.river_reach_rs = f"{river} {reach} {self.river_station}"
-        self._is_interpolated: bool | None = None
-
-    def split_xs_header(self, position: int):
+    def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """
-        Split cross section header.
-
-        Example: Type RM Length L Ch R = 1 ,83554.  ,237.02,192.39,113.07.
+        Plots mesh areas on the given axes.
         """
-        header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
-
-        return header.split(",")[position]
-
-    @property
-    def river_station(self) -> float:
-        """Cross section river station."""
-        return float(self.split_xs_header(1).replace("*", ""))
-
-    @property
-    def left_reach_length(self) -> float:
-        """Cross section left reach length."""
-        return float(self.split_xs_header(2))
-
-    @property
-    def channel_reach_length(self) -> float:
-        """Cross section channel reach length."""
-        return float(self.split_xs_header(3))
-
-    @property
-    def right_reach_length(self) -> float:
-        """Cross section right reach length."""
-        return float(self.split_xs_header(4))
-
-    @property
-    def number_of_coords(self) -> int:
-        """Number of coordinates in cross section."""
-        try:
-            return int(search_contents(self.ras_data, "XS GIS Cut Line", expect_one=True))
-        except ValueError:
-            return 0
-            # raise NotGeoreferencedError(f"No coordinates found for cross section: {self.river_reach_rs} ")
-
-    @property
-    def thalweg(self) -> float | None:
-        """Cross section thalweg elevation."""
-        if self.station_elevation_points:
-            _, y = list(zip(*self.station_elevation_points))
-            return min(y)
-
-    @property
-    def xs_max_elevation(self) -> float | None:
-        """Cross section maximum elevation."""
-        if self.station_elevation_points:
-            _, y = list(zip(*self.station_elevation_points))
-            return max(y)
-
-    @property
-    def coords(self) -> list[tuple[float, float]] | None:
-        """Cross section coordinates."""
-        lines = text_block_from_start_str_length(
-            f"XS GIS Cut Line={self.number_of_coords}",
-            math.ceil(self.number_of_coords / 2),
-            self.ras_data,
+        mesh_polygons.plot(
+            ax=ax,
+            edgecolor="silver",
+            facecolor="none",
+            linestyle="-",
+            alpha=0.7,
+            label="Mesh Polygons",
         )
-        if lines:
-            return data_pairs_from_text_block(lines, 32)
-
-    @property
-    def number_of_station_elevation_points(self) -> int:
-        """Number of station elevation points."""
-        return int(search_contents(self.ras_data, "#Sta/Elev", expect_one=True))
-
-    @property
-    def station_elevation_points(self) -> list[tuple[float, float]] | None:
-        """Station elevation points."""
-        try:
-            lines = text_block_from_start_str_length(
-                f"#Sta/Elev= {self.number_of_station_elevation_points} ",
-                math.ceil(self.number_of_station_elevation_points / 5),
-                self.ras_data,
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color="silver",
+                linestyle="-",
+                linewidth=2,
+                label="Mesh Polygons",
             )
-            return data_pairs_from_text_block(lines, 16)
-        except ValueError:
-            return None
+        ]
+        return legend_handle
 
-    @property
-    def bank_stations(self) -> list[str]:
-        """Bank stations."""
-        return search_contents(self.ras_data, "Bank Sta", expect_one=True).split(",")
+    def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list[Line2D]:
+        """
+        Plots breaklines on the given axes.
+        """
+        breaklines.plot(ax=ax, edgecolor="red", linestyle="-", alpha=0.3, label="Breaklines")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color="red",
+                linestyle="-",
+                alpha=0.4,
+                linewidth=2,
+                label="Breaklines",
+            )
+        ]
+        return legend_handle
 
-    @property
-    def gdf(self) -> gpd.GeoDataFrame:
-        """Cross section geodataframe."""
-        return gpd.GeoDataFrame(
-            {
-                "geometry": [LineString(self.coords)],
-                "river": [self.river],
-                "reach": [self.reach],
-                "river_reach": [self.river_reach],
-                "river_station": [self.river_station],
-                "river_reach_rs": [self.river_reach_rs],
-                "thalweg": [self.thalweg],
-                "xs_max_elevation": [self.xs_max_elevation],
-                "left_reach_length": [self.left_reach_length],
-                "right_reach_length": [self.right_reach_length],
-                "channel_reach_length": [self.channel_reach_length],
-                "ras_data": ["\n".join(self.ras_data)],
-                "station_elevation_points": [self.station_elevation_points],
-                "bank_stations": [self.bank_stations],
-                "number_of_station_elevation_points": [self.number_of_station_elevation_points],
-                "number_of_coords": [self.number_of_coords],
-                # "coords": [self.coords],
-            },
-            crs=self.crs,
-            geometry="geometry",
+    def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list[Line2D]:
+        """
+        Plots boundary condition lines on the given axes.
+        """
+        legend_handles = [
+            Line2D([0], [0], color="none", linestyle="None", label="BC Lines"),
+        ]
+        colors = plt.cm.get_cmap("Dark2", len(bc_lines))
+
+        for bc_line, color in zip(bc_lines.itertuples(), colors.colors):
+            x_coords, y_coords = bc_line.geometry.xy
+            ax.plot(
+                x_coords,
+                y_coords,
+                color=color,
+                linestyle="-",
+                linewidth=2,
+                label=bc_line.name,
+            )
+            legend_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    color=color,
+                    linestyle="-",
+                    linewidth=2,
+                    label=bc_line.name,
+                )
+            )
+        return legend_handles
+
+    def _add_thumbnail_asset(self, filepath: str) -> None:
+        """Add the thumbnail image as an asset with a relative href."""
+
+        filename = os.path.basename(filepath)
+
+        if filepath.startswith("s3://"):
+            media_type = "image/png"
+        else:
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
+            media_type = "image/png"
+
+        return GenericAsset(
+            href=filename,
+            title="Model Thumbnail",
+            description="Thumbnail image for the model",
+            media_type=media_type,
+            roles=["thumbnail"],
+            extra_fields=None,
         )
 
-    @property
-    def n_subdivisions(self) -> int:
-        """Get the number of subdivisions (defined by manning's n)."""
-        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0])
+    # def get_primary_geom(self):
+    #     # TODO: This functions should probably be more robust and check for the primary geometry file based on some criteria
+    #     geom_hdf_assets = [asset for asset in self._geom_files if isinstance(asset, GeometryHdfAsset)]
+    #     if len(geom_hdf_assets) == 0:
+    #         raise FileNotFoundError("No 2D geometry found")
+    #     elif len(geom_hdf_assets) > 1:
+    #         primary_geom_hdf_asset = next(asset for asset in geom_hdf_assets if ".g01" in asset.hdf_file)
+    #     else:
+    #         primary_geom_hdf_asset = geom_hdf_assets[0]
+    #     return primary_geom_hdf_asset
 
-    @property
-    def subdivision_type(self) -> int:
-        """Get the subdivision type.
-
-        -1 seems to indicate horizontally-varied n.  0 seems to indicate subdivisions by LOB, channel, ROB.
-        """
-        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
-
-    @property
-    def subdivisions(self) -> tuple[list[float], list[float]]:
-        """Get the stations corresponding to subdivision breaks, along with their roughness."""
-        try:
-            header = [l for l in self.ras_data if l.startswith("#Mann")][0]
-            lines = text_block_from_start_str_length(
-                header,
-                math.ceil(self.n_subdivisions / 3),
-                self.ras_data,
-            )
-
-            return delimited_pairs_to_lists(lines)
-        except ValueError:
-            return None
-
-    @property
-    def is_interpolated(self) -> bool:
-        if self._is_interpolated == None:
-            self._is_interpolated = "*" in self.split_xs_header(1)
-        return self._is_interpolated
-
-    def wse_intersection_pts(self, wse: float) -> list[tuple[float, float]]:
-        """Find where the cross-section terrain intersects the water-surface elevation."""
-        section_pts = self.station_elevation_points
-        intersection_pts = []
-
-        # Iterate through all pairs of points and find any points where the line would cross the wse
-        for i in range(len(section_pts) - 1):
-            p1 = section_pts[i]
-            p2 = section_pts[i + 1]
-
-            if p1[1] > wse and p2[1] > wse:  # No intesection
-                continue
-            elif p1[1] < wse and p2[1] < wse:  # Both below wse
-                continue
-
-            # Define line
-            m = (p2[1] - p1[1]) / (p2[0] - p1[0])
-            b = p1[1] - (m * p1[0])
-
-            # Find intersection point with Cramer's rule
-            determinant = lambda a, b: (a[0] * b[1]) - (a[1] * b[0])
-            div = determinant((1, 1), (-m, 0))
-            tmp_y = determinant((b, wse), (-m, 0)) / div
-            tmp_x = determinant((1, 1), (b, wse)) / div
-
-            intersection_pts.append((tmp_x, tmp_y))
-        return intersection_pts
-
-    def get_wetted_perimeter(self, wse: float, start: float = None, stop: float = None) -> float:
-        """Get the hydraulic radius of the cross-section at a given WSE."""
-        df = pd.DataFrame(self.station_elevation_points, columns=["x", "y"])
-        df = pd.concat([df, pd.DataFrame(self.wse_intersection_pts(wse), columns=["x", "y"])])
-        if start is not None:
-            df = df[df["x"] >= start]
-        if stop is not None:
-            df = df[df["x"] <= stop]
-        df = df.sort_values("x", ascending=True)
-        df = df[df["y"] <= wse]
-        if len(df) == 0:
-            return 0
-        df["dx"] = df["x"].diff(-1)
-        df["dy"] = df["y"].diff(-1)
-        df["d"] = ((df["x"] ** 2) + (df["y"] ** 2)) ** (0.5)
-
-        return df["d"].cumsum().values[0]
-
-    def get_flow_area(self, wse: float, start: float = None, stop: float = None) -> float:
-        """Get the flow area of the cross-section at a given WSE."""
-        df = pd.DataFrame(self.station_elevation_points, columns=["x", "y"])
-        df = pd.concat([df, pd.DataFrame(self.wse_intersection_pts(wse), columns=["x", "y"])])
-        if start is not None:
-            df = df[df["x"] >= start]
-        if stop is not None:
-            df = df[df["x"] <= stop]
-        df = df.sort_values("x", ascending=True)
-        df = df[df["y"] <= wse]
-        if len(df) == 0:
-            return 0
-        df["d"] = wse - df["y"]  # depth
-        df["d2"] = df["d"].shift(-1)
-        df["x2"] = df["x"].shift(-1)
-        df["a"] = ((df["d"] + df["d2"]) / 2) * (df["x2"] - df["x"])  # area of a trapezoid
-
-        return df["a"].cumsum().values[0]
-
-    def get_mannings_discharge(self, wse: float, slope: float, units: str) -> float:
-        """Calculate the discharge of the cross-section according to manning's equation."""
-        q = 0
-        stations, mannings = self.subdivisions
-        slope = slope**0.5  # pre-process slope for efficiency
-        for i in range(self.n_subdivisions - 1):
-            start = stations[i]
-            stop = stations[i + 1]
-            n = mannings[i]
-            area = self.get_flow_area(wse, start, stop)
-            if area == 0:
-                continue
-            perimeter = self.get_wetted_perimeter(wse, start, stop)
-            rh = area / perimeter
-            tmp_q = (1 / n) * area * (rh ** (2 / 3)) * slope
-            if units == "english":
-                tmp_q *= 1.49
-            q += (1 / n) * area * (rh ** (2 / 3)) * slope
-        return q
-
-
-class StructureType(Enum):
-    XS = 1
-    CULVERT = 2
-    BRIDGE = 3
-    MULTIPLE_OPENING = 4
-    INLINE_STRUCTURE = 5
-    LATERAL_STRUCTURE = 6
-
-
-class Structure:
-    """Structure."""
-
-    def __init__(
+    def thumbnail(
         self,
-        ras_data: list[str],
-        river_reach: str,
-        river: str,
-        reach: str,
-        crs: str,
-        us_xs: XS,
+        add_asset: bool,
+        write: bool,
+        layers: list,
+        title: str = "Model_Thumbnail",
+        add_usgs_properties: bool = False,
+        crs = "EPSG:4326",
+        thumbnail_dest: str =  None,
     ):
-        self.ras_data = ras_data
-        self.crs = crs
-        self.river = river
-        self.reach = reach
-        self.river_reach = river_reach
-        self.river_reach_rs = f"{river} {reach} {self.river_station}"
-        self.us_xs = us_xs
+        """Create a thumbnail figure for each geometry hdf file, including
+        various geospatial layers such as USGS gages, mesh areas,
+        breaklines, and boundary condition (BC) lines. If `add_asset` or `write`
+        is `True`, the function saves the thumbnail to a file and optionally
+        adds it as an asset.
 
-    def split_structure_header(self, position: int) -> str:
+        Parameters
+        ----------
+        add_asset : bool
+            Whether to add the thumbnail as an asset in the asset dictionary. If true then it also writes the thumbnail to a file.
+        write : bool
+            Whether to save the thumbnail image to a file.
+        layers : list
+            A list of model layers to include in the thumbnail plot.
+            Options include "usgs_gages", "mesh_areas", "breaklines", and "bc_lines".
+        title : str, optional
+            Title of the figure, by default "Model Thumbnail".
+        add_usgs_properties : bool, optional
+            If usgs_gages is included in layers, adds USGS metadata to the STAC item properties. Defaults to false.
         """
-        Split Structure header.
 
-        Example: Type RM Length L Ch R = 3 ,83554.  ,237.02,192.39,113.07.
-        """
-        header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
+        fig, ax = plt.subplots(figsize=(12, 12))
+        legend_handles = []
 
-        return header.split(",")[position]
+        for layer in layers:
+            try:
+                # if layer == "usgs_gages":
+                #     if add_usgs_properties:
+                #         gages_gdf = self.get_usgs_data(True, geom_asset=geom_asset)
+                #     else:
+                #         gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
+                #     gages_gdf_geo = gages_gdf.to_crs(self.crs)
+                #     legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
+                # else:
+                #     if not hasattr(geom_asset, layer):
+                #         raise AttributeError(f"Layer {layer} not found in {geom_asset.hdf_file}")
 
-    @property
-    def river_station(self) -> float:
-        """Structure river station."""
-        return float(self.split_structure_header(1))
+                    # if layer == "mesh_areas":
+                    #     layer_data = geom_asset.mesh_areas(self.crs, return_gdf=True)
+                    # else:
+                    #     layer_data = getattr(geom_asset, layer)
 
-    @property
-    def type(self) -> StructureType:
-        """Structure type."""
-        return StructureType(int(self.split_structure_header(0)))
+                    # if layer_data.crs is None:
+                    #     layer_data.set_crs(self.crs, inplace=True)
+                    # layer_data_geo = layer_data.to_crs(self.crs)
 
-    def structure_data(self, position: int) -> str | int:
-        """Structure data."""
-        if self.type in [
-            StructureType.XS,
-            StructureType.CULVERT,
-            StructureType.BRIDGE,
-            StructureType.MULTIPLE_OPENING,
-        ]:  # 1 = Cross Section, 2 = Culvert, 3 = Bridge, 4 = Multiple Opening
-            data = text_block_from_start_str_length(
-                "Deck Dist Width WeirC Skew NumUp NumDn MinLoCord MaxHiCord MaxSubmerge Is_Ogee",
-                1,
-                self.ras_data,
-            )
-            return data[0].split(",")[position]
-        elif self.type == StructureType.INLINE_STRUCTURE:  # 5 = Inline Structure
-            data = text_block_from_start_str_length(
-                "IW Dist,WD,Coef,Skew,MaxSub,Min_El,Is_Ogee,SpillHt,DesHd",
-                1,
-                self.ras_data,
-            )
-            return data[0].split(",")[position]
-        elif self.type == StructureType.LATERAL_STRUCTURE:  # 6 = Lateral Structure
-            return 0
+                    if layer == "mesh_areas":
+                        mesh_areas_data = self.mesh_areas(crs, return_gdf=True)
+                        legend_handles += self._plot_mesh_areas(ax, mesh_areas_data)
+                    elif layer == "breaklines":
+                        breaklines_data = self.breaklines
+                        breaklines_data_geo = breaklines_data.to_crs(crs)
+                        legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
+                    elif layer == "bc_lines":
+                        bc_lines_data = self.bc_lines
+                        bc_lines_data_geo = bc_lines_data.to_crs(crs)
+                        legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
+            except Exception as e:
+                logging.warning(f"Warning: Failed to process layer '{layer}' for {self.hdf_file}: {e}")
 
-    @property
-    def distance(self) -> float:
-        """Distance to upstream cross section."""
-        return float(self.structure_data(0))
-
-    @property
-    def width(self) -> float:
-        """Structure width."""
-        # TODO check units of the RAS model
-        return float(self.structure_data(1))
-
-    @property
-    def gdf(self) -> gpd.GeoDataFrame:
-        """Structure geodataframe."""
-        return gpd.GeoDataFrame(
-            {
-                "geometry": [LineString(self.us_xs.coords).offset_curve(self.distance)],
-                "river": [self.river],
-                "reach": [self.reach],
-                "river_reach": [self.river_reach],
-                "river_station": [self.river_station],
-                "river_reach_rs": [self.river_reach_rs],
-                "type": [self.type],
-                "distance": [self.distance],
-                "width": [self.width],
-                "ras_data": ["\n".join(self.ras_data)],
-            },
-            crs=self.crs,
-            geometry="geometry",
+        # Add OpenStreetMap basemap
+        ctx.add_basemap(
+            ax,
+            crs=crs,
+            source=ctx.providers.OpenStreetMap.Mapnik,
+            alpha=0.4,
         )
+        ax.set_title(f"{title} - {os.path.basename(self.hdf_file)}", fontsize=15)
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
 
 
-class Reach:
-    """HEC-RAS River Reach."""
+        if add_asset or write:
+            hdf_ext = os.path.basename(self.hdf_file).split(".")[-2]
+            filename = f"thumbnail_{hdf_ext}.png"
+            base_dir = os.path.dirname(thumbnail_dest)
+            filepath = os.path.join(base_dir, filename)
 
-    def __init__(self, ras_data: list[str], river_reach: str, crs: str):
-        reach_lines = text_block_from_start_end_str(f"River Reach={river_reach}", ["River Reach"], ras_data, -1)
-        self.ras_data = reach_lines
-        self.crs = crs
-        self.river_reach = river_reach
-        self.river = river_reach.split(",")[0].rstrip()
-        self.reach = river_reach.split(",")[1].rstrip()
-
-        us_connection: str = None
-        ds_connection: str = None
-
-    @property
-    def us_xs(self) -> "XS":
-        """Upstream cross section."""
-        return self.cross_sections[
-            self.xs_gdf.loc[
-                self.xs_gdf["river_station"] == self.xs_gdf["river_station"].max(),
-                "river_reach_rs",
-            ][0]
-        ]
-
-    @property
-    def ds_xs(self) -> "XS":
-        """Downstream cross section."""
-        return self.cross_sections[
-            self.xs_gdf.loc[
-                self.xs_gdf["river_station"] == self.xs_gdf["river_station"].min(),
-                "river_reach_rs",
-            ][0]
-        ]
-
-    @property
-    def number_of_cross_sections(self) -> int:
-        """Number of cross sections."""
-        return len(self.cross_sections)
-
-    @property
-    def number_of_coords(self) -> int:
-        """Number of coordinates in reach."""
-        return int(search_contents(self.ras_data, "Reach XY"))
-
-    @property
-    def coords(self) -> list[tuple[float, float]]:
-        """Reach coordinates."""
-        lines = text_block_from_start_str_length(
-            f"Reach XY= {self.number_of_coords} ",
-            math.ceil(self.number_of_coords / 2),
-            self.ras_data,
-        )
-        return data_pairs_from_text_block(lines, 32)
-
-    @property
-    def reach_nodes(self) -> list[str]:
-        """Reach nodes."""
-        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False)
-
-    @property
-    def cross_sections(self) -> dict[str, "XS"]:
-        """Cross sections."""
-        cross_sections = {}
-        for header in self.reach_nodes:
-            type, _, _, _, _ = header.split(",")[:5]
-            if int(type) != 1:
-                continue
-            xs_lines = text_block_from_start_end_str(
-                f"Type RM Length L Ch R ={header}",
-                ["Type RM Length L Ch R", "River Reach"],
-                self.ras_data,
-            )
-            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.crs)
-            cross_sections[cross_section.river_reach_rs] = cross_section
-
-        return cross_sections
-
-    @property
-    def structures(self) -> dict[str, "Structure"]:
-        """Structures."""
-        structures = {}
-        for header in self.reach_nodes:
-            type, _, _, _, _ = header.split(",")[:5]
-            if int(type) == 1:
-                xs_lines = text_block_from_start_end_str(
-                    f"Type RM Length L Ch R ={header}",
-                    ["Type RM Length L Ch R", "River Reach"],
-                    self.ras_data,
-                )
-                cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.crs)
-                continue
-            elif int(type) in [2, 3, 4, 5, 6]:  # culvert or bridge or multiple openeing
-                structure_lines = text_block_from_start_end_str(
-                    f"Type RM Length L Ch R ={header}",
-                    ["Type RM Length L Ch R", "River Reach"],
-                    self.ras_data,
-                )
+            if filepath.startswith("s3://"):
+                img_data = io.BytesIO()
+                fig.savefig(img_data, format="png", bbox_inches="tight")
+                img_data.seek(0)
+                save_bytes_s3(img_data, filepath)
             else:
-                raise TypeError(
-                    f"Unsupported structure type: {int(type)}. Supported structure types are 2, 3, 4, 5, and 6 corresponding to culvert, bridge, multiple openeing, inline structure, lateral structure, respectively"
-                )
+                os.makedirs(base_dir, exist_ok=True)
+                fig.savefig(filepath, dpi=80, bbox_inches="tight")
 
-            structure = Structure(
-                structure_lines,
-                self.river_reach,
-                self.river,
-                self.reach,
-                self.crs,
-                cross_section,
-            )
-            structures[structure.river_reach_rs] = structure
-
-        return structures
-
-    @property
-    def gdf(self) -> gpd.GeoDataFrame:
-        """Reach geodataframe."""
-        return gpd.GeoDataFrame(
-            {
-                "geometry": [LineString(self.coords)],
-                "river": [self.river],
-                "reach": [self.reach],
-                "river_reach": [self.river_reach],
-                # "number_of_coords": [self.number_of_coords],
-                # "coords": [self.coords],
-                "ras_data": ["\n".join(self.ras_data)],
-            },
-            crs=self.crs,
-            geometry="geometry",
-        )
-
-    @property
-    def xs_gdf(self) -> gpd.GeoDataFrame:
-        """Cross section geodataframe."""
-        return pd.concat([xs.gdf for xs in self.cross_sections.values()])
-
-    @property
-    def structures_gdf(self) -> gpd.GeoDataFrame:
-        """Structures geodataframe."""
-        return pd.concat([structure.gdf for structure in self.structures.values()])
-
-
-class Junction:
-    """HEC-RAS Junction."""
-
-    def __init__(self, ras_data: list[str], junct: str, crs: str):
-        self.crs = crs
-        self.name = junct
-        self.ras_data = text_block_from_start_str_to_empty_line(f"Junct Name={junct}", ras_data)
-
-    def split_lines(self, lines: list[str], token: str, idx: int) -> list[str]:
-        """Split lines."""
-        return list(map(lambda line: line.split(token)[idx].rstrip(), lines))
-
-    @property
-    def x(self) -> float:
-        """Junction x coordinate."""
-        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0))
-
-    @property
-    def y(self):
-        """Junction y coordinate."""
-        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1))
-
-    @property
-    def point(self) -> Point:
-        """Junction point."""
-        return Point(self.x, self.y)
-
-    @property
-    def upstream_rivers(self) -> str:
-        """Upstream rivers."""
-        return ",".join(
-            self.split_lines(
-                search_contents(self.ras_data, "Up River,Reach", expect_one=False),
-                ",",
-                0,
-            )
-        )
-
-    @property
-    def downstream_rivers(self) -> str:
-        """Downstream rivers."""
-        return ",".join(
-            self.split_lines(
-                search_contents(self.ras_data, "Dn River,Reach", expect_one=False),
-                ",",
-                0,
-            )
-        )
-
-    @property
-    def upstream_reaches(self) -> str:
-        """Upstream reaches."""
-        return ",".join(
-            self.split_lines(
-                search_contents(self.ras_data, "Up River,Reach", expect_one=False),
-                ",",
-                1,
-            )
-        )
-
-    @property
-    def downstream_reaches(self) -> str:
-        """Downstream reaches."""
-        return ",".join(
-            self.split_lines(
-                search_contents(self.ras_data, "Dn River,Reach", expect_one=False),
-                ",",
-                1,
-            )
-        )
-
-    @property
-    def junction_lengths(self) -> str:
-        """Junction lengths."""
-        return ",".join(self.split_lines(search_contents(self.ras_data, "Junc L&A", expect_one=False), ",", 0))
-
-    @property
-    def gdf(self):
-        """Junction geodataframe."""
-        return gpd.GeoDataFrame(
-            {
-                "geometry": [self.point],
-                "junction_lengths": [self.junction_lengths],
-                "us_rivers": [self.upstream_rivers],
-                "ds_rivers": [self.downstream_rivers],
-                "us_reaches": [self.upstream_reaches],
-                "ds_reaches": [self.downstream_reaches],
-                "ras_data": ["\n".join(self.ras_data)],
-            },
-            geometry="geometry",
-            crs=self.crs,
-        )
-
-
-class StorageArea:
-
-    def __init__(self, ras_data: list[str], crs: str):
-        self.crs = crs
-        self.ras_data = ras_data
-        # TODO: Implement this
-
-
-class Connection:
-
-    def __init__(self, ras_data: list[str], crs: str):
-        self.crs = crs
-        self.ras_data = ras_data
-        # TODO: Implement this
-
+            if add_asset:
+                return self._add_thumbnail_asset(filepath)
 
 RasAsset: TypeAlias = (
     GenericAsset
