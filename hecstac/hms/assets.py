@@ -1,6 +1,3 @@
-from pathlib import Path
-from typing import Dict, Type
-
 from pystac import MediaType
 
 from hecstac.common.asset_factory import GenericAsset
@@ -16,7 +13,6 @@ from hecstac.hms.parser import (
     SqliteDB,
     TerrainFile,
 )
-from hecstac.hms.s3_utils import check_storage_extension
 
 
 class GeojsonAsset(GenericAsset):
@@ -42,7 +38,7 @@ class ProjectAsset(GenericAsset):
 
     def __init__(self, href: str, *args, **kwargs):
 
-        roles = ["hms-project"]
+        roles = ["hms-project", MediaType.TEXT]
         description = "The HEC-HMS project file."
 
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
