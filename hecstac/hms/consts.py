@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from datetime import datetime
 
-from hms.data_model import (
+from hecstac.hms.data_model import (
     Diversion,
     Junction,
     Reach,

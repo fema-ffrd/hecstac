@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections import Counter, OrderedDict
 from dataclasses import dataclass
 
-import hms.utils as utils
 from shapely.geometry import LineString, Point, Polygon
+
+import hecstac.hms.utils as utils
 
 
 @dataclass

@@ -9,9 +9,13 @@ from functools import lru_cache
 
 import fiona
 import geopandas as gpd
-import hms.utils as utils
 import pandas as pd
-from hms.consts import (
+from pyproj import CRS
+from shapely import get_point
+from shapely.geometry import LineString, MultiLineString, Point
+
+import hecstac.hms.utils as utils
+from hecstac.hms.consts import (
     BASIN_DEFAULTS,
     BC_LENGTH,
     BC_LINE_BUFFER,
@@ -23,7 +27,7 @@ from hms.consts import (
     GRID_DEFAULTS,
     RUN_DEFAULTS,
 )
-from hms.data_model import (
+from hecstac.hms.data_model import (
     ET,
     BasinHeader,
     BasinLayerProperties,
@@ -47,9 +51,6 @@ from hms.data_model import (
     Table,
     Temperature,
 )
-from pyproj import CRS
-from shapely import get_point
-from shapely.geometry import LineString, MultiLineString, Point
 
 
 class BaseTextFile(ABC):

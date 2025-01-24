@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from hms.parser import (
+from pystac import Asset, MediaType
+
+from hecstac.hms.parser import (
     BasinFile,
     ControlFile,
     GageFile,
@@ -12,8 +14,7 @@ from hms.parser import (
     SqliteDB,
     TerrainFile,
 )
-from hms.s3_utils import check_storage_extension
-from pystac import Asset, MediaType
+from hecstac.hms.s3_utils import check_storage_extension
 
 
 def asset_factory(fpath: str) -> Asset:

@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 from shapely import MultiPolygon, Polygon
 
-from hms.consts import (
+from hecstac.hms.consts import (
     ATTR_KEYVAL_GROUPER,
     ATTR_NESTED_KEYVAL_GROUPER,
     NL_KEYS,

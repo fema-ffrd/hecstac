@@ -12,8 +12,8 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
 
-from hms.assets import ProjectAsset, asset_factory
-from hms.parser import BasinFile, ProjectFile
+from hecstac.hms.assets import ProjectAsset, asset_factory
+from hecstac.hms.parser import BasinFile, ProjectFile
 
 
 class HMSItem(Item):
