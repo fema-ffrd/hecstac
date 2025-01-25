@@ -113,8 +113,6 @@ class HMSModelItem(Item):
         if os.path.exists(fpath):
             asset = self.factory.create_asset(fpath)
             if asset is not None:
-                if fpath in self.pf.result_files:
-                    asset.roles.append("results")
                 self.add_asset(asset.title, asset)
                 if isinstance(asset, ProjectAsset):
                     if self._project is not None:

@@ -17,6 +17,11 @@ class LocalPathManager:
     def model_parent_dir(self) -> str:
         return str(Path(self._model_root_dir).parent)
 
+    @property
+    def item_dir(self) -> str:
+        """Duplicate of model_root, added for clarity in the calling code"""
+        return self.model_root_dir
+
     def item_path(self, item_id: str) -> str:
         return f"{self._model_root_dir}/{item_id}.json"
 
