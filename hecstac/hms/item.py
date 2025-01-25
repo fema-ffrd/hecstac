@@ -14,6 +14,7 @@ from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
 
 from hecstac.common.asset_factory import AssetFactory
+from hecstac.common.path_manager import LocalPathManager
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING, ProjectAsset
 from hecstac.hms.parser import BasinFile, ProjectFile
 
@@ -21,7 +22,12 @@ from hecstac.hms.parser import BasinFile, ProjectFile
 class HMSModelItem(Item):
     """An object representation of a HEC-HMS model."""
 
-    def __init__(self, hms_project_file, href: str) -> None:
+    PROJECT = "hms:project"
+    PROJECT_TITLE = "hms:project_title"
+    MODEL_UNITS = "hms:unit system"
+    MODEL_GAGES = "hms:gages"
+
+    def __init__(self, hms_project_file, item_id: str) -> None:
 
         self._project = None
         self.assets = {}
@@ -30,7 +36,8 @@ class HMSModelItem(Item):
         self.geojson_paths = []
         self.extra_fields = {}
         self.stac_extensions = None
-        self._href = href
+        self.pm = LocalPathManager(Path(hms_project_file).parent)
+        self._href = self.pm.item_path(item_id)
         self.hms_project_file = hms_project_file
 
         self.pf = ProjectFile(self.hms_project_file, assert_uniform_version=False)
@@ -60,13 +67,13 @@ class HMSModelItem(Item):
     def _properties(self):
         """Properties for the HMS STAC item."""
         properties = {}
-        properties["hms:project"] = f"{self.pf.name}.hms"
-        properties["hms:project_title"] = self.pf.name
+        properties[self.PROJECT] = f"{self.pf.name}.hms"
+        properties[self.PROJECT_TITLE] = self.pf.name
 
         # TODO probably fine 99% of the time but we grab this info from the first basin file only
-        properties["hms:unit system"] = self.pf.basins[0].attrs["Unit System"]
-        properties["hms:gages"] = self.pf.basins[0].gages
-        properties["projection:code"] = self.pf.basins[0].epsg
+        properties[self.MODEL_UNITS] = self.pf.basins[0].attrs["Unit System"]
+        properties[self.MODEL_GAGES] = self.pf.basins[0].gages
+        properties["proj:code"] = self.pf.basins[0].epsg
         return properties
 
     def _check_files_exists(self, files: list[str]):
@@ -75,36 +82,34 @@ class HMSModelItem(Item):
             if not os.path.exists(file):
                 logging.warning(f"Could not find HMS model file: {file}")
 
-    def make_thumbnails(self, basins: list[BasinFile]):
-        """Create a png for each basin."""
+    def make_thumbnails(self, basins: list[BasinFile], overwrite: bool = False):
+        """Create a png for each basin. Optionally overwrite existing files."""
         for bf in basins:
-            fig = self.make_thumbnail(bf.hms_schematic_2_gdfs)
-            thumbnail_path = os.path.join(self.item_dir, f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
-            fig.savefig(thumbnail_path)
-            fig.clf()
+            thumbnail_path = self.pm.derived_item_asset(f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
+
+            if not overwrite and os.path.exists(thumbnail_path):
+                logging.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
+            else:
+                logging.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
+                fig = self.make_thumbnail(bf.hms_schematic_2_gdfs)
+                fig.savefig(thumbnail_path)
+                fig.clf()
             self.thumbnail_paths.append(thumbnail_path)
 
-    def write_element_geojsons(self, basins: list[BasinFile]):
+    def write_element_geojsons(self, basins: list[BasinFile], overwrite: bool = False):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
         for element_type in basins.elements.element_types:
-            path = os.path.join(self.item_dir, f"{element_type}.geojson")
-            self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326).to_file(path)
+            logging.debug(f"Checking if geojson for {element_type} exists")
+            path = self.pm.derived_item_asset(f"{element_type}.geojson")
+            if not overwrite and os.path.exists(path):
+                logging.info(f"Geojson for {element_type} already exists. Skipping creation.")
+            else:
+                logging.info(f"Creating geojson for {element_type}")
+                self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326).to_file(path)
             self.geojson_paths.append(path)
-
-    @property
-    def item_dir(self):
-        """Directory of the HMS STAC item."""
-        if "\\" in self._href or "/" in self._href:
-            # check if a path was provided or if a relative file was provided; no directory to create if the latter
-            directory = os.path.dirname(self._href)
-            os.makedirs(directory, exist_ok=True)
-            return directory
-        else:
-            return ""
 
     def add_hms_asset(self, fpath: str) -> None:
         """Add an asset to the HMS STAC item."""
-        # fpath = fpath.replace(" ", "_").replace("-", "_")
         if os.path.exists(fpath):
             asset = self.factory.create_asset(fpath)
             if asset is not None:
@@ -113,7 +118,9 @@ class HMSModelItem(Item):
                 self.add_asset(asset.title, asset)
                 if isinstance(asset, ProjectAsset):
                     if self._project is not None:
-                        f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
+                        logging.error(
+                            f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
+                        )
                     self._project = asset
 
     @property
