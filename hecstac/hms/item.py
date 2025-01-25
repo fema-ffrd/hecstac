@@ -178,6 +178,8 @@ class HMSModelItem(Item):
             if layer in cdict.keys():
                 if layer == "Subbasin":
                     gdfs[layer].plot(ax=ax, edgecolor=cdict[layer], linewidth=1, label=layer, facecolor="none")
+                elif layer == "Junction":
+                    gdfs[layer].plot(ax=ax, color=cdict[layer], label=layer, markersize=25)
                 else:
                     gdfs[layer].plot(ax=ax, color=cdict[layer], linewidth=1, label=layer, markersize=5)
         try:
