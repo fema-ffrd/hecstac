@@ -73,7 +73,11 @@ class HMSModelItem(Item):
         # TODO probably fine 99% of the time but we grab this info from the first basin file only
         properties[self.MODEL_UNITS] = self.pf.basins[0].attrs["Unit System"]
         properties[self.MODEL_GAGES] = self.pf.basins[0].gages
-        properties["proj:code"] = self.pf.basins[0].epsg
+        if self.pf.basins[0].epsg:
+            properties["proj:code"] = self.pf.basins[0].epsg
+        else:
+            logging.warning("No EPSG code found in basin file.")
+            properties["proj:wkt"] = self.pf.basins[0].wkt
         return properties
 
     def _check_files_exists(self, files: list[str]):
@@ -105,7 +109,11 @@ class HMSModelItem(Item):
                 logging.info(f"Geojson for {element_type} already exists. Skipping creation.")
             else:
                 logging.info(f"Creating geojson for {element_type}")
-                self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326).to_file(path)
+                gdf = self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
+                logging.debug(gdf.columns)
+                keep_columns = ["name", "geometry", "Last Modified Date", "Last Modified Time", "Number Subreaches"]
+                gdf = gdf[[col for col in keep_columns if col in gdf.columns]]
+                gdf.to_file(path)
             self.geojson_paths.append(path)
 
     def add_hms_asset(self, fpath: str) -> None:
