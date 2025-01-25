@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List
 
 import numpy as np
-from pystac import Item
+from pystac import Item, Link
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
@@ -25,14 +25,14 @@ class FFRDEventItem(Item):
         realization: str,
         block_group: str,
         event_id: str,
-        model_items: List[Item],
+        source_model_items: List[Item],
         hms_simulation_files: list = [],
         ras_simulation_files: list = [],
     ) -> None:
         self.realization = realization
         self.block_group = block_group
         self.event_id = event_id
-        self.model_items = model_items
+        self.source_model_items = source_model_items
         self.stac_extensions = None
         self.hms_simulation_files = hms_simulation_files
         self.ras_simulation_files = ras_simulation_files
@@ -52,10 +52,22 @@ class FFRDEventItem(Item):
             self.add_hms_asset(fpath, item_type="event")
 
         self._register_extensions()
+        self._add_model_links()
 
     def _register_extensions(self) -> None:
         ProjectionExtension.add_to(self)
         StorageExtension.add_to(self)
+
+    def _add_model_links(self) -> None:
+        """Add links to the model items."""
+        for item in self.source_model_items:
+            logging.info(f"Adding link from source model item: {item.id}")
+            link = Link(
+                rel="derived_from",
+                target=item,
+                title=f"Source Models: {item.id}",
+            )
+            self.add_link(link)
 
     @property
     def _item_id(self) -> str:
@@ -81,7 +93,7 @@ class FFRDEventItem(Item):
     @property
     def _geometry(self) -> dict | None:
         """Geometry of the FFRD Event STAC item. Union of all basins in the FFRD Event items."""
-        geometries = [shape(item.geometry) for item in self.model_items]
+        geometries = [shape(item.geometry) for item in self.source_model_items]
         return json.loads(to_geojson(union_all(geometries)))
 
     @property
@@ -92,7 +104,7 @@ class FFRDEventItem(Item):
     @property
     def _bbox(self) -> list[float]:
         """Bounding box of the FFRD Event STAC item."""
-        bboxes = np.array([item.bbox for item in self.model_items])
+        bboxes = np.array([item.bbox for item in self.source_model_items])
         bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
         return [float(i) for i in bboxes]
 
