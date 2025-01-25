@@ -1,6 +1,8 @@
 from collections import OrderedDict
 from datetime import datetime
 
+# TODO: This looks like it may include data from a specific model. Lets do a check / clean on this.
+# See line 93 for example
 from hecstac.hms.data_model import (
     Diversion,
     Junction,
