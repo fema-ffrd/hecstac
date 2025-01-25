@@ -263,5 +263,6 @@ HMS_EXTENSION_MAPPING = {
     ".dss": DSSAsset,
     ".geojson": GeojsonAsset,
     ".tiff": TiffAsset,
+    ".tif": TiffAsset,
     ".png": ThumbnailAsset,
 }
