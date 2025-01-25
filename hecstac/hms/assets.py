@@ -58,7 +58,7 @@ class ThumbnailAsset(GenericAsset):
     """Thumbnail asset."""
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["Thumbnail"]
+        roles = ["thumbnail"]
         media_type = MediaType.PNG
         description = "Thumbnail"
         super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
