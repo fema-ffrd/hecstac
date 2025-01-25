@@ -30,7 +30,7 @@ class HMSModelItem(Item):
     PROJECT_DESCRIPTION = "hms:description"
     PROJECT_UNITS = "hms:unit_system"
 
-    def __init__(self, hms_project_file, item_id: str) -> None:
+    def __init__(self, hms_project_file, item_id: str, simplify_geometry: bool = True) -> None:
 
         self._project = None
         self.assets = {}
@@ -42,6 +42,7 @@ class HMSModelItem(Item):
         self.pm = LocalPathManager(Path(hms_project_file).parent)
         self._href = self.pm.item_path(item_id)
         self.hms_project_file = hms_project_file
+        self._simplify_geometry = simplify_geometry
 
         self.pf = ProjectFile(self.hms_project_file, assert_uniform_version=False)
         self.factory = AssetFactory(HMS_EXTENSION_MAPPING)
@@ -127,7 +128,7 @@ class HMSModelItem(Item):
     def add_hms_asset(self, fpath: str) -> None:
         """Add an asset to the HMS STAC item."""
         if os.path.exists(fpath):
-            asset = self.factory.create_asset(fpath)
+            asset = self.factory.create_hms_asset(fpath)
             if asset is not None:
                 self.add_asset(asset.title, asset)
                 if isinstance(asset, ProjectAsset):
@@ -150,7 +151,11 @@ class HMSModelItem(Item):
     @property
     def _geometry(self) -> dict | None:
         """Geometry of the HMS STAC item. Union of all basins in the HMS model."""
-        return json.loads(to_geojson(union_all([b.basin_geom for b in self.pf.basins])))
+        if self._simplify_geometry:
+            geometries = [b.basin_geom.simplify(0.001) for b in self.pf.basins]
+        else:
+            geometries = [b.basin_geom for b in self.pf.basins]
+        return json.loads(to_geojson(union_all(geometries)))
 
     @property
     def _datetime(self) -> datetime:

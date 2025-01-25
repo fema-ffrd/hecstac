@@ -58,8 +58,37 @@ class ThumbnailAsset(GenericAsset):
         super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
 
 
-class BasinAsset(GenericAsset):
-    """HEC-HMS Basin file asset."""
+class ModelBasinAsset(GenericAsset):
+    """HEC-HMS Basin file asset from authoritative model, containing geometry and other detailed data."""
+
+    def __init__(self, href: str, *args, **kwargs):
+        roles = ["hms-basin"]
+        media_type = MediaType.TEXT
+        description = "Defines the basin geometry and elements for HEC-HMS simulations."
+        super().__init__(
+            href,
+            roles=roles,
+            description=description,
+            media_type=media_type,
+            *args,
+            **kwargs,
+        )
+        self.bf = BasinFile(href, read_geom=True)
+        self.extra_fields = {
+            "hms:title": self.bf.name,
+            "hms:version": self.bf.header.attrs["Version"],
+            "hms:description": self.bf.header.attrs.get("Description"),
+            "hms:unit_system": self.bf.header.attrs["Unit System"],
+            "hms:gages": self.bf.gages,
+            "hms:drainage_area_miles": self.bf.drainage_area,
+            "hms:reach_length_miles": self.bf.reach_miles,
+            "proj:wkt": self.bf.wkt,
+            "proj:code": self.bf.epsg,
+        } | {f"hms_basin:{key}".lower(): val for key, val in self.bf.elements.element_counts.items()}
+
+
+class EventBasinAsset(GenericAsset):
+    """HEC-HMS Basin file asset from event, with limited basin info."""
 
     def __init__(self, href: str, *args, **kwargs):
         roles = ["hms-basin"]
@@ -79,12 +108,7 @@ class BasinAsset(GenericAsset):
             "hms:version": self.bf.header.attrs["Version"],
             "hms:description": self.bf.header.attrs.get("Description"),
             "hms:unit_system": self.bf.header.attrs["Unit System"],
-            "hms:gages": self.bf.gages,
-            "hms:drainage_area_miles": self.bf.drainage_area,
-            "hms:reach_length_miles": self.bf.reach_miles,
-            "proj:wkt": self.bf.wkt,
-            "proj:code": self.bf.epsg,
-        } | {f"hms:{key}".lower(): val for key, val in self.bf.elements.element_counts.items()}
+        }
 
 
 class RunAsset(GenericAsset):
@@ -249,7 +273,7 @@ class TerrainAsset(GenericAsset):
 
 HMS_EXTENSION_MAPPING = {
     ".hms": ProjectAsset,
-    ".basin": BasinAsset,
+    ".basin": {"event": EventBasinAsset, "model": ModelBasinAsset},
     ".control": ControlAsset,
     ".met": MetAsset,
     ".sqlite": SqliteAsset,

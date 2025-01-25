@@ -37,12 +37,22 @@ class AssetFactory:
         """
         self.extension_to_asset = extension_to_asset
 
-    def create_asset(self, fpath: str) -> Asset:
+    def create_hms_asset(self, fpath: str, item_type: str = "model") -> Asset:
         """
         Create an asset instance based on the file extension.
+        item_type: str
+            The type of item to create. This is used to determine the asset class.
+            Options are event or model.
         """
+        if item_type not in ["event", "model"]:
+            raise ValueError(f"Invalid item type: {item_type}, valid options are 'event' or 'model'.")
+
         file_extension = Path(fpath).suffix.lower()
-        asset_class = self.extension_to_asset.get(file_extension, GenericAsset)
+        if file_extension == ".basin":
+            asset_class = self.extension_to_asset.get(".basin").get(item_type)
+        else:
+            asset_class = self.extension_to_asset.get(file_extension, GenericAsset)
+
         asset = asset_class(href=fpath)
         asset.title = Path(fpath).name
         return check_storage_extension(asset)
@@ -50,6 +60,6 @@ class AssetFactory:
     def create_ras_asset(self, fpath: str):
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
-                return asset_class(href = fpath, title = Path(fpath).name)
+                return asset_class(href=fpath, title=Path(fpath).name)
 
-        return GenericAsset(href=fpath, title = Path(fpath).name)
+        return GenericAsset(href=fpath, title=Path(fpath).name)
