@@ -42,16 +42,10 @@ class ProjectAsset(GenericAsset):
 
         roles = ["hms-project"]
         media_type = MediaType.TEXT
-        description = "The HEC-HMS project file."
+        description = "The HEC-HMS project file. Summary provied at the item level"
 
         super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
         self.pf = ProjectFile(href, assert_uniform_version=False)
-        self.extra_fields = {
-            "hms:project_title": self.pf.name,
-            "hms:version": self.pf.attrs["Version"],
-            "hms:description": self.pf.attrs.get("Description"),
-            "hms:unit_system": self.pf.basins[0].header.attrs["Unit System"],
-        } | {f"hms:{key}": val for key, val in self.pf.file_counts.items()}
 
 
 class ThumbnailAsset(GenericAsset):

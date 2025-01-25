@@ -26,6 +26,9 @@ class HMSModelItem(Item):
     PROJECT_TITLE = "hms:project_title"
     MODEL_UNITS = "hms:unit system"
     MODEL_GAGES = "hms:gages"
+    PROJECT_VERSION = "hms:version"
+    PROJECT_DESCRIPTION = "hms:description"
+    PROJECT_UNITS = "hms:unit_system"
 
     def __init__(self, hms_project_file, item_id: str) -> None:
 
@@ -69,15 +72,18 @@ class HMSModelItem(Item):
         properties = {}
         properties[self.PROJECT] = f"{self.pf.name}.hms"
         properties[self.PROJECT_TITLE] = self.pf.name
+        properties[self.PROJECT_VERSION] = (self.pf.attrs["Version"],)
+        properties[self.PROJECT_DESCRIPTION] = (self.pf.attrs.get("Description"),)
 
         # TODO probably fine 99% of the time but we grab this info from the first basin file only
         properties[self.MODEL_UNITS] = self.pf.basins[0].attrs["Unit System"]
         properties[self.MODEL_GAGES] = self.pf.basins[0].gages
+
+        properties["proj:code"] = self.pf.basins[0].epsg
         if self.pf.basins[0].epsg:
-            properties["proj:code"] = self.pf.basins[0].epsg
-        else:
             logging.warning("No EPSG code found in basin file.")
-            properties["proj:wkt"] = self.pf.basins[0].wkt
+        properties["proj:wkt"] = self.pf.basins[0].wkt
+        properties["hms:summary"] = self.pf.file_counts
         return properties
 
     def _check_files_exists(self, files: list[str]):
