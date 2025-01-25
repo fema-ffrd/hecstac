@@ -7,6 +7,7 @@ from abc import ABC
 from collections import OrderedDict
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
 
 import fiona
 import geopandas as gpd
@@ -216,6 +217,9 @@ class ProjectFile(BaseTextFile):
 
     @property
     def files(self):
+
+        # logging.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
+
         return (
             [self.path]
             + [basin.path for basin in self.basins]
@@ -229,27 +233,29 @@ class ProjectFile(BaseTextFile):
 
     @property
     def dss_files(self):
-        return self.absolute_paths(
-            set(
-                [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
-                + [
-                    grid.attrs["Variant"]["Variant-1"]["DSS File Name"]
-                    for grid in self.grid.elements.elements.values()
-                    if "Variant" in grid.attrs
-                ]
-                + [pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()]
-            )
+        files = set(
+            [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
+            + [
+                grid.attrs["Variant"]["Variant-1"]["DSS File Name"]
+                for grid in self.grid.elements.elements.values()
+                if "Variant" in grid.attrs
+            ]
+            + [pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()]
         )
+
+        files = [str(Path(f.replace("\\", "/"))) for f in files]
+        return self.absolute_paths(files)
 
     @property
     def result_files(self):
-        return self.absolute_paths(
-            set(
-                [i[1].attrs["Log File"] for i in self.run.elements]
-                + [i[1].attrs["DSS File"] for i in self.run.elements]
-                + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
-            )
+        files = set(
+            [i[1].attrs["Log File"] for i in self.run.elements]
+            + [i[1].attrs["DSS File"] for i in self.run.elements]
+            + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
         )
+
+        files = [str(Path(f.replace("\\", "/"))) for f in files]
+        return self.absolute_paths(set(files))
 
     def absolute_paths(self, paths):
         return [os.path.join(self.directory, path) for path in paths]
@@ -261,6 +267,7 @@ class ProjectFile(BaseTextFile):
             for terrain in self.terrain.layers:
                 files += [os.path.join(terrain["raster_dir"], f) for f in os.listdir(terrain["raster_dir"])]
         files += [grid.attrs["Filename"] for grid in self.grid.elements.elements.values() if "Filename" in grid.attrs]
+        files = [str(Path(f.replace("\\", "/"))) for f in files]
         return self.absolute_paths(set(files))
 
     @property

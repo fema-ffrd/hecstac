@@ -88,9 +88,11 @@ class HMSModelItem(Item):
 
     def _check_files_exists(self, files: list[str]):
         """Ensure the files exists. If they don't rasie an error."""
+        from pathlib import Path
+
         for file in files:
             if not os.path.exists(file):
-                logging.warning(f"Could not find HMS model file: {file}")
+                logging.warning(f"File not found {file}")
 
     def make_thumbnails(self, basins: list[BasinFile], overwrite: bool = False):
         """Create a png for each basin. Optionally overwrite existing files."""
