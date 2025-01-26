@@ -6,7 +6,7 @@ from typing import Callable
 
 from pystac import Asset, MediaType
 
-from .assets import (
+from hecstac.ras.assets import (
     GeometryAsset,
     GeometryHdfAsset,
     PlanAsset,
@@ -17,8 +17,8 @@ from .assets import (
     SteadyFlowAsset,
     UnsteadyFlowAsset,
 )
-from .errors import GeometryAssetMissingCRSError, GeometryAssetNoXSError
-from .utils import is_ras_prj
+from hecstac.ras.errors import GeometryAssetMissingCRSError, GeometryAssetNoXSError
+from hecstac.ras.utils import is_ras_prj
 
 
 @dataclass

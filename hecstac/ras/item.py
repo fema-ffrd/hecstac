@@ -29,9 +29,8 @@ NULL_STAC_BBOX = NULL_BBOX.bounds
 PLACEHOLDER_ID = "id"
 
 from hecstac.common.asset_factory import AssetFactory
-
-from .assets import (
-    GenericAsset,
+from hecstac.ras.assets import (
+    RAS_EXTENSION_MAPPING,
     GeometryAsset,
     GeometryHdfAsset,
     PlanAsset,
@@ -40,10 +39,9 @@ from .assets import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
-    RAS_EXTENSION_MAPPING
 )
-from .consts import SCHEMA_URI
-from .stac_utils import asset_factory
+from hecstac.ras.consts import SCHEMA_URI
+from hecstac.ras.stac_utils import asset_factory
 
 
 class ThumbnailParameter(Enum):

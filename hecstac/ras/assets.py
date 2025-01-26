@@ -1,8 +1,10 @@
 import datetime
+import io
 import json
 import logging
 import math
 import os
+import re
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from copy import deepcopy
@@ -34,16 +36,19 @@ from shapely import (
 )
 from shapely.ops import unary_union
 
-from .errors import GeometryAssetInvalidCRSError
-from .parser import XS, Connection, Junction, Reach, River, StorageArea, Structure
-from .utils import (
-    data_pairs_from_text_block,
-    delimited_pairs_to_lists,
-    search_contents,
-    text_block_from_start_end_str,
-    text_block_from_start_str_length,
-    text_block_from_start_str_to_empty_line,
+from hecstac.common.asset_factory import GenericAsset
+from hecstac.ras.errors import GeometryAssetInvalidCRSError
+from hecstac.ras.parser import (
+    XS,
+    Connection,
+    Junction,
+    Reach,
+    River,
+    StorageArea,
+    Structure,
+    StructureType,
 )
+from hecstac.ras.utils import search_contents
 
 
 class ProjectAsset(GenericAsset):
@@ -57,16 +62,17 @@ class ProjectAsset(GenericAsset):
 
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
-        self.ras_schema = extract_schema_definition("project")
+        # self.ras_schema = extract_schema_definition("project")
 
         # Populate extra fields directly within __init__
         self.extra_fields = kwargs.get("extra_fields", {})
-        self.extra_fields.update({
-            "ras:project_title": self.project_title,
-            "ras:project_units": self.project_units,
-            "ras:ras_version": self.ras_version,
-        })
-
+        self.extra_fields.update(
+            {
+                "ras:project_title": self.project_title,
+                "ras:project_units": self.project_units,
+                "ras:ras_version": self.ras_version,
+            }
+        )
 
     def populate(self) -> None:
         """Get rid of requirements for properties which are defined after other assets are associated with this asset
@@ -211,8 +217,7 @@ class PlanAsset(GenericAsset):
 
         super().__init__(plan_file, roles=roles, description=description, **kwargs)
 
-        self.ras_schema = extract_schema_definition("plan")
-
+        # self.ras_schema = extract_schema_definition("plan")
 
     def populate(self) -> None:
         # get rid of requirements for properties which are defined after other assets are associated with this asset (geometry_file, one of [steady_flow_file, quasi_unsteady_flow_file, unsteady_flow_file])
@@ -283,8 +288,7 @@ class GeometryAsset(GenericAsset):
         super().__init__(geom_file, roles=roles, description=description, **kwargs)
 
         self.crs = crs
-        self.ras_schema = extract_schema_definition("geometry")
-
+        # self.ras_schema = extract_schema_definition("geometry")
 
     @staticmethod
     def validate_crs(crs: str) -> CRS:
@@ -513,8 +517,7 @@ class SteadyFlowAsset(GenericAsset):
 
         super().__init__(steady_flow_file, roles=roles, description=description, **kwargs)
 
-        self.ras_schema = extract_schema_definition("steady_flow")
-
+        # self.ras_schema = extract_schema_definition("steady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -542,8 +545,7 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
 
         super().__init__(quasi_unsteady_flow_file, roles=roles, description=description, **kwargs)
 
-        self.ras_schema = extract_schema_definition("quasi_unsteady_flow")
-
+        # self.ras_schema = extract_schema_definition("quasi_unsteady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -571,8 +573,7 @@ class UnsteadyFlowAsset(GenericAsset):
 
         super().__init__(unsteady_flow_file, roles=roles, description=description, **kwargs)
 
-        self.ras_schema = extract_schema_definition("unsteady_flow")
-
+        # self.ras_schema = extract_schema_definition("unsteady_flow")
 
     def populate(self) -> None:
         self.extra_fields["ras:flow_title"] = self.flow_title
@@ -588,7 +589,7 @@ class HdfAsset(GenericAsset):
     """Base class for HDF assets (Plan and Geometry HDF files)."""
 
     def __init__(self, hdf_file: str, hdf_constructor: Callable[[str], RasHdf], **kwargs):
-        roles = kwargs.get("roles", []) + ["ras-file", Media.HDF]
+        roles = kwargs.get("roles", []) + ["ras-file", MediaType.HDF]
         description = kwargs.get("description")
 
         super().__init__(hdf_file, roles=roles, description=description, **kwargs)
@@ -598,7 +599,6 @@ class HdfAsset(GenericAsset):
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
         self._2d_flow_attrs: dict | None = None
-
 
     def populate(
         self,
@@ -800,7 +800,6 @@ class PlanHdfAsset(HdfAsset):
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
-
 
     def populate(self) -> None:
         plan_hdf_properties = {
@@ -1065,7 +1064,6 @@ class GeometryHdfAsset(HdfAsset):
         self.hdf_object: RasGeomHdf
         self.hdf_file = hdf_file
 
-
     @property
     def cross_sections(self) -> int | None:
         pass
@@ -1294,20 +1292,22 @@ class GeometryHdfAsset(HdfAsset):
             base_dir = os.path.dirname(thumbnail_dest)
             filepath = os.path.join(base_dir, filename)
 
-            if filepath.startswith("s3://"):
-                img_data = io.BytesIO()
-                fig.savefig(img_data, format="png", bbox_inches="tight")
-                img_data.seek(0)
-                save_bytes_s3(img_data, filepath)
-            else:
-                os.makedirs(base_dir, exist_ok=True)
-                fig.savefig(filepath, dpi=80, bbox_inches="tight")
+            # if filepath.startswith("s3://"):
+            #     img_data = io.BytesIO()
+            #     fig.savefig(img_data, format="png", bbox_inches="tight")
+            #     img_data.seek(0)
+            #     save_bytes_s3(img_data, filepath)
+            # else:
+            os.makedirs(base_dir, exist_ok=True)
+            fig.savefig(filepath, dpi=80, bbox_inches="tight")
 
             if add_asset:
                 return self._add_thumbnail_asset(filepath)
 
+
 class RunFileAsset(GenericAsset):
     """Run file asset for steady flow analysis."""
+
     regex_parse_str = r".+\.r\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1318,6 +1318,7 @@ class RunFileAsset(GenericAsset):
 
 class ComputationalLevelOutputAsset(GenericAsset):
     """Computational Level Output asset."""
+
     regex_parse_str = r".+\.hyd\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1328,6 +1329,7 @@ class ComputationalLevelOutputAsset(GenericAsset):
 
 class GeometricPreprocessorAsset(GenericAsset):
     """Geometric Pre-Processor asset."""
+
     regex_parse_str = r".+\.c\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1338,6 +1340,7 @@ class GeometricPreprocessorAsset(GenericAsset):
 
 class BoundaryConditionAsset(GenericAsset):
     """Boundary Condition asset."""
+
     regex_parse_str = r".+\.b\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1348,6 +1351,7 @@ class BoundaryConditionAsset(GenericAsset):
 
 class UnsteadyFlowLogAsset(GenericAsset):
     """Unsteady Flow Log asset."""
+
     regex_parse_str = r".+\.bco\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1358,6 +1362,7 @@ class UnsteadyFlowLogAsset(GenericAsset):
 
 class SedimentDataAsset(GenericAsset):
     """Sediment Data asset."""
+
     regex_parse_str = r".+\.s\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1368,16 +1373,18 @@ class SedimentDataAsset(GenericAsset):
 
 class HydraulicDesignAsset(GenericAsset):
     """Hydraulic Design asset."""
+
     regex_parse_str = r".+\.h\d{2}$"
+
     def __init__(self, href: str, *args, **kwargs):
         roles = ["hydraulic-design-file", "ras-file", MediaType.TEXT]
         description = "Hydraulic Design data file."
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
-
 class WaterQualityAsset(GenericAsset):
     """Water Quality asset."""
+
     regex_parse_str = r".+\.w\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1388,6 +1395,7 @@ class WaterQualityAsset(GenericAsset):
 
 class SedimentTransportCapacityAsset(GenericAsset):
     """Sediment Transport Capacity asset."""
+
     regex_parse_str = r".+\.SedCap\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1398,6 +1406,7 @@ class SedimentTransportCapacityAsset(GenericAsset):
 
 class XSOutputAsset(GenericAsset):
     """Cross Section Output asset."""
+
     regex_parse_str = r".+\.SedXS\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1408,6 +1417,7 @@ class XSOutputAsset(GenericAsset):
 
 class XSOutputHeaderAsset(GenericAsset):
     """Cross Section Output Header asset."""
+
     regex_parse_str = r".+\.SedHeadXS\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1418,6 +1428,7 @@ class XSOutputHeaderAsset(GenericAsset):
 
 class WaterQualityRestartAsset(GenericAsset):
     """Water Quality Restart asset."""
+
     regex_parse_str = r".+\.wqrst\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1428,6 +1439,7 @@ class WaterQualityRestartAsset(GenericAsset):
 
 class SedimentOutputAsset(GenericAsset):
     """Sediment Output asset."""
+
     regex_parse_str = r".+\.sed$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1438,6 +1450,7 @@ class SedimentOutputAsset(GenericAsset):
 
 class BinaryLogAsset(GenericAsset):
     """Binary Log asset."""
+
     regex_parse_str = r".+\.blf$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1448,6 +1461,7 @@ class BinaryLogAsset(GenericAsset):
 
 class DSSAsset(GenericAsset):
     """DSS asset."""
+
     regex_parse_str = r".+\.dss$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1458,6 +1472,7 @@ class DSSAsset(GenericAsset):
 
 class LogAsset(GenericAsset):
     """Log asset."""
+
     regex_parse_str = r".+\.log$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1468,6 +1483,7 @@ class LogAsset(GenericAsset):
 
 class RestartAsset(GenericAsset):
     """Restart file asset."""
+
     regex_parse_str = r".+\.rst$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1478,6 +1494,7 @@ class RestartAsset(GenericAsset):
 
 class SiamInputAsset(GenericAsset):
     """SIAM Input Data file asset."""
+
     regex_parse_str = r".+\.SiamInput$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1488,6 +1505,7 @@ class SiamInputAsset(GenericAsset):
 
 class SiamOutputAsset(GenericAsset):
     """SIAM Output Data file asset."""
+
     regex_parse_str = r".+\.SiamOutput$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1498,6 +1516,7 @@ class SiamOutputAsset(GenericAsset):
 
 class WaterQualityLogAsset(GenericAsset):
     """Water Quality Log file asset."""
+
     regex_parse_str = r".+\.bco$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1508,6 +1527,7 @@ class WaterQualityLogAsset(GenericAsset):
 
 class ColorScalesAsset(GenericAsset):
     """Color Scales file asset."""
+
     regex_parse_str = r".+\.color-scales$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1518,6 +1538,7 @@ class ColorScalesAsset(GenericAsset):
 
 class ComputationalMessageAsset(GenericAsset):
     """Computational Message file asset."""
+
     regex_parse_str = r".+\.comp-msgs.txt$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1528,6 +1549,7 @@ class ComputationalMessageAsset(GenericAsset):
 
 class UnsteadyRunFileAsset(GenericAsset):
     """Run file for Unsteady Flow asset."""
+
     regex_parse_str = r".+\.x\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1538,6 +1560,7 @@ class UnsteadyRunFileAsset(GenericAsset):
 
 class OutputFileAsset(GenericAsset):
     """Output RAS file asset."""
+
     regex_parse_str = r".+\.o\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1545,8 +1568,10 @@ class OutputFileAsset(GenericAsset):
         description = "Output RAS file which contains all computed results."
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
+
 class InitialConditionsFileAsset(GenericAsset):
     """Initial Conditions file asset."""
+
     regex_parse_str = r".+\.IC\.O\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1557,6 +1582,7 @@ class InitialConditionsFileAsset(GenericAsset):
 
 class PlanRestartFileAsset(GenericAsset):
     """Restart file for Unsteady Flow Plan asset."""
+
     regex_parse_str = r".+\.p\d{2}\.rst$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1567,6 +1593,7 @@ class PlanRestartFileAsset(GenericAsset):
 
 class RasMapperFileAsset(GenericAsset):
     """RAS Mapper file asset."""
+
     regex_parse_str = r".+\.rasmap$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1577,9 +1604,9 @@ class RasMapperFileAsset(GenericAsset):
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
-
 class RasMapperBackupFileAsset(GenericAsset):
     """Backup RAS Mapper file asset."""
+
     regex_parse_str = r".+\.rasmap\.backup$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1590,6 +1617,7 @@ class RasMapperBackupFileAsset(GenericAsset):
 
 class RasMapperOriginalFileAsset(GenericAsset):
     """Original RAS Mapper file asset."""
+
     regex_parse_str = r".+\.rasmap\.original$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1600,6 +1628,7 @@ class RasMapperOriginalFileAsset(GenericAsset):
 
 class MiscTextFileAsset(GenericAsset):
     """Miscellaneous Text file asset."""
+
     regex_parse_str = r".+\.txt$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -1610,12 +1639,14 @@ class MiscTextFileAsset(GenericAsset):
 
 class MiscXMLFileAsset(GenericAsset):
     """Miscellaneous XML file asset."""
+
     regex_parse_str = r".+\.xml$"
 
     def __init__(self, href: str, *args, **kwargs):
         roles = [MediaType.XML]
         description = "Miscellaneous XML file."
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
+
 
 RAS_ASSET_CLASSES = [
     ProjectAsset,
@@ -1659,9 +1690,7 @@ RAS_ASSET_CLASSES = [
     MiscXMLFileAsset,
 ]
 
-PATTERN_RAS_MAPPING = {
-    re.compile(cls.regex_parse_str, re.IGNORECASE): cls for cls in RAS_ASSET_CLASSES
-}
+PATTERN_RAS_MAPPING = {re.compile(cls.regex_parse_str, re.IGNORECASE): cls for cls in RAS_ASSET_CLASSES}
 
 # TODO: Convert to dictionary of classes
 RasAsset: TypeAlias = (

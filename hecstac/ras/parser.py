@@ -1,8 +1,19 @@
+import math
 from enum import Enum
 
 import geopandas as gpd
+import pandas as pd
 from shapely import LineString, Point
-from 
+
+from hecstac.ras.utils import (
+    data_pairs_from_text_block,
+    delimited_pairs_to_lists,
+    search_contents,
+    text_block_from_start_end_str,
+    text_block_from_start_str_length,
+    text_block_from_start_str_to_empty_line,
+)
+
 
 class River:
 
@@ -461,7 +472,8 @@ class Reach:
                 )
             else:
                 raise TypeError(
-                    f"Unsupported structure type: {int(type)}. Supported structure types are 2, 3, 4, 5, and 6 corresponding to culvert, bridge, multiple openeing, inline structure, lateral structure, respectively"
+                    f"Unsupported structure type: {int(type)}. Supported structure types are 2, 3, 4, 5, and 6 corresponding to culvert, \
+                        bridge, multiple openeing, inline structure, lateral structure, respectively"
                 )
 
             structure = Structure(
