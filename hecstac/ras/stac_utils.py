@@ -6,13 +6,12 @@ from typing import Callable
 
 from pystac import Asset, MediaType
 
-from hecstac.ras.assets import (
+from hecstac.ras.assets import (  # QuasiUnsteadyFlowAsset,
     GeometryAsset,
     GeometryHdfAsset,
     PlanAsset,
     PlanHdfAsset,
     ProjectAsset,
-    QuasiUnsteadyFlowAsset,
     RasAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,

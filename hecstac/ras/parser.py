@@ -1,11 +1,26 @@
+import datetime
 import logging
 import math
+from collections import defaultdict
 from enum import Enum
 from pathlib import Path
+from typing import Any, Callable, Iterator, TypeAlias
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
-from shapely import LineString, Point
+from pystac import Asset, MediaType
+from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
+from shapely import (
+    LineString,
+    MultiPolygon,
+    Point,
+    Polygon,
+    make_valid,
+    to_geojson,
+    union_all,
+)
+from shapely.ops import unary_union
 
 from hecstac.ras.utils import (
     data_pairs_from_text_block,
@@ -752,3 +767,707 @@ class PlanFile:
                 breach_dict[key] = eval(parts[3].strip())
         logging.info(breach_dict)
         return breach_dict
+
+
+class GeometryFile:
+    """HEC-RAS Geometry file asset."""
+
+    def __init__(self, fpath):
+        # TODO: Compare with HMS implementation
+        self.fpath = fpath
+        with open(fpath, "r") as f:
+            self.file_lines = f.readlines()
+
+    @property
+    def geom_title(self) -> str:
+        return search_contents(self.file_lines, "Geom Title")
+
+    @property
+    def geom_version(self) -> str:
+        return search_contents(self.file_lines, "Program Version")
+
+    @property
+    def rivers(self) -> dict[str, "River"]:
+        """A dictionary of river_name: River (class) for the rivers contained in the HEC-RAS geometry file."""
+        tmp_rivers = defaultdict(list)
+        for reach in self.reaches.values():  # First, group all reaches into their respective rivers
+            tmp_rivers[reach.river].append(reach.reach)
+        for (
+            river,
+            reaches,
+        ) in tmp_rivers.items():  # Then, create a River object for each river
+            tmp_rivers[river] = River(river, reaches)
+        return tmp_rivers
+
+    @property
+    def reaches(self) -> dict[str, "Reach"]:
+        """A dictionary of the reaches contained in the HEC-RAS geometry file."""
+        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False)
+        return {river_reach: Reach(self.file_lines, river_reach, self.crs) for river_reach in river_reaches}
+
+    @property
+    def junctions(self) -> dict[str, "Junction"]:
+        """A dictionary of the junctions contained in the HEC-RAS geometry file."""
+        juncts = search_contents(self.file_lines, "Junct Name", expect_one=False)
+        return {junction: Junction(self.file_lines, junction, self.crs) for junction in juncts}
+
+    @property
+    def cross_sections(self) -> dict[str, "XS"]:
+        """A dictionary of all the cross sections contained in the HEC-RAS geometry file."""
+        cross_sections = {}
+        for reach in self.reaches.values():
+            cross_sections.update(reach.cross_sections)
+        return cross_sections
+
+    @property
+    def structures(self) -> dict[str, "Structure"]:
+        """A dictionary of the structures contained in the HEC-RAS geometry file."""
+        structures = {}
+        for reach in self.reaches.values():
+            structures.update(reach.structures)
+        return structures
+
+    @property
+    def storage_areas(self) -> dict[str, "StorageArea"]:
+        """A dictionary of the storage areas contained in the HEC-RAS geometry file."""
+        areas = search_contents(self.file_lines, "Storage Area", expect_one=False)
+        return {a: StorageArea(a, self.crs) for a in areas}
+
+    @property
+    def connections(self) -> dict[str, "Connection"]:
+        """A dictionary of the SA/2D connections contained in the HEC-RAS geometry file."""
+        connections = search_contents(self.file_lines, "Connection", expect_one=False)
+        return {c: Connection(c, self.crs) for c in connections}
+
+    @property
+    def datetimes(self) -> list[datetime.datetime]:
+        """Get the latest node last updated entry for this geometry"""
+        dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False)
+        if len(dts) >= 1:
+            try:
+                return [datetime.datetime.strptime(d, "%b/%d/%Y %H:%M:%S") for d in dts]
+            except ValueError:
+                return []
+        else:
+            return []
+
+    @property
+    def has_2d(self) -> bool:
+        """Check if RAS geometry has any 2D areas"""
+        for line in self.file_lines:
+            if line.startswith("Storage Area Is2D=") and int(line[len("Storage Area Is2D=") :].strip()) in (1, -1):
+                # RAS mostly uses "-1" to indicate True and "0" to indicate False. Checking for "1" also here.
+                return True
+        return False
+
+    @property
+    def has_1d(self) -> bool:
+        """Check if RAS geometry has any 1D components"""
+        return len(self.cross_sections) > 0
+
+    @property
+    def concave_hull(self) -> Polygon:
+        """Compute and return the concave hull (polygon) for cross sections."""
+        polygons = []
+        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+        for river_reach in xs_gdf["river_reach"].unique():
+            xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
+            points = xs_subset.boundary.explode(index_parts=True).unstack()
+            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
+            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
+            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
+            if isinstance(polygon, MultiPolygon):
+                polygons += list(polygon.geoms)
+            else:
+                polygons.append(polygon)
+        if len(self.junctions) > 0:
+            for junction in self.junctions.values():
+                for _, j in junction.gdf.iterrows():
+                    polygons.append(self.junction_hull(xs_gdf, j))
+        out_hull = union_all([make_valid(p) for p in polygons])
+        return out_hull
+
+    def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
+        """Compute and return the concave hull (polygon) for a juction."""
+        junction_xs = self.determine_junction_xs(xs_gdf, junction)
+
+        junction_xs["start"] = junction_xs.apply(lambda row: row.geometry.boundary.geoms[0], axis=1)
+        junction_xs["end"] = junction_xs.apply(lambda row: row.geometry.boundary.geoms[1], axis=1)
+        junction_xs["to_line"] = junction_xs.apply(lambda row: self.determine_xs_order(row, junction_xs), axis=1)
+
+        coords = []
+        first_to_line = junction_xs["to_line"].iloc[0]
+        to_line = first_to_line
+        while True:
+            xs = junction_xs[junction_xs["river_reach_rs"] == to_line]
+            coords += list(xs.iloc[0].geometry.coords)
+            to_line = xs["to_line"].iloc[0]
+            if to_line == first_to_line:
+                break
+        return Polygon(coords)
+
+    def determine_junction_xs(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> gpd.GeoDataFrame:
+        """Determine the cross sections that bound a junction."""
+        junction_xs = []
+        for us_river, us_reach in zip(junction.us_rivers.split(","), junction.us_reaches.split(",")):
+            xs_us_river_reach = xs_gdf[(xs_gdf["river"] == us_river) & (xs_gdf["reach"] == us_reach)]
+            junction_xs.append(
+                xs_us_river_reach[xs_us_river_reach["river_station"] == xs_us_river_reach["river_station"].min()]
+            )
+        for ds_river, ds_reach in zip(junction.ds_rivers.split(","), junction.ds_reaches.split(",")):
+            xs_ds_river_reach = xs_gdf[(xs_gdf["river"] == ds_river) & (xs_gdf["reach"] == ds_reach)].copy()
+            xs_ds_river_reach["geometry"] = xs_ds_river_reach.reverse()
+            junction_xs.append(
+                xs_ds_river_reach[xs_ds_river_reach["river_station"] == xs_ds_river_reach["river_station"].max()]
+            )
+        return pd.concat(junction_xs).copy()
+
+    def determine_xs_order(self, row: gpd.GeoSeries, junction_xs: gpd.gpd.GeoDataFrame):
+        """Detemine what order cross sections bounding a junction should be in to produce a valid polygon."""
+        candidate_lines = junction_xs[junction_xs["river_reach_rs"] != row["river_reach_rs"]]
+        candidate_lines["distance"] = candidate_lines["start"].distance(row.end)
+        return candidate_lines.loc[
+            candidate_lines["distance"] == candidate_lines["distance"].min(),
+            "river_reach_rs",
+        ].iloc[0]
+
+    def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
+        """Get a geodataframe of a specific subtype of geometry asset."""
+        tmp_objs: dict[str] = getattr(self, subtype)
+        return gpd.GeoDataFrame(
+            pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True)
+        )  # TODO: may need to add some logic here for empty dicts
+
+    def iter_labeled_gdfs(self) -> Iterator[tuple[str, gpd.GeoDataFrame]]:
+        for property in self.PROPERTIES_WITH_GDF:
+            gdf = self.get_subtype_gdf(property)
+            yield property, gdf
+
+    def to_gpkg(self, gpkg_path: str) -> None:
+        """Write the HEC-RAS Geometry file to geopackage."""
+        for subtype, gdf in self.iter_labeled_gdfs():
+            gdf.to_file(gpkg_path, driver="GPKG", layer=subtype, ignore_index=True)
+
+
+class SteadyFlowFile:
+    """HEC-RAS Steady Flow file data."""
+
+    def __init__(self, fpath):
+        self.fpath = fpath
+        with open(fpath, "r") as f:
+            self.file_lines = f.readlines()
+
+    @property
+    def flow_title(self) -> str:
+        return search_contents(self.file_lines, "Flow Title")
+
+    @property
+    def n_profiles(self) -> int:
+        return int(search_contents(self.file_lines, "Number of Profiles"))
+
+
+class UnsteadyFlowFile:
+    """HEC-RAS Unsteady Flow file data."""
+
+    def __init__(self, fpath):
+        self.fpath = fpath
+        with open(fpath, "r") as f:
+            self.file_lines = f.readlines()
+
+    @property
+    def flow_title(self) -> str:
+        return search_contents(self.file_lines, "Flow Title")
+
+    @property
+    def boundary_locations(self) -> list:
+        """
+        example file line:
+        Boundary Location=                ,                ,        ,        ,                ,Perimeter 1     ,                ,PugetSound_Ocean_Boundary       ,
+        """
+        boundary_dict = []
+        matches = search_contents(self.file_lines, "Boundary Location", expect_one=False)
+        for line in matches:
+            parts = line.split(",")
+            if len(parts) >= 7:
+                flow_area = parts[5].strip()
+                bc_line = parts[7].strip()
+                boundary_dict.append({flow_area: bc_line})
+        logging.info(boundary_dict)
+        return boundary_dict
+
+    @property
+    def reference_lines(self):
+        return search_contents(self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False)
+
+
+class QuasiUnsteadyFlowFile:
+    """HEC-RAS Quasi-Unsteady Flow file data."""
+
+    # TODO: implement this class
+    pass
+    # @property
+    # def flow_title(self) -> str:
+    #     tree = ET.parse(self.href)
+    #     file_info = tree.find("FileInfo")
+    #     return file_info.attrib.get("Title")
+
+
+class RASHDFFile:
+    """Base class for HDF assets (Plan and Geometry HDF files)."""
+
+    def __init__(self, fpath):
+        self.fpath = fpath
+
+        self.hdf_object = RasHdf(fpath)
+        self._root_attrs: dict | None = None
+        self._geom_attrs: dict | None = None
+        self._structures_attrs: dict | None = None
+        self._2d_flow_attrs: dict | None = None
+
+    # def populate(
+    #     self,
+    #     optional_property_dict: dict[str, str],
+    #     required_property_dict: dict[str, str],
+    # ) -> dict:
+    #     extra_fields = {}
+    #     # go through dictionary of stac property names and class property names, only adding property to extra fields if the value is not None
+    #     for stac_property_name, class_property_name in optional_property_dict.items():
+    #         property_value = getattr(self, class_property_name)
+    #         if property_value != None:
+    #             extra_fields[stac_property_name] = property_value
+    #     # go through dictionary of stac property names and class property names, adding all properties to extra fields regardless of value
+    #     for stac_property_name, class_property_name in required_property_dict.items():
+    #         property_value = getattr(self, class_property_name)
+    #         extra_fields[stac_property_name] = property_value
+    #     return extra_fields
+
+    @property
+    def file_version(self) -> str | None:
+        if self._root_attrs == None:
+            self._root_attrs = self.hdf_object.get_root_attrs()
+        return self._root_attrs.get("File Version")
+
+    @property
+    def units_system(self) -> str | None:
+        if self._root_attrs == None:
+            self._root_attrs = self.hdf_object.get_root_attrs()
+        return self._root_attrs.get("Units System")
+
+    @property
+    def geometry_time(self) -> datetime.datetime | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Geometry Time").isoformat()
+
+    @property
+    def landcover_date_last_modified(self) -> datetime.datetime | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Land Cover Date Last Modified")
+
+    @property
+    def landcover_filename(self) -> str | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Land Cover Filename")
+
+    @property
+    def landcover_layername(self) -> str | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Land Cover Layername")
+
+    @property
+    def rasmapperlibdll_date(self) -> datetime.datetime | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("RasMapperLib.dll Date").isoformat()
+
+    @property
+    def si_units(self) -> bool | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("SI Units")
+
+    @property
+    def terrain_file_date(self) -> datetime.datetime | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Terrain File Date").isoformat()
+
+    @property
+    def terrain_filename(self) -> str | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Terrain Filename")
+
+    @property
+    def terrain_layername(self) -> str | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Terrain Layername")
+
+    @property
+    def geometry_version(self) -> str | None:
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_geom_attrs()
+        return self._geom_attrs.get("Version")
+
+    @property
+    def bridges_culverts(self) -> int | None:
+        if self._structures_attrs == None:
+            self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
+        return self._structures_attrs.get("Bridge/Culvert Count")
+
+    @property
+    def connections(self) -> int | None:
+        if self._structures_attrs == None:
+            self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
+        return self._structures_attrs.get("Connection Count")
+
+    @property
+    def inline_structures(self) -> int | None:
+        if self._structures_attrs == None:
+            self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
+        return self._structures_attrs.get("Inline Structure Count")
+
+    @property
+    def lateral_structures(self) -> int | None:
+        if self._structures_attrs == None:
+            self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
+        return self._structures_attrs.get("Lateral Structure Count")
+
+    @property
+    def two_d_flow_cell_average_size(self) -> float | None:
+        if self._2d_flow_attrs == None:
+            self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
+        return int(np.sqrt(self._2d_flow_attrs.get("Cell Average Size")))
+
+    @property
+    def two_d_flow_cell_maximum_index(self) -> int | None:
+        if self._2d_flow_attrs == None:
+            self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
+        return self._2d_flow_attrs.get("Cell Maximum Index")
+
+    @property
+    def two_d_flow_cell_maximum_size(self) -> int | None:
+        if self._2d_flow_attrs == None:
+            self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
+        return int(np.sqrt(self._2d_flow_attrs.get("Cell Maximum Size")))
+
+    @property
+    def two_d_flow_cell_minimum_size(self) -> int | None:
+        if self._2d_flow_attrs == None:
+            self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
+        return int(np.sqrt(self._2d_flow_attrs.get("Cell Minimum Size")))
+
+    def mesh_areas(self, crs, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
+
+        mesh_areas = self.hdf_object.mesh_cell_polygons()
+        if mesh_areas is None or mesh_areas.empty:
+            raise ValueError("No mesh areas found.")
+
+        if mesh_areas.crs and mesh_areas.crs != crs:
+            mesh_areas = mesh_areas.to_crs(crs)
+
+        if return_gdf:
+            return mesh_areas
+        else:
+            geometries = mesh_areas["geometry"]
+            return unary_union(geometries)
+
+    @property
+    def breaklines(self) -> gpd.GeoDataFrame | None:
+        breaklines = self.hdf_object.breaklines()
+
+        if breaklines is None or breaklines.empty:
+            raise ValueError("No breaklines found.")
+        else:
+            return breaklines
+
+    @property
+    def bc_lines(self) -> gpd.GeoDataFrame | None:
+        bc_lines = self.hdf_object.bc_lines()
+
+        if bc_lines is None or bc_lines.empty:
+            raise ValueError("No boundary condition lines found.")
+        else:
+            return bc_lines
+
+    @property
+    def landcover_filename(self) -> str | None:
+        # broken example property which would give a filename to use when linking assets together
+        if self._geom_attrs == None:
+            self._geom_attrs = self.hdf_object.get_attrs("geom_or_something")
+        return self._geom_attrs.get("land_cover_filename")
+
+    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
+        if self.landcover_filename:
+            landcover_asset = asset_dict[self.parent.joinpath(self.landcover_filename).resolve()]
+            self.extra_fields["ras:landcover_file"] = landcover_asset.href
+
+
+class PlanHDFFile(RASHDFFile):
+
+    def __init__(self, fpath: str, **kwargs):
+        super().__init__(fpath, **kwargs)
+
+        self.hdf_object = RasPlanHdf(fpath)
+        self._plan_info_attrs = None
+        self._plan_parameters_attrs = None
+        self._meteorology_attrs = None
+
+    @property
+    def plan_information_base_output_interval(self) -> str | None:
+        # example property to show pattern: if attributes in which property is found is not loaded, load them
+        # then use key for the property in the dictionary of attributes to retrieve the property
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Base Output Interval")
+
+    @property
+    def plan_information_computation_time_step_base(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Computation Time Step Base")
+
+    @property
+    def plan_information_flow_filename(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Flow Filename")
+
+    @property
+    def plan_information_geometry_filename(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Geometry Filename")
+
+    @property
+    def plan_information_plan_filename(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Plan Filename")
+
+    @property
+    def plan_information_plan_name(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Plan Name")
+
+    @property
+    def plan_information_project_filename(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Project Filename")
+
+    @property
+    def plan_information_project_title(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Project Title")
+
+    @property
+    def plan_information_simulation_end_time(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Simulation End Time").isoformat()
+
+    @property
+    def plan_information_simulation_start_time(self):
+        if self._plan_info_attrs == None:
+            self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
+        return self._plan_info_attrs.get("Simulation Start Time").isoformat()
+
+    @property
+    def plan_parameters_1d_flow_tolerance(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Flow Tolerance")
+
+    @property
+    def plan_parameters_1d_maximum_iterations(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Maximum Iterations")
+
+    @property
+    def plan_parameters_1d_maximum_iterations_without_improvement(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Maximum Iterations Without Improvement")
+
+    @property
+    def plan_parameters_1d_maximum_water_surface_error_to_abort(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Maximum Water Surface Error To Abort")
+
+    @property
+    def plan_parameters_1d_storage_area_elevation_tolerance(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Storage Area Elevation Tolerance")
+
+    @property
+    def plan_parameters_1d_theta(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Theta")
+
+    @property
+    def plan_parameters_1d_theta_warmup(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Theta Warmup")
+
+    @property
+    def plan_parameters_1d_water_surface_elevation_tolerance(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D Water Surface Elevation Tolerance")
+
+    @property
+    def plan_parameters_1d2d_gate_flow_submergence_decay_exponent(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Gate Flow Submergence Decay Exponent")
+
+    @property
+    def plan_parameters_1d2d_is_stablity_factor(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D IS Stablity Factor")
+
+    @property
+    def plan_parameters_1d2d_ls_stablity_factor(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D LS Stablity Factor")
+
+    @property
+    def plan_parameters_1d2d_maximum_number_of_time_slices(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Maximum Number of Time Slices")
+
+    @property
+    def plan_parameters_1d2d_minimum_time_step_for_slicinghours(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Minimum Time Step for Slicing(hours)")
+
+    @property
+    def plan_parameters_1d2d_number_of_warmup_steps(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Number of Warmup Steps")
+
+    @property
+    def plan_parameters_1d2d_warmup_time_step_hours(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Warmup Time Step (hours)")
+
+    @property
+    def plan_parameters_1d2d_weir_flow_submergence_decay_exponent(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D-2D Weir Flow Submergence Decay Exponent")
+
+    @property
+    def plan_parameters_1d2d_maxiter(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("1D2D MaxIter")
+
+    @property
+    def plan_parameters_2d_equation_set(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Equation Set")
+
+    @property
+    def plan_parameters_2d_names(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Names")
+
+    @property
+    def plan_parameters_2d_volume_tolerance(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Volume Tolerance")
+
+    @property
+    def plan_parameters_2d_water_surface_tolerance(self):
+        if self._plan_parameters_attrs == None:
+            self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
+        return self._plan_parameters_attrs.get("2D Water Surface Tolerance")
+
+    @property
+    def meteorology_dss_filename(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("DSS Filename")
+
+    @property
+    def meteorology_dss_pathname(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("DSS Pathname")
+
+    @property
+    def meteorology_data_type(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Data Type")
+
+    @property
+    def meteorology_mode(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Mode")
+
+    @property
+    def meteorology_raster_cellsize(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Raster Cellsize")
+
+    @property
+    def meteorology_source(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Source")
+
+    @property
+    def meteorology_units(self):
+        if self._meteorology_attrs == None:
+            self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
+        return self._meteorology_attrs.get("Units")
+
+
+class GeometryHDFFile(RASHDFFile):
+
+    def __init__(self, fpath: str, **kwargs):
+        super().__init__(fpath, **kwargs)
+
+        self.hdf_object = RasPlanHdf(fpath)
+        self._plan_info_attrs = None
+        self._plan_parameters_attrs = None
+        self._meteorology_attrs = None
+
+    @property
+    def cross_sections(self) -> int | None:
+        pass
+
+    @property
+    def reference_lines(self) -> gpd.GeoDataFrame | None:
+
+        ref_lines = self.hdf_object.reference_lines()
+
+        if ref_lines is None or ref_lines.empty:
+            raise ValueError("No reference lines found.")
+        else:
+            return ref_lines

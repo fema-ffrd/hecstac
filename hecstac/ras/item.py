@@ -168,7 +168,11 @@ class RASModelItem(Item):
     def add_ras_asset(self, fpath: str = None) -> None:
         """Add an asset to the HMS STAC item."""
         # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.prj"
-        fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.p01"
+        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.p01"
+        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.g01"
+        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.u01"
+        fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.p01.hdf"
+        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.g01.hdf"
 
         if os.path.exists(fpath):
             asset = self.factory.create_ras_asset(fpath)
