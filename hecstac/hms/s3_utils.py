@@ -51,8 +51,8 @@ def check_storage_extension(asset: Asset) -> Asset:
 
 
 def get_metadata(key: str) -> str:
-    """Head object and get metadata."""
-    _, s3_client, s3_resource = init_s3_resources()
+    """Read the head object and return metadata."""
+    _, _, s3_resource = init_s3_resources()
     bucket, key = split_s3_key(key)
     bucket = s3_resource.Bucket(bucket)
     key_obj = bucket.Object(key)

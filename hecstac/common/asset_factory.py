@@ -42,8 +42,9 @@ class AssetFactory:
         """
         Create an asset instance based on the file extension.
         item_type: str
-            The type of item to create. This is used to determine the asset class.
-            Options are event or model.
+
+        The type of item to create. This is used to determine the asset class.
+        Options are event or model.
         """
         if item_type not in ["event", "model"]:
             raise ValueError(f"Invalid item type: {item_type}, valid options are 'event' or 'model'.")
