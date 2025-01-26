@@ -3,13 +3,11 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
-from pyproj import CRS, Transformer
 from pystac import Item
 from pystac.extensions.projection import ProjectionExtension
-from shapely import Geometry, Polygon, box, simplify, to_geojson, union_all
-from shapely.ops import transform
+from pystac.extensions.storage import StorageExtension
+from shapely import Polygon, box, simplify, to_geojson, union_all
 
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.ras.parser import ProjectFile
@@ -26,21 +24,8 @@ from hecstac.ras.assets import (
     RAS_EXTENSION_MAPPING,
     GeometryAsset,
     GeometryHdfAsset,
-    PlanAsset,
-    PlanHdfAsset,
     ProjectAsset,
-    QuasiUnsteadyFlowAsset,
-    SteadyFlowAsset,
-    UnsteadyFlowAsset,
 )
-
-# from hecstac.ras.consts import SCHEMA_URI
-
-
-# class ThumbnailParameter(Enum):
-#     XS = "cross_sections"
-#     MESH_2D = "mesh_areas"
-#     EXAMPLE = "example"
 
 
 class RASModelItem(Item):
@@ -84,6 +69,17 @@ class RASModelItem(Item):
             self._properties,
             href=self._href,
         )
+
+        # derived_assets  = self.add_model_thumbnail() TODO: implement this method
+        ras_asset_files = self.scan_model_dir()
+
+        for fpath in ras_asset_files:
+            if fpath and fpath != self._href:
+                self.add_ras_asset(fpath)
+
+    def _register_extensions(self) -> None:
+        ProjectionExtension.add_to(self)
+        StorageExtension.add_to(self)
 
     @property
     def _properties(self) -> None:
@@ -165,18 +161,14 @@ class RASModelItem(Item):
                         add_asset=add_asset, write=write, layers=layers, title=title, thumbnail_dest=self.href
                     )
 
-    def add_ras_asset(self, fpath: str = None) -> None:
+    def add_ras_asset(self, fpath: str = "") -> None:
         """Add an asset to the HMS STAC item."""
-        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.prj"
-        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.p01"
-        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.g01"
-        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.u01"
-        fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.p01.hdf"
-        # fpath = "/Users/slawler/Downloads/model-library-2/ffrd-duwamish/checkpoint-validation/hydraulics/duwamish-20250106/Duwamish_17110013.g01.hdf"
-
         if os.path.exists(fpath):
-            asset = self.factory.create_ras_asset(fpath)
-            logging.info(f"Adding asset {str(asset)}")
+            try:
+                asset = self.factory.create_ras_asset(fpath)
+                logging.debug(f"Adding asset {str(asset)}")
+            except TypeError as e:
+                logging.error(f"Error creating asset for {fpath}: {e}")
             if asset is not None:
                 self.add_asset(asset.title, asset)
                 if isinstance(asset, ProjectAsset):

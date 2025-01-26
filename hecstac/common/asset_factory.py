@@ -62,7 +62,7 @@ class AssetFactory:
         logging.info(f"Creating asset for {fpath}")
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
-                logging.info(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
+                logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class(href=fpath, title=Path(fpath).name)
 
         return GenericAsset(href=fpath, title=Path(fpath).name)

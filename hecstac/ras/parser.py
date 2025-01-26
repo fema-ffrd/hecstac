@@ -4,22 +4,14 @@ import math
 from collections import defaultdict
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterator, TypeAlias
+from typing import Iterator
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from pystac import Asset, MediaType
-from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
-from shapely import (
-    LineString,
-    MultiPolygon,
-    Point,
-    Polygon,
-    make_valid,
-    to_geojson,
-    union_all,
-)
+from pystac import Asset
+from rashdf import RasHdf, RasPlanHdf
+from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
 from hecstac.ras.utils import (
@@ -765,7 +757,7 @@ class PlanFile:
             if len(parts) >= 4:
                 key = parts[4].strip()
                 breach_dict[key] = eval(parts[3].strip())
-        logging.info(breach_dict)
+        logging.debug(f"breach_dict {breach_dict}")
         return breach_dict
 
 
@@ -992,7 +984,7 @@ class UnsteadyFlowFile:
                 flow_area = parts[5].strip()
                 bc_line = parts[7].strip()
                 boundary_dict.append({flow_area: bc_line})
-        logging.info(boundary_dict)
+        logging.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
     @property
