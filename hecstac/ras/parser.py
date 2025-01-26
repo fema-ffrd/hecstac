@@ -1,5 +1,7 @@
+import logging
 import math
 from enum import Enum
+from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
@@ -13,6 +15,11 @@ from hecstac.ras.utils import (
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
+
+
+def name_from_suffix(fpath: str, suffix: str) -> str:
+    """Generate a name by appending a suffix to the file stem."""
+    return f"{Path(fpath).stem}.{suffix}"
 
 
 class River:
@@ -624,3 +631,76 @@ class Connection:
         self.crs = crs
         self.ras_data = ras_data
         # TODO: Implement this
+
+
+class ProjectFile:
+    """HEC-RAS Project file."""
+
+    def __init__(self, fpath):
+        # TODO: Compare with HMS implementation
+        self.fpath = fpath
+        with open(fpath, "r") as f:
+            self.file_lines = f.readlines()
+
+    @property
+    def project_title(self) -> str:
+        return search_contents(self.file_lines, "Proj Title")
+
+    @property
+    def project_description(self) -> str:
+        return search_contents(self.file_lines, "Model Description", token=":")
+
+    @property
+    def project_status(self) -> str:
+        return search_contents(self.file_lines, "Status of Model", token=":")
+
+    @property
+    def project_units(self) -> str | None:
+        for line in self.file_lines:
+            if "Units" in line:
+                return " ".join(line.split(" ")[:-1])
+
+    @property
+    def plan_current(self) -> str | None:
+        try:
+            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
+            return self.name_from_suffix(suffix)
+        except Exception:
+            logging.warning("Ras model has no current plan")
+            return None
+
+    @property
+    def ras_version(self) -> str | None:
+        version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False)
+        if version == []:
+            version = search_contents(self.file_lines, "Program and Version", token=":", expect_one=False)
+        if version == []:
+            logging.warning("Unable to parse project version")
+            return "N/A"
+        else:
+            return version[0]
+
+    @property
+    def plan_files(self) -> list[str]:
+        suffixes = search_contents(self.file_lines, "Plan File", expect_one=False)
+        return [name_from_suffix(self.fpath, i) for i in suffixes]
+
+    @property
+    def geometry_files(self) -> list[str]:
+        suffixes = search_contents(self.file_lines, "Geom File", expect_one=False)
+        return [name_from_suffix(self.fpath, i) for i in suffixes]
+
+    @property
+    def steady_flow_files(self) -> list[str]:
+        suffixes = search_contents(self.file_lines, "Flow File", expect_one=False)
+        return [name_from_suffix(self.fpath, i) for i in suffixes]
+
+    @property
+    def quasi_unsteady_flow_files(self) -> list[str]:
+        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
+        return [name_from_suffix(self.fpath, i) for i in suffixes]
+
+    @property
+    def unsteady_flow_files(self) -> list[str]:
+        suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
+        return [name_from_suffix(self.fpath, i) for i in suffixes]

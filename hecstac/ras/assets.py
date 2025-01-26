@@ -42,6 +42,7 @@ from hecstac.ras.parser import (
     XS,
     Connection,
     Junction,
+    ProjectFile,
     Reach,
     River,
     StorageArea,
@@ -54,6 +55,13 @@ from hecstac.ras.utils import search_contents
 class ProjectAsset(GenericAsset):
     """HEC-RAS Project file asset."""
 
+    CURRENT_PLAN = "ras:current_plan"
+    PLAN_FILES = "ras:plan_files"
+    GEOMETRY_FILES = "ras:geometry_files"
+    STEADY_FLOW_FILES = "ras:steady_flow_files"
+    QUASI_UNSTEADY_FLOW_FILES = "ras:quasi_unsteady_flow_files"
+    UNSTEADY_FLOW_FILES = "ras:unsteady_flow_files"
+
     regex_parse_str = r".+\.prj$"
 
     def __init__(self, href: str, *args, **kwargs):
@@ -65,142 +73,20 @@ class ProjectAsset(GenericAsset):
         # self.ras_schema = extract_schema_definition("project")
 
         # Populate extra fields directly within __init__
-        self.extra_fields = kwargs.get("extra_fields", {})
-        self.extra_fields.update(
-            {
-                "ras:project_title": self.project_title,
-                "ras:project_units": self.project_units,
-                "ras:ras_version": self.ras_version,
-            }
-        )
-
-    def populate(self) -> None:
-        """Get rid of requirements for properties which are defined after other assets are associated with this asset
-        (plan_current, plan_files, geometry_files, steady_flow_files, quasi_unsteady_flow_files, and unsteady_flow_files)
-        """
-
-        pre_asset_association_schema = deepcopy(self.ras_schema)
-        required_property_names: list[str] = pre_asset_association_schema["required"]
-        for asset_associated_property in [
-            "ras:plan_current",
-            "ras:plan_files",
-            "ras:geometry_files",
-            "ras:steady_flow_files",
-            "ras:quasi_unsteady_flow_files",
-            "ras:unsteady_flow_files",
-        ]:
-            required_property_names.remove(asset_associated_property)
-        pre_asset_association_schema["required"] = required_property_names
-        as_dict = self.to_dict()
-        jsonschema.validate(as_dict, pre_asset_association_schema, jsonschema.Draft7Validator)
-
-    @property
-    @lru_cache
-    def project_title(self) -> str:
-        title = search_contents(self.file_lines, "Proj Title")
-        return title
-
-    @property
-    @lru_cache
-    def project_units(self) -> str | None:
-        for line in self.file_lines:
-            if "Units" in line:
-                units = " ".join(line.split(" ")[:-1])
-                self.extra_fields["ras:project_units"] = units
-                return units
-
-    @property
-    @lru_cache
-    def plan_current(self) -> str | None:
-        try:
-            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
-            return self.name_from_suffix(suffix)
-        except Exception:
-            logging.warning("Ras model has no current plan")
-            return None
-
-    @property
-    def ras_version(self) -> str | None:
-        try:
-            return search_contents(self.file_lines, "Program Version", expect_one=True)
-        except ValueError:
-            return None
-
-    @property
-    @lru_cache
-    def plan_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Plan File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def geometry_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Geom File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def steady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Flow File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def quasi_unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    @property
-    @lru_cache
-    def unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
-        return [self.name_from_suffix(i) for i in suffixes]
-
-    def associate_related_plans(self, asset_dict: dict[str, Asset]) -> None:
-        plan_file_list: list[str] = []
-        for plan_file in self.plan_files:
-            asset = asset_dict[plan_file]
-            if plan_file == self.plan_current:
-                self.extra_fields["ras:plan_current"] = asset.href
-            plan_file_list.append(asset.href)
-        self.extra_fields["ras:plan_files"] = plan_file_list
-
-    def associate_related_geometries(self, asset_dict: dict[str, Asset]) -> None:
-        geom_file_list: list[str] = []
-        for geom_file in self.geometry_files:
-            asset = asset_dict[geom_file]
-            geom_file_list.append(asset.href)
-        self.extra_fields["ras:geometry_files"] = geom_file_list
-
-    def associate_related_steady_flows(self, asset_dict: dict[str, Asset]) -> None:
-        steady_flow_file_list: list[str] = []
-        for steady_flow_file in self.steady_flow_files:
-            asset = asset_dict[steady_flow_file]
-            steady_flow_file_list.append(asset.href)
-        self.extra_fields["ras:steady_flow_files"] = steady_flow_file_list
-
-    def associate_related_quasi_unsteady_flows(self, asset_dict: dict[str, Asset]) -> None:
-        quasi_unsteady_flow_file_list: list[str] = []
-        for quasi_unsteady_flow_file in self.quasi_unsteady_flow_files:
-            asset = asset_dict[quasi_unsteady_flow_file]
-            quasi_unsteady_flow_file_list.append(asset.href)
-        self.extra_fields["ras:quasi_unsteady_flow_files"] = quasi_unsteady_flow_file_list
-
-    def associate_related_unsteady_flows(self, asset_dict: dict[str, Asset]) -> None:
-        unsteady_flow_file_list: list[str] = []
-        for unsteady_file in self.unsteady_flow_files:
-            asset = asset_dict[unsteady_file]
-            unsteady_flow_file_list.append(asset.href)
-        self.extra_fields["ras:unsteady_flow_files"] = unsteady_flow_file_list
-
-    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
-        self.associate_related_plans(asset_dict)
-        self.associate_related_geometries(asset_dict)
-        self.associate_related_steady_flows(asset_dict)
-        self.associate_related_quasi_unsteady_flows(asset_dict)
-        self.associate_related_unsteady_flows(asset_dict)
-        as_dict = self.to_dict()
-        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
+        self.href = href
+        self.pf = ProjectFile(self.href)
+        self.extra_fields = {
+            key: value
+            for key, value in {
+                self.CURRENT_PLAN: self.pf.plan_current,
+                self.PLAN_FILES: self.pf.plan_files,
+                self.GEOMETRY_FILES: self.pf.geometry_files,
+                self.STEADY_FLOW_FILES: self.pf.steady_flow_files,
+                self.QUASI_UNSTEADY_FLOW_FILES: self.pf.quasi_unsteady_flow_files,
+                self.UNSTEADY_FLOW_FILES: self.pf.unsteady_flow_files,
+            }.items()
+            if value
+        }
 
 
 class PlanAsset(GenericAsset):
@@ -1690,7 +1576,7 @@ RAS_ASSET_CLASSES = [
     MiscXMLFileAsset,
 ]
 
-PATTERN_RAS_MAPPING = {re.compile(cls.regex_parse_str, re.IGNORECASE): cls for cls in RAS_ASSET_CLASSES}
+RAS_EXTENSION_MAPPING = {re.compile(cls.regex_parse_str, re.IGNORECASE): cls for cls in RAS_ASSET_CLASSES}
 
 # TODO: Convert to dictionary of classes
 RasAsset: TypeAlias = (

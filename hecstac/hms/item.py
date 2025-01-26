@@ -30,7 +30,7 @@ class HMSModelItem(Item):
     PROJECT_DESCRIPTION = "hms:description"
     PROJECT_UNITS = "hms:unit_system"
 
-    def __init__(self, hms_project_file, item_id: str, simplify_geometry: bool = True) -> None:
+    def __init__(self, hms_project_file, item_id: str, simplify_geometry: bool = True):
 
         self._project = None
         self.assets = {}
@@ -46,6 +46,7 @@ class HMSModelItem(Item):
 
         self.pf = ProjectFile(self.hms_project_file, assert_uniform_version=False)
         self.factory = AssetFactory(HMS_EXTENSION_MAPPING)
+
         super().__init__(
             Path(self.hms_project_file).stem,
             self._geometry,
@@ -86,6 +87,32 @@ class HMSModelItem(Item):
         properties["proj:wkt"] = self.pf.basins[0].wkt
         properties["hms:summary"] = self.pf.file_counts
         return properties
+
+    @property
+    def _bbox(self) -> tuple[float, float, float, float]:
+        """Bounding box of the HMS STAC item."""
+        if len(self.pf.basins) == 0:
+            return [0, 0, 0, 0]
+        else:
+            bboxes = np.array([i.bbox(4326) for i in self.pf.basins])
+            bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
+            return [float(i) for i in bboxes]
+
+    @property
+    def _geometry(self) -> dict | None:
+        """Geometry of the HMS STAC item. Union of all basins in the HMS model."""
+        if self._simplify_geometry:
+            geometries = [b.basin_geom.simplify(0.001) for b in self.pf.basins]
+        else:
+            geometries = [b.basin_geom for b in self.pf.basins]
+        return json.loads(to_geojson(union_all(geometries)))
+
+    @property
+    def _datetime(self) -> datetime:
+        """The datetime for the HMS STAC item."""
+        date = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
+        time = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
+        return datetime.combine(date, time)
 
     def _check_files_exists(self, files: list[str]):
         """Ensure the files exists. If they don't rasie an error."""
@@ -137,32 +164,6 @@ class HMSModelItem(Item):
                             f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
                         )
                     self._project = asset
-
-    @property
-    def _bbox(self) -> list[float]:
-        """Bounding box of the HMS STAC item."""
-        if len(self.pf.basins) == 0:
-            return [0, 0, 0, 0]
-        else:
-            bboxes = np.array([i.bbox(4326) for i in self.pf.basins])
-            bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
-            return [float(i) for i in bboxes]
-
-    @property
-    def _geometry(self) -> dict | None:
-        """Geometry of the HMS STAC item. Union of all basins in the HMS model."""
-        if self._simplify_geometry:
-            geometries = [b.basin_geom.simplify(0.001) for b in self.pf.basins]
-        else:
-            geometries = [b.basin_geom for b in self.pf.basins]
-        return json.loads(to_geojson(union_all(geometries)))
-
-    @property
-    def _datetime(self) -> datetime:
-        """The datetime for the HMS STAC item."""
-        date = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
-        time = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
-        return datetime.combine(date, time)
 
     def make_thumbnail(self, gdfs: dict):
         """Create a png from the geodataframes (values of the dictionary).

@@ -5,11 +5,15 @@ from collections import OrderedDict
 
 from shapely import MultiPolygon, Polygon
 
-from hecstac.hms.consts import (
-    ATTR_KEYVAL_GROUPER,
-    ATTR_NESTED_KEYVAL_GROUPER,
-    NL_KEYS,
-)
+from hecstac.hms.consts import ATTR_KEYVAL_GROUPER, ATTR_NESTED_KEYVAL_GROUPER, NL_KEYS
+
+# def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
+#     pyproj_crs = CRS.from_user_input(self.crs)
+#     wgs_crs = CRS.from_authority("EPSG", "4326")
+#     if pyproj_crs != wgs_crs:
+#         transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
+#         return transform(transformer.transform, geom)
+#     return geom
 
 
 def add_no_duplicate(d: dict, key, val):
