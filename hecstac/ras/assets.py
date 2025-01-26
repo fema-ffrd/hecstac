@@ -42,6 +42,7 @@ from hecstac.ras.parser import (
     XS,
     Connection,
     Junction,
+    PlanFile,
     ProjectFile,
     Reach,
     River,
@@ -51,16 +52,32 @@ from hecstac.ras.parser import (
 )
 from hecstac.ras.utils import search_contents
 
+CURRENT_PLAN = "ras:current_plan"
+PLAN_SHORT_ID = "ras:short_plan_id"
+TITLE = "ras:title"
+VERSION = "ras:version"
+
+PLAN_FILE = "ras:plan_file"
+GEOMETRY_FILE = "ras:geometry_file"
+FLOW_FILE = "ras:flow_file"
+
+STEADY_FLOW_FILE = f"ras:steady_{FLOW_FILE}"
+QUASI_UNSTEADY_FLOW_FILE = f"ras:quasi_unsteady_{FLOW_FILE}"
+UNSTEADY_FLOW_FILE = f"ras:unsteady_{FLOW_FILE}"
+
+
+PLAN_FILES = f"{PLAN_FILE}s"
+GEOMETRY_FILES = f"{GEOMETRY_FILE}s"
+STEADY_FLOW_FILES = f"{STEADY_FLOW_FILE}s"
+QUASI_UNSTEADY_FLOW_FILES = f"{QUASI_UNSTEADY_FLOW_FILE}s"
+UNSTEADY_FLOW_FILES = f"{UNSTEADY_FLOW_FILE}s"
+
+
+BREACH_LOCATIONS = "ras:breach_locations"
+
 
 class ProjectAsset(GenericAsset):
     """HEC-RAS Project file asset."""
-
-    CURRENT_PLAN = "ras:current_plan"
-    PLAN_FILES = "ras:plan_files"
-    GEOMETRY_FILES = "ras:geometry_files"
-    STEADY_FLOW_FILES = "ras:steady_flow_files"
-    QUASI_UNSTEADY_FLOW_FILES = "ras:quasi_unsteady_flow_files"
-    UNSTEADY_FLOW_FILES = "ras:unsteady_flow_files"
 
     regex_parse_str = r".+\.prj$"
 
@@ -70,20 +87,17 @@ class ProjectAsset(GenericAsset):
 
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
-        # self.ras_schema = extract_schema_definition("project")
-
-        # Populate extra fields directly within __init__
         self.href = href
         self.pf = ProjectFile(self.href)
         self.extra_fields = {
             key: value
             for key, value in {
-                self.CURRENT_PLAN: self.pf.plan_current,
-                self.PLAN_FILES: self.pf.plan_files,
-                self.GEOMETRY_FILES: self.pf.geometry_files,
-                self.STEADY_FLOW_FILES: self.pf.steady_flow_files,
-                self.QUASI_UNSTEADY_FLOW_FILES: self.pf.quasi_unsteady_flow_files,
-                self.UNSTEADY_FLOW_FILES: self.pf.unsteady_flow_files,
+                CURRENT_PLAN: self.pf.plan_current,
+                PLAN_FILES: self.pf.plan_files,
+                GEOMETRY_FILES: self.pf.geometry_files,
+                STEADY_FLOW_FILES: self.pf.steady_flow_files,
+                QUASI_UNSTEADY_FLOW_FILES: self.pf.quasi_unsteady_flow_files,
+                UNSTEADY_FLOW_FILES: self.pf.unsteady_flow_files,
             }.items()
             if value
         }
@@ -94,67 +108,28 @@ class PlanAsset(GenericAsset):
 
     regex_parse_str = r".+\.p\d{2}$"
 
-    def __init__(self, plan_file: str, **kwargs):
+    def __init__(self, href: str, **kwargs):
         roles = kwargs.get("roles", []) + ["plan-file", "ras-file"]
         description = kwargs.get(
             "description",
             "The plan file which contains a list of associated input files and all simulation options.",
         )
 
-        super().__init__(plan_file, roles=roles, description=description, **kwargs)
+        super().__init__(href, roles=roles, description=description, **kwargs)
 
-        # self.ras_schema = extract_schema_definition("plan")
-
-    def populate(self) -> None:
-        # get rid of requirements for properties which are defined after other assets are associated with this asset (geometry_file, one of [steady_flow_file, quasi_unsteady_flow_file, unsteady_flow_file])
-        pre_asset_association_schema = self.ras_schema
-        required_property_names: list[str] = pre_asset_association_schema["required"]
-        for asset_associated_property in ["ras:geometry_file"]:
-            required_property_names.remove(asset_associated_property)
-        pre_asset_association_schema["required"] = required_property_names
-        del pre_asset_association_schema["oneOf"]
-        self.extra_fields["ras:plan_title"] = self.plan_title
-        self.extra_fields["ras:short_identifier"] = self.short_identifier
-        as_dict = self.to_dict()
-        jsonschema.validate(as_dict, pre_asset_association_schema, jsonschema.Draft7Validator)
-
-    @property
-    def plan_title(self) -> str:
-        # gets title and adds to asset properties
-        title = search_contents(self.file_lines, "Plan Title")
-        self.extra_fields["ras:plan_title"] = title
-
-    @property
-    def geometry_file(self) -> str:
-        suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
-        return self.name_from_suffix(suffix)
-
-    @property
-    def flow_file(self) -> str:
-        suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
-        return self.name_from_suffix(suffix)
-
-    @property
-    def short_identifier(self) -> str:
-        return search_contents(self.file_lines, "Short Identifier", expect_one=True)
-
-    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
-        primary_geometry_asset = asset_dict[self.geometry_file]
-        self.extra_fields["ras:geometry_file"] = primary_geometry_asset.href
-        primary_flow_asset = asset_dict[self.flow_file]
-        if isinstance(primary_flow_asset, SteadyFlowAsset):
-            property_name = "ras:steady_flow_file"
-        elif isinstance(primary_flow_asset, QuasiUnsteadyFlowAsset):
-            property_name = "ras:quasi_unsteady_flow_file"
-        elif isinstance(primary_flow_asset, UnsteadyFlowAsset):
-            property_name = "ras:unsteady_flow_file"
-        else:
-            logging.warning(
-                f"Asset being linked to plan asset {self.plan_title} is not one of the following: ['SteadyFlowAsset', 'QuasiUnsteadyFlowAsset', 'UnsteadyFlowAsset']; cannot provide a link type for the link object being created"
-            )
-        self.extra_fields[property_name] = primary_flow_asset.href
-        as_dict = self.to_dict()
-        jsonschema.validate(as_dict, self.ras_schema, jsonschema.Draft7Validator)
+        self.href = href
+        self.planf = PlanFile(self.href)
+        self.extra_fields = {
+            key: value
+            for key, value in {
+                TITLE: self.planf.plan_title,
+                VERSION: self.planf.plan_version,
+                GEOMETRY_FILE: self.planf.geometry_file,
+                FLOW_FILE: self.planf.flow_file,
+                BREACH_LOCATIONS: self.planf.breach_locations,
+            }.items()
+            if value
+        }
 
 
 class GeometryAsset(GenericAsset):

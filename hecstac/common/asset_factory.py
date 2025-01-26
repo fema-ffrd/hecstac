@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Dict, Type
 
@@ -58,8 +59,10 @@ class AssetFactory:
         return check_storage_extension(asset)
 
     def create_ras_asset(self, fpath: str):
+        logging.info(f"Creating asset for {fpath}")
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
+                logging.info(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class(href=fpath, title=Path(fpath).name)
 
         return GenericAsset(href=fpath, title=Path(fpath).name)

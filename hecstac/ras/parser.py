@@ -704,3 +704,51 @@ class ProjectFile:
     def unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
+
+
+class PlanFile:
+    """HEC-RAS Plan file asset."""
+
+    def __init__(self, fpath):
+        # TODO: Compare with HMS implementation
+        self.fpath = fpath
+        with open(fpath, "r") as f:
+            self.file_lines = f.readlines()
+
+    @property
+    def plan_title(self) -> str:
+        return search_contents(self.file_lines, "Plan Title")
+
+    @property
+    def plan_version(self) -> str:
+        return search_contents(self.file_lines, "Program Version")
+
+    @property
+    def geometry_file(self) -> str:
+        suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
+        return name_from_suffix(self.fpath, suffix)
+
+    @property
+    def flow_file(self) -> str:
+        suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
+        return name_from_suffix(self.fpath, suffix)
+
+    @property
+    def short_identifier(self) -> str:
+        return search_contents(self.file_lines, "Short Identifier", expect_one=True)
+
+    @property
+    def breach_locations(self) -> dict:
+        """
+        example file line:
+        Breach Loc=                ,                ,        ,True,HH_DamEmbankment
+        """
+        breach_dict = {}
+        matches = search_contents(self.file_lines, "Breach Loc", expect_one=False)
+        for line in matches:
+            parts = line.split(",")
+            if len(parts) >= 4:
+                key = parts[4].strip()
+                breach_dict[key] = eval(parts[3].strip())
+        logging.info(breach_dict)
+        return breach_dict
