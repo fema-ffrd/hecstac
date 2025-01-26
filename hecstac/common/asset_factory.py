@@ -59,7 +59,7 @@ class AssetFactory:
         return check_storage_extension(asset)
 
     def create_ras_asset(self, fpath: str):
-        logging.info(f"Creating asset for {fpath}")
+        logging.debug(f"Creating asset for {fpath}")
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
                 logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")

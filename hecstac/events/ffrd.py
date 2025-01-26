@@ -13,6 +13,7 @@ from shapely.geometry import shape
 
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
+from hecstac.ras.assets import RAS_EXTENSION_MAPPING
 
 
 class FFRDEventItem(Item):
@@ -37,6 +38,7 @@ class FFRDEventItem(Item):
         self.hms_simulation_files = hms_simulation_files
         self.ras_simulation_files = ras_simulation_files
         self.hms_factory = AssetFactory(HMS_EXTENSION_MAPPING)
+        self.ras_factory = AssetFactory(RAS_EXTENSION_MAPPING)
         # TODO: Add ras_factory
 
         super().__init__(
@@ -50,6 +52,9 @@ class FFRDEventItem(Item):
 
         for fpath in self.hms_simulation_files:
             self.add_hms_asset(fpath, item_type="event")
+
+        for fpath in self.ras_simulation_files:
+            self.add_ras_asset(fpath)
 
         self._register_extensions()
         self._add_model_links()
@@ -113,5 +118,13 @@ class FFRDEventItem(Item):
         if os.path.exists(fpath):
             logging.info(f"Adding asset: {fpath}")
             asset = self.hms_factory.create_hms_asset(fpath, item_type=item_type)
+            if asset is not None:
+                self.add_asset(asset.title, asset)
+
+    def add_ras_asset(self, fpath: str) -> None:
+        """Add an asset to the FFRD Event STAC item."""
+        if os.path.exists(fpath):
+            logging.info(f"Adding asset: {fpath}")
+            asset = self.ras_factory.create_ras_asset(fpath)
             if asset is not None:
                 self.add_asset(asset.title, asset)
