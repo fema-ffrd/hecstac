@@ -63,7 +63,7 @@ The following snippet provides an example of how to create stac items for an eve
    from pystac import Item
 
    from hecstac.common.logger import initialize_logger
-   from hecstac.events.ffrd import FFRDEventItem
+   from hecstac.events.ffrd import EventItem
 
    if __name__ == "__main__":
       initialize_logger()
@@ -98,7 +98,7 @@ The following snippet provides an example of how to create stac items for an eve
       ffrd_event_item_id = f"{realization}-{block_group}-{event_id}"
       dest_href = f"/<local-file-dr>/{ffrd_event_item_id}.json"
 
-      ffrd_event_item = FFRDEventItem(
+      ffrd_event_item = EventItem(
          realization=realization,
          block_group=block_group,
          event_id=event_id,
