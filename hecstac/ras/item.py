@@ -46,7 +46,14 @@ class RASModelItem(Item):
     RAS_HAS_2D = "ras:has_2d"
     RAS_DATETIME_SOURCE = "ras:datetime_source"
 
-    def __init__(self, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
+    def __init__(
+        self,
+        ras_project_file: str | None = None,
+        item_id: str | None = None,
+        crs: str | None = None,
+        simplify_geometry: bool = True,
+        **kwargs,
+    ):
 
         self._project = None
         self.assets = {}
@@ -56,10 +63,10 @@ class RASModelItem(Item):
         self.extra_fields = {}
         self._geom_files = []
         self.stac_extensions = None
+        self.ras_project_file = self.__get_ras_project(ras_project_file, **kwargs)
         self.pm = LocalPathManager(Path(ras_project_file).parent)
-        self._href = self.pm.item_path(item_id)
+        self._href = self.__get_href(item_id, self.pm, **kwargs)
         self.crs = crs
-        self.ras_project_file = ras_project_file
         self._simplify_geometry = simplify_geometry
 
         self.pf = ProjectFile(self.ras_project_file)
@@ -69,12 +76,12 @@ class RASModelItem(Item):
         self.has_2d = False
 
         super().__init__(
-            Path(self.ras_project_file).stem,
-            NULL_STAC_GEOMETRY,
-            NULL_STAC_BBOX,
-            self._datetime,
-            self._properties,
-            href=self._href,
+            id=Path(self.ras_project_file).stem,
+            geometry=kwargs.get("geometry", NULL_STAC_GEOMETRY),
+            bbox=kwargs.get("bbox", NULL_STAC_BBOX),
+            datetime=kwargs.get("datetime", self._datetime),
+            properties=kwargs.get("properties", self._properties),
+            href=kwargs.get("href", href=self._href),
         )
         # derived_assets  = self.add_model_thumbnail() TODO: implement this method
         ras_asset_files = self.scan_model_dir()
@@ -85,6 +92,30 @@ class RASModelItem(Item):
                 self.add_ras_asset(fpath)
 
         self._geometry
+
+    @staticmethod
+    def __get_ras_project(ras_project_file: str | None, **kwargs) -> str:
+        # if ras_project_file given, return it
+        if ras_project_file:
+            return ras_project_file
+        # if no ras_project_file given, try to pull the filename from assets within the kwargs
+        assets: list[dict] = kwargs["assets"]
+        for asset in assets:
+            asset_roles = asset["roles"]
+            if "project-file" in asset_roles:
+                filename = asset["href"]
+                return filename
+        raise ValueError(
+            f"No project file given as parameter and kwargs passed don't contain asset with role 'project-file'"
+        )
+
+    @staticmethod
+    def __get_href(item_id: str | None, path_manager: LocalPathManager, **kwargs) -> str:
+        if item_id:
+            href = path_manager.item_path(item_id)
+            return href
+        href = kwargs["href"]
+        return href
 
     def _register_extensions(self) -> None:
         ProjectionExtension.add_to(self)
@@ -153,12 +184,6 @@ class RASModelItem(Item):
             else:
                 self._datetime_source = "model_geometry"
         return self._datetime_source
-
-    @classmethod
-    def from_dict(cls, *args, **kwargs):
-        raise NotImplementedError(
-            f"init method of {type(cls)} does not take the same arguments as pystac.Item init method; class methods to generate items will not function properly"
-        )
 
     def add_model_thumbnail(self, layers: list, title: str = "Model_Thumbnail"):
 
