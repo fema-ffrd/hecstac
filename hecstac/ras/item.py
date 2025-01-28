@@ -154,6 +154,12 @@ class RASModelItem(Item):
                 self._datetime_source = "model_geometry"
         return self._datetime_source
 
+    @classmethod
+    def from_dict(cls, *args, **kwargs):
+        raise NotImplementedError(
+            f"init method of {type(cls)} does not take the same arguments as pystac.Item init method; class methods to generate items will not function properly"
+        )
+
     def add_model_thumbnail(self, layers: list, title: str = "Model_Thumbnail"):
 
         for geom in self._geom_files:
