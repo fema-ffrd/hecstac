@@ -10,7 +10,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pystac import Asset
-from rashdf import RasHdf, RasPlanHdf, RasGeomHdf
+from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
 from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
@@ -655,11 +655,11 @@ class ProjectFile:
 
     @property
     def project_description(self) -> str:
-        return search_contents(self.file_lines, "Model Description", token=":")
+        return search_contents(self.file_lines, "Model Description", token=":", require_one=False)
 
     @property
     def project_status(self) -> str:
-        return search_contents(self.file_lines, "Status of Model", token=":")
+        return search_contents(self.file_lines, "Status of Model", token=":", require_one=False)
 
     @property
     def project_units(self) -> str | None:
@@ -670,7 +670,7 @@ class ProjectFile:
     @property
     def plan_current(self) -> str | None:
         try:
-            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
+            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False)
             return self.name_from_suffix(suffix)
         except Exception:
             logging.warning("Ras model has no current plan")
@@ -678,9 +678,11 @@ class ProjectFile:
 
     @property
     def ras_version(self) -> str | None:
-        version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False)
+        version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
         if version == []:
-            version = search_contents(self.file_lines, "Program and Version", token=":", expect_one=False)
+            version = search_contents(
+                self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
+            )
         if version == []:
             logging.warning("Unable to parse project version")
             return "N/A"
@@ -699,17 +701,17 @@ class ProjectFile:
 
     @property
     def steady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Flow File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Flow File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def quasi_unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
 
@@ -751,7 +753,7 @@ class PlanFile:
         Breach Loc=                ,                ,        ,True,HH_DamEmbankment
         """
         breach_dict = {}
-        matches = search_contents(self.file_lines, "Breach Loc", expect_one=False)
+        matches = search_contents(self.file_lines, "Breach Loc", expect_one=False, require_one=False)
         for line in matches:
             parts = line.split(",")
             if len(parts) >= 4:
@@ -764,9 +766,10 @@ class PlanFile:
 class GeometryFile:
     """HEC-RAS Geometry file asset."""
 
-    def __init__(self, fpath):
+    def __init__(self, fpath, crs):
         # TODO: Compare with HMS implementation
         self.fpath = fpath
+        self.crs = crs
         with open(fpath, "r") as f:
             self.file_lines = f.readlines()
 
@@ -993,7 +996,9 @@ class UnsteadyFlowFile:
 
     @property
     def reference_lines(self):
-        return search_contents(self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False)
+        return search_contents(
+            self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False, require_one=False
+        )
 
 
 class QuasiUnsteadyFlowFile:
@@ -1447,6 +1452,6 @@ class GeometryHDFFile(RASHDFFile):
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            raise ValueError("No reference lines found.")
+            logging.warning("No reference lines found.")
         else:
             return ref_lines

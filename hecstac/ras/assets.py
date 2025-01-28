@@ -1,10 +1,10 @@
+import io
 import logging
 import os
 import re
 
 import contextily as ctx
 import geopandas as gpd
-import io
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pystac import MediaType
@@ -218,7 +218,7 @@ class SteadyFlowAsset(GenericAsset):
         self.extra_fields = {
             key: value
             for key, value in {
-                TITLE: self.flowf.geom_title,
+                TITLE: self.flowf.flow_title,
                 N_PROFILES: self.flowf.n_profiles,
             }.items()
             if value

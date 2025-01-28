@@ -4,13 +4,13 @@ import logging
 import os
 from pathlib import Path
 
+from pyproj import CRS, Transformer
 from pystac import Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
-from shapely import Polygon, box, simplify, to_geojson, union_all
-from shapely import Geometry
-from pyproj import CRS, Transformer
+from shapely import Geometry, Polygon, box, simplify, to_geojson, union_all
 from shapely.ops import transform
+
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.ras.parser import ProjectFile
 
@@ -98,9 +98,9 @@ class RASModelItem(Item):
         properties[self.RAS_HAS_2D] = self.has_2d
         properties[self.PROJECT_TITLE] = self.pf.project_title
         properties[self.PROJECT_VERSION] = self.pf.ras_version
-        # properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
-        # properties[self.PROJECT_STATUS] = self.pf.project_status
-        # properties[self.MODEL_UNITS] = self.pf.project_units
+        properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
+        properties[self.PROJECT_STATUS] = self.pf.project_status
+        properties[self.MODEL_UNITS] = self.pf.project_units
 
         # self.properties[RAS_DATETIME_SOURCE] = self.datetime_source
         # TODO: once all assets are created, populate associations between assets
@@ -167,34 +167,40 @@ class RASModelItem(Item):
 
     def add_ras_asset(self, fpath: str = "") -> None:
         """Add an asset to the HMS STAC item."""
-        if os.path.exists(fpath):
-            try:
-                asset = self.factory.create_ras_asset(fpath)
-                logging.debug(f"Adding asset {str(asset)}")
-            except TypeError as e:
-                logging.error(f"Error creating asset for {fpath}: {e}")
-            if asset is not None:
-                self.add_asset(asset.title, asset)
-                if isinstance(asset, ProjectAsset):
-                    if self._project is not None:
-                        logging.error(
-                            f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
-                        )
-                    self._project = asset
-                elif isinstance(asset, GeometryHdfAsset):
-                    self.has_2d = True
-                    self._geom_files.append(asset)
-                elif isinstance(asset, GeometryAsset):
-                    self.has_1d = True
-                    self._geom_files.append(asset)
+        if not os.path.exists(fpath):
+            logging.warning(f"File not found: {fpath}")
+            return
+        try:
+            asset = self.factory.create_ras_asset(fpath)
+            logging.debug(f"Adding asset {str(asset)}")
+        except TypeError as e:
+            logging.error(f"Error creating asset for {fpath}: {e}")
+            return
 
-    def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
-        pyproj_crs = CRS.from_user_input(self.crs)
-        wgs_crs = CRS.from_authority("EPSG", "4326")
-        if pyproj_crs != wgs_crs:
-            transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
-            return transform(transformer.transform, geom)
-        return geom
+        if asset:
+            self.add_asset(asset.title, asset)
+            if isinstance(asset, ProjectAsset):
+                if self._project is not None:
+                    logging.error(
+                        f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
+                    )
+                self._project = asset
+            elif isinstance(asset, GeometryHdfAsset):
+                # TODO: if mesh areas exist there are 2d...these can be in text or hdf files.
+                pass
+                # self.has_2d = True
+                # self._geom_files.append(asset)
+            elif isinstance(asset, GeometryAsset):
+                self.has_1d = True
+            self._geom_files.append(asset)
+
+    # def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
+    #     pyproj_crs = CRS.from_user_input(self.crs)
+    #     wgs_crs = CRS.from_authority("EPSG", "4326")
+    #     if pyproj_crs != wgs_crs:
+    #         transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
+    #         return transform(transformer.transform, geom)
+    #     return geom
 
     def parse_1d_geom(self):
         logging.info("Creating geometry using 1d text file cross sections")

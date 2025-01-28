@@ -66,4 +66,5 @@ class AssetFactory:
                 logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class(href=fpath, title=Path(fpath).name)
 
+        logging.warning(f"Unable to pattern match asset for file {fpath}")
         return GenericAsset(href=fpath, title=Path(fpath).name)
