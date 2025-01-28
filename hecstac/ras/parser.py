@@ -10,7 +10,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pystac import Asset
-from rashdf import RasHdf, RasPlanHdf
+from rashdf import RasHdf, RasPlanHdf, RasGeomHdf
 from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
@@ -861,23 +861,27 @@ class GeometryFile:
     def concave_hull(self) -> Polygon:
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
-        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
-        for river_reach in xs_gdf["river_reach"].unique():
-            xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
-            points = xs_subset.boundary.explode(index_parts=True).unstack()
-            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
-            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
-            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
-            if isinstance(polygon, MultiPolygon):
-                polygons += list(polygon.geoms)
-            else:
-                polygons.append(polygon)
-        if len(self.junctions) > 0:
-            for junction in self.junctions.values():
-                for _, j in junction.gdf.iterrows():
-                    polygons.append(self.junction_hull(xs_gdf, j))
-        out_hull = union_all([make_valid(p) for p in polygons])
-        return out_hull
+        if self.cross_sections:
+            xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+
+            for river_reach in xs_gdf["river_reach"].unique():
+                xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
+                points = xs_subset.boundary.explode(index_parts=True).unstack()
+                points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
+                points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
+                polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
+                if isinstance(polygon, MultiPolygon):
+                    polygons += list(polygon.geoms)
+                else:
+                    polygons.append(polygon)
+            if len(self.junctions) > 0:
+                for junction in self.junctions.values():
+                    for _, j in junction.gdf.iterrows():
+                        polygons.append(self.junction_hull(xs_gdf, j))
+            out_hull = union_all([make_valid(p) for p in polygons])
+            return out_hull
+        else:
+            raise ValueError(f"No cross sections found for {self.fpath}. Cannot calculate geometry")
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
@@ -1007,31 +1011,14 @@ class QuasiUnsteadyFlowFile:
 class RASHDFFile:
     """Base class for HDF assets (Plan and Geometry HDF files)."""
 
-    def __init__(self, fpath):
+    def __init__(self, fpath, hdf_constructor):
         self.fpath = fpath
 
-        self.hdf_object = RasHdf(fpath)
+        self.hdf_object = hdf_constructor(fpath)
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
         self._2d_flow_attrs: dict | None = None
-
-    # def populate(
-    #     self,
-    #     optional_property_dict: dict[str, str],
-    #     required_property_dict: dict[str, str],
-    # ) -> dict:
-    #     extra_fields = {}
-    #     # go through dictionary of stac property names and class property names, only adding property to extra fields if the value is not None
-    #     for stac_property_name, class_property_name in optional_property_dict.items():
-    #         property_value = getattr(self, class_property_name)
-    #         if property_value != None:
-    #             extra_fields[stac_property_name] = property_value
-    #     # go through dictionary of stac property names and class property names, adding all properties to extra fields regardless of value
-    #     for stac_property_name, class_property_name in required_property_dict.items():
-    #         property_value = getattr(self, class_property_name)
-    #         extra_fields[stac_property_name] = property_value
-    #     return extra_fields
 
     @property
     def file_version(self) -> str | None:
@@ -1202,7 +1189,7 @@ class RASHDFFile:
 class PlanHDFFile(RASHDFFile):
 
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, **kwargs)
+        super().__init__(fpath, RasPlanHdf, **kwargs)
 
         self.hdf_object = RasPlanHdf(fpath)
         self._plan_info_attrs = None
@@ -1443,9 +1430,9 @@ class PlanHDFFile(RASHDFFile):
 class GeometryHDFFile(RASHDFFile):
 
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, **kwargs)
+        super().__init__(fpath, RasGeomHdf, **kwargs)
 
-        self.hdf_object = RasPlanHdf(fpath)
+        self.hdf_object = RasGeomHdf(fpath)
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
