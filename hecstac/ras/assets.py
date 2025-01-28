@@ -4,6 +4,7 @@ import re
 
 import contextily as ctx
 import geopandas as gpd
+import io
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pystac import MediaType
@@ -352,7 +353,7 @@ class GeometryHdfAsset(GenericAsset):
             for key, value in {
                 VERSION: self.hdf_object.file_version,
                 UNITS: self.hdf_object.units_system,
-                # REFERENCE_LINES: self.hdf_object.reference_lines,#TODO: fix this
+                REFERENCE_LINES: list(self.hdf_object.reference_lines["refln_name"]),
             }.items()
             if value
         }
@@ -453,33 +454,22 @@ class GeometryHdfAsset(GenericAsset):
 
     def thumbnail(
         self,
-        add_asset: bool,
-        write: bool,
         layers: list,
         title: str = "Model_Thumbnail",
-        add_usgs_properties: bool = False,
         crs="EPSG:4326",
         thumbnail_dest: str = None,
     ):
         """Create a thumbnail figure for each geometry hdf file, including
         various geospatial layers such as USGS gages, mesh areas,
-        breaklines, and boundary condition (BC) lines. If `add_asset` or `write`
-        is `True`, the function saves the thumbnail to a file and optionally
-        adds it as an asset.
+        breaklines, and boundary condition (BC) lines.
 
         Parameters
         ----------
-        add_asset : bool
-            Whether to add the thumbnail as an asset in the asset dictionary. If true then it also writes the thumbnail to a file.
-        write : bool
-            Whether to save the thumbnail image to a file.
         layers : list
             A list of model layers to include in the thumbnail plot.
             Options include "usgs_gages", "mesh_areas", "breaklines", and "bc_lines".
         title : str, optional
             Title of the figure, by default "Model Thumbnail".
-        add_usgs_properties : bool, optional
-            If usgs_gages is included in layers, adds USGS metadata to the STAC item properties. Defaults to false.
         """
 
         fig, ax = plt.subplots(figsize=(12, 12))
@@ -494,28 +484,17 @@ class GeometryHdfAsset(GenericAsset):
                 #         gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
                 #     gages_gdf_geo = gages_gdf.to_crs(self.crs)
                 #     legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
-                # else:
-                #     if not hasattr(geom_asset, layer):
-                #         raise AttributeError(f"Layer {layer} not found in {geom_asset.hdf_file}")
-
-                # if layer == "mesh_areas":
-                #     layer_data = geom_asset.mesh_areas(self.crs, return_gdf=True)
-                # else:
-                #     layer_data = getattr(geom_asset, layer)
-
-                # if layer_data.crs is None:
-                #     layer_data.set_crs(self.crs, inplace=True)
-                # layer_data_geo = layer_data.to_crs(self.crs)
 
                 if layer == "mesh_areas":
-                    mesh_areas_data = self.mesh_areas(crs, return_gdf=True)
-                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_data)
+                    mesh_areas_data = self.hdf_object.mesh_areas(crs, return_gdf=True)
+                    mesh_areas_geo = mesh_areas_data.to_crs(crs)
+                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_geo)
                 elif layer == "breaklines":
-                    breaklines_data = self.breaklines
+                    breaklines_data = self.hdf_object.breaklines
                     breaklines_data_geo = breaklines_data.to_crs(crs)
                     legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
                 elif layer == "bc_lines":
-                    bc_lines_data = self.bc_lines
+                    bc_lines_data = self.hdf_object.bc_lines
                     bc_lines_data_geo = bc_lines_data.to_crs(crs)
                     legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:
@@ -533,23 +512,20 @@ class GeometryHdfAsset(GenericAsset):
         ax.set_ylabel("Latitude")
         ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
 
-        if add_asset or write:
-            hdf_ext = os.path.basename(self.href).split(".")[-2]
-            filename = f"thumbnail_{hdf_ext}.png"
-            base_dir = os.path.dirname(thumbnail_dest)
-            filepath = os.path.join(base_dir, filename)
+        hdf_ext = os.path.basename(self.href).split(".")[-2]
+        filename = f"thumbnail_{hdf_ext}.png"
+        base_dir = os.path.dirname(thumbnail_dest)
+        filepath = os.path.join(base_dir, filename)
 
-            # if filepath.startswith("s3://"):
-            #     img_data = io.BytesIO()
-            #     fig.savefig(img_data, format="png", bbox_inches="tight")
-            #     img_data.seek(0)
-            #     save_bytes_s3(img_data, filepath)
-            # else:
+        if filepath.startswith("s3://"):
+            img_data = io.BytesIO()
+            fig.savefig(img_data, format="png", bbox_inches="tight")
+            img_data.seek(0)
+            save_bytes_s3(img_data, filepath)
+        else:
             os.makedirs(base_dir, exist_ok=True)
             fig.savefig(filepath, dpi=80, bbox_inches="tight")
-
-            if add_asset:
-                return self._add_thumbnail_asset(filepath)
+        return self._add_thumbnail_asset(filepath)
 
 
 class RunFileAsset(GenericAsset):
