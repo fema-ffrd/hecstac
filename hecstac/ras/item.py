@@ -66,7 +66,7 @@ class RASModelItem(Item):
         self.ras_project_file = self.__get_ras_project(ras_project_file, **kwargs)
         self.pm = LocalPathManager(Path(ras_project_file).parent)
         self._href = self.__get_href(item_id, self.pm, **kwargs)
-        self.crs = crs
+        self.crs = self.__get_crs(crs, **kwargs)
         self._simplify_geometry = simplify_geometry
 
         self.pf = ProjectFile(self.ras_project_file)
@@ -108,6 +108,16 @@ class RASModelItem(Item):
         raise ValueError(
             f"No project file given as parameter and kwargs passed don't contain asset with role 'project-file'"
         )
+
+    @staticmethod
+    def __get_crs(crs: str | None, **kwargs) -> str | None:
+        # if crs provided, return it
+        if crs:
+            return crs
+        # if no crs provided, try to find proj:wkt2 property in properties and return that instead
+        properties: dict = kwargs["properties"]
+        crs = properties.get("proj:wkt2", None)
+        return crs
 
     @staticmethod
     def __get_href(item_id: str | None, path_manager: LocalPathManager, **kwargs) -> str:
