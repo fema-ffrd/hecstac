@@ -10,7 +10,7 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeAlias
-from shapely.ops import unary_union
+
 import geopandas as gpd
 import jsonschema
 import pandas as pd
@@ -27,6 +27,7 @@ from shapely import (
     to_geojson,
     union_all,
 )
+from shapely.ops import unary_union
 
 from .errors import GeometryAssetInvalidCRSError
 from .ras_utils import (
