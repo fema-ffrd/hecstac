@@ -8,6 +8,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pystac import MediaType
+from pyproj import CRS
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.ras.parser import (
@@ -169,6 +170,7 @@ class GeometryAsset(GenericAsset):
 
     def __init__(self, href: str, crs: str = None, **kwargs):
         # self.pyproj_crs = self.validate_crs(crs)
+        self.crs = crs
         roles = kwargs.get("roles", []) + ["geometry-file", "ras-file"]
         description = kwargs.get(
             "description",
@@ -178,7 +180,7 @@ class GeometryAsset(GenericAsset):
         super().__init__(href, roles=roles, description=description, **kwargs)
 
         self.href = href
-        self.geomf = GeometryFile(self.href)
+        self.geomf = GeometryFile(self.href, self.crs)
         self.extra_fields = {
             key: value
             for key, value in {
@@ -186,11 +188,11 @@ class GeometryAsset(GenericAsset):
                 VERSION: self.geomf.geom_version,
                 HAS_1D: self.geomf.has_1d,
                 HAS_2D: self.geomf.has_2d,
-                RIVERS: self.geomf.rivers,
-                REACHES: self.geomf.reaches,
-                JUNCTIONS: self.geomf.junctions,
-                CROSS_SECTIONS: self.geomf.cross_sections,
-                STRUCTURES: self.geomf.structures,
+                # RIVERS: self.geomf.rivers,
+                # REACHES: self.geomf.reaches,
+                # JUNCTIONS: self.geomf.junctions,
+                # CROSS_SECTIONS: self.geomf.cross_sections,
+                # STRUCTURES: self.geomf.structures,
                 # STORAGE_AREAS: self.geomf.storage_areas, #TODO: fix this
                 # CONNECTIONS: self.geomf.connections,#TODO: fix this
                 # BREACH_LOCATIONS: self.planf.breach_locations,
@@ -341,20 +343,31 @@ class GeometryHdfAsset(GenericAsset):
 
     regex_parse_str = r".+\.g\d{2}\.hdf$"
 
-    def __init__(self, href: str, **kwargs):
+    def __init__(self, href: str, crs: str = None, **kwargs):
+        logging.info("Initializing hdf class")
         roles = kwargs.get("roles", []) + ["geometry-hdf-file"]
         description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
-        import json
+        logging.info("initializing hdf file")
+        self.crs = crs
 
-        self.hdf_object = GeometryHDFFile(self.href)
+        logging.warning(f"crs has been set to {self.crs}")
+        self.hdf_object = GeometryHDFFile(self.href, self.crs)
+        logging.info("reading mesh areas...")
+        try:
+            if self.hdf_object.mesh_areas():
+                self.has_2d = True
+        except ValueError:
+            logging.info(f"Could not read mesh areas for {self.href}")
+            self.has_2d = False
+
         self.extra_fields = {
             key: value
             for key, value in {
                 VERSION: self.hdf_object.file_version,
                 UNITS: self.hdf_object.units_system,
-                "proj:wkt": json.dumps(self.hdf_object.crs),
+                # "proj:wkt": json.load(self.hdf_object.crs),
                 REFERENCE_LINES: list(self.hdf_object.reference_lines["refln_name"]),
             }.items()
             if value

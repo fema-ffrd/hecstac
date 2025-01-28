@@ -10,6 +10,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pyproj import CRS
+from pyproj.exceptions import CRSError
 from pystac import Asset
 from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
 from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
@@ -798,7 +799,7 @@ class GeometryFile:
     @property
     def reaches(self) -> dict[str, "Reach"]:
         """A dictionary of the reaches contained in the HEC-RAS geometry file."""
-        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False)
+        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False, require_one=False)
         return {river_reach: Reach(self.file_lines, river_reach, self.crs) for river_reach in river_reaches}
 
     @property
@@ -867,13 +868,16 @@ class GeometryFile:
         polygons = []
         if self.cross_sections:
             xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
-
+            # logging.info(xs_gdf)
             for river_reach in xs_gdf["river_reach"].unique():
+                logging.info(f"river reach: {river_reach}")
                 xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
+                logging.info(xs_subset)
                 points = xs_subset.boundary.explode(index_parts=True).unstack()
                 points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
                 points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
                 polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
+                logging.info("got polygon")
                 if isinstance(polygon, MultiPolygon):
                     polygons += list(polygon.geoms)
                 else:
@@ -1146,14 +1150,14 @@ class RASHDFFile:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Minimum Size")))
 
-    def mesh_areas(self, crs, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
+    def mesh_areas(self, crs=None, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
 
         mesh_areas = self.hdf_object.mesh_cell_polygons()
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
 
-        if mesh_areas.crs and mesh_areas.crs != crs:
-            mesh_areas = mesh_areas.to_crs(crs)
+        if mesh_areas.crs is None and crs is not None:
+            mesh_areas = mesh_areas.set_crs(crs)
 
         if return_gdf:
             return mesh_areas
@@ -1435,15 +1439,20 @@ class PlanHDFFile(RASHDFFile):
 
 class GeometryHDFFile(RASHDFFile):
 
-    def __init__(self, fpath: str, **kwargs):
+    def __init__(self, fpath: str, crs=None, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
         self.hdf_object = RasGeomHdf(fpath)
-        self.crs = CRS.from_user_input(self.hdf_object.projection())
-        if not self.crs:
-            logging.info(f"No projection found in file {fpath}")
-        else:
-            logging.debug(f"Projection found in file {fpath}: {self.crs}")
+        self.crs = crs
+        logging.info("creating pyproj crs")
+        if self.crs is None:
+            try:
+                self.crs = CRS.from_user_input(self.hdf_object.projection())
+                logging.debug(f"Projection found in file {fpath}: {self.crs}")
+            except CRSError:
+                raise ValueError(f"CRS was not given and could not be extracted from from {fpath}")
+
+        logging.info("done getting crs")
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None

@@ -46,7 +46,7 @@ class RASModelItem(Item):
     RAS_HAS_2D = "ras:has_2d"
     RAS_DATETIME_SOURCE = "ras:datetime_source"
 
-    def __init__(self, ras_project_file, item_id: str, crs: str, simplify_geometry: bool = True):
+    def __init__(self, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
 
         self._project = None
         self.assets = {}
@@ -65,13 +65,13 @@ class RASModelItem(Item):
         self.pf = ProjectFile(self.ras_project_file)
 
         self.factory = AssetFactory(RAS_EXTENSION_MAPPING)
-        self.has_1d = None
-        self.has_2d = None
+        self.has_1d = False
+        self.has_2d = False
 
         super().__init__(
             Path(self.ras_project_file).stem,
             NULL_STAC_GEOMETRY,
-            self._bbox,
+            NULL_STAC_BBOX,
             self._datetime,
             self._properties,
             href=self._href,
@@ -81,6 +81,7 @@ class RASModelItem(Item):
 
         for fpath in ras_asset_files:
             if fpath and fpath != self._href:
+                logging.info(f"processing {fpath}")
                 self.add_ras_asset(fpath)
 
         self._geometry
@@ -105,12 +106,6 @@ class RASModelItem(Item):
         # self.properties[RAS_DATETIME_SOURCE] = self.datetime_source
         # TODO: once all assets are created, populate associations between assets
         return properties
-
-    @property
-    def _bbox(self) -> tuple[float, float, float, float]:
-        if self._geometry == NULL_STAC_GEOMETRY:
-            return NULL_STAC_BBOX
-        return self._geometry.bounds
 
     @property
     def _geometry(self) -> dict | None:
@@ -144,8 +139,8 @@ class RASModelItem(Item):
     @property
     def _datetime(self) -> datetime:
         """The datetime for the HMS STAC item."""
-        # date = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
-        # time = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
+        # date = datetime.datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
+        # time = datetime.datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
         return datetime.datetime.now()
 
     @property
@@ -186,20 +181,29 @@ class RASModelItem(Item):
                     )
                 self._project = asset
             elif isinstance(asset, GeometryHdfAsset):
-                # TODO: if mesh areas exist there are 2d...these can be in text or hdf files.
-                self.has_2d = True
-                self._geom_files.append(asset)
+                # if crs is None, use the crs from the 2d geom hdf file.
+                if self.crs is None:
+                    self.crs = asset.hdf_object.crs
+                else:
+                    logging.warning("settomg crs")
+                    asset.crs = self.crs
+                if asset.has_2d:
+                    self.has_2d = True
+                    self.properties[self.RAS_HAS_2D] = True
+                    self._geom_files.append(asset)
             elif isinstance(asset, GeometryAsset):
-                self.has_1d = True
-            self._geom_files.append(asset)
+                if asset.geomf.has_1d:
+                    self.has_1d = True
+                    self.properties[self.RAS_HAS_1D] = True
+                    self._geom_files.append(asset)
 
-    # def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
-    #     pyproj_crs = CRS.from_user_input(self.crs)
-    #     wgs_crs = CRS.from_authority("EPSG", "4326")
-    #     if pyproj_crs != wgs_crs:
-    #         transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
-    #         return transform(transformer.transform, geom)
-    #     return geom
+    def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
+        pyproj_crs = CRS.from_user_input(self.crs)
+        wgs_crs = CRS.from_authority("EPSG", "4326")
+        if pyproj_crs != wgs_crs:
+            transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
+            return transform(transformer.transform, geom)
+        return geom
 
     def parse_1d_geom(self):
         logging.info("Creating geometry using 1d text file cross sections")
@@ -207,8 +211,13 @@ class RASModelItem(Item):
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryAsset):
                 try:
-                    # concave_hull = self._geometry_to_wgs84(geom_asset.geomf.concave_hull)
-                    concave_hull_polygons.append(geom_asset.geomf.concave_hull)
+                    logging.info("Getting concave hull")
+                    geom_asset.crs = self.crs
+                    logging.info(geom_asset.crs)
+                    concave_hull = geom_asset.geomf.concave_hull
+                    logging.info("Concave hull retrieved")
+                    concave_hull = self._geometry_to_wgs84(concave_hull)
+                    concave_hull_polygons.append(concave_hull)
                 except ValueError:
                     logging.warning(f"Could not extract geometry from {geom_asset.href}")
 
@@ -220,8 +229,8 @@ class RASModelItem(Item):
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryHdfAsset):
 
-                # mesh_areas = self._geometry_to_wgs84(geom_asset.hdf_object.mesh_areas(self.crs))
-                mesh_area_polygons.append(geom_asset.hdf_object.mesh_areas(self.crs))
+                mesh_areas = self._geometry_to_wgs84(geom_asset.hdf_object.mesh_areas(self.crs))
+                mesh_area_polygons.append(mesh_areas)
 
         return union_all(mesh_area_polygons)
 
