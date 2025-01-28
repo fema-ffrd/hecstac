@@ -346,6 +346,7 @@ class GeometryHdfAsset(GenericAsset):
         description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
+        import json
 
         self.hdf_object = GeometryHDFFile(self.href)
         self.extra_fields = {
@@ -353,6 +354,7 @@ class GeometryHdfAsset(GenericAsset):
             for key, value in {
                 VERSION: self.hdf_object.file_version,
                 UNITS: self.hdf_object.units_system,
+                "proj:wkt": json.dumps(self.hdf_object.crs),
                 REFERENCE_LINES: list(self.hdf_object.reference_lines["refln_name"]),
             }.items()
             if value

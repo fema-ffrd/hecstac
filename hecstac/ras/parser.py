@@ -9,6 +9,7 @@ from typing import Iterator
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from pyproj import CRS
 from pystac import Asset
 from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
 from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
@@ -1438,6 +1439,11 @@ class GeometryHDFFile(RASHDFFile):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
         self.hdf_object = RasGeomHdf(fpath)
+        self.crs = CRS.from_user_input(self.hdf_object.projection())
+        if not self.crs:
+            logging.info(f"No projection found in file {fpath}")
+        else:
+            logging.debug(f"Projection found in file {fpath}: {self.crs}")
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None

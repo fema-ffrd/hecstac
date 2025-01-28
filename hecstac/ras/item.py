@@ -70,7 +70,7 @@ class RASModelItem(Item):
 
         super().__init__(
             Path(self.ras_project_file).stem,
-            self._geometry,
+            NULL_STAC_GEOMETRY,
             self._bbox,
             self._datetime,
             self._properties,
@@ -187,9 +187,8 @@ class RASModelItem(Item):
                 self._project = asset
             elif isinstance(asset, GeometryHdfAsset):
                 # TODO: if mesh areas exist there are 2d...these can be in text or hdf files.
-                pass
-                # self.has_2d = True
-                # self._geom_files.append(asset)
+                self.has_2d = True
+                self._geom_files.append(asset)
             elif isinstance(asset, GeometryAsset):
                 self.has_1d = True
             self._geom_files.append(asset)
@@ -208,8 +207,8 @@ class RASModelItem(Item):
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryAsset):
                 try:
-                    concave_hull = self._geometry_to_wgs84(geom_asset.geomf.concave_hull)
-                    concave_hull_polygons.append(concave_hull)
+                    # concave_hull = self._geometry_to_wgs84(geom_asset.geomf.concave_hull)
+                    concave_hull_polygons.append(geom_asset.geomf.concave_hull)
                 except ValueError:
                     logging.warning(f"Could not extract geometry from {geom_asset.href}")
 
@@ -221,8 +220,8 @@ class RASModelItem(Item):
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryHdfAsset):
 
-                mesh_areas = self._geometry_to_wgs84(geom_asset.hdf_object.mesh_areas(self.crs))
-                mesh_area_polygons.append(mesh_areas)
+                # mesh_areas = self._geometry_to_wgs84(geom_asset.hdf_object.mesh_areas(self.crs))
+                mesh_area_polygons.append(geom_asset.hdf_object.mesh_areas(self.crs))
 
         return union_all(mesh_area_polygons)
 
