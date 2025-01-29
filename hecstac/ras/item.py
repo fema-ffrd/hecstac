@@ -135,10 +135,14 @@ class RASModelItem(Item):
 
     @staticmethod
     def __get_href(item_id: str | None, path_manager: LocalPathManager, href: str | None) -> str:
+        # define href using item id if provided
         if item_id:
             parsed_href = path_manager.item_path(item_id)
             return parsed_href
-        return href
+        # use provided href parameter if given
+        if href:
+            return href
+        raise ValueError("Neither item id nor href provided to define item href")
 
     def _register_extensions(self) -> None:
         ProjectionExtension.add_to(self)
