@@ -693,12 +693,12 @@ class ProjectFile:
 
     @property
     def plan_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Plan File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Plan File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def geometry_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Geom File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Geom File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
@@ -1152,12 +1152,15 @@ class RASHDFFile:
 
     def mesh_areas(self, crs=None, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
 
-        mesh_areas = self.hdf_object.mesh_cell_polygons()
+        mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
 
         if mesh_areas.crs is None and crs is not None:
             mesh_areas = mesh_areas.set_crs(crs)
+
+        elif mesh_areas.crs is None and crs is None:
+            raise CRSError("Mesh areas have no CRS and have none to be set to")
 
         if return_gdf:
             return mesh_areas
@@ -1439,23 +1442,17 @@ class PlanHDFFile(RASHDFFile):
 
 class GeometryHDFFile(RASHDFFile):
 
-    def __init__(self, fpath: str, crs=None, **kwargs):
+    def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
         self.hdf_object = RasGeomHdf(fpath)
-        self.crs = crs
-        logging.info("creating pyproj crs")
-        if self.crs is None:
-            try:
-                self.crs = CRS.from_user_input(self.hdf_object.projection())
-                logging.debug(f"Projection found in file {fpath}: {self.crs}")
-            except CRSError:
-                raise ValueError(f"CRS was not given and could not be extracted from from {fpath}")
-
-        logging.info("done getting crs")
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
+
+    @property
+    def projection(self):
+        return self.hdf_object.projection()
 
     @property
     def cross_sections(self) -> int | None:
