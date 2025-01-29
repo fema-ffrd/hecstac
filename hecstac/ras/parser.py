@@ -9,10 +9,9 @@ from typing import Iterator
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from pyproj import CRS
 from pyproj.exceptions import CRSError
 from pystac import Asset
-from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
+from rashdf import RasGeomHdf, RasPlanHdf
 from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
@@ -868,16 +867,12 @@ class GeometryFile:
         polygons = []
         if self.cross_sections:
             xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
-            # logging.info(xs_gdf)
             for river_reach in xs_gdf["river_reach"].unique():
-                logging.info(f"river reach: {river_reach}")
                 xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
-                logging.info(xs_subset)
                 points = xs_subset.boundary.explode(index_parts=True).unstack()
                 points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
                 points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
                 polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
-                logging.info("got polygon")
                 if isinstance(polygon, MultiPolygon):
                     polygons += list(polygon.geoms)
                 else:
@@ -1046,7 +1041,7 @@ class RASHDFFile:
     def geometry_time(self) -> datetime.datetime | None:
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
-        return self._geom_attrs.get("Geometry Time").isoformat()
+        return self._geom_attrs.get("Geometry Time")
 
     @property
     def landcover_date_last_modified(self) -> datetime.datetime | None:
@@ -1150,8 +1145,16 @@ class RASHDFFile:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Minimum Size")))
 
-    def mesh_areas(self, crs=None, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
+    def mesh_areas(self, crs: str = None, return_gdf: bool = False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
+        """Retrieves and processes mesh area geometries.
 
+        Parameters
+        ----------
+        crs : str, optional
+            The coordinate reference system (CRS) to set if the mesh areas do not have one. Defaults to None
+        return_gdf : bool, optional
+            If True, returns a GeoDataFrame of the mesh areas. If False, returns a unified Polygon or Multipolygon geometry. Defaults to False.
+        """
         mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
@@ -1174,8 +1177,17 @@ class RASHDFFile:
 
         if breaklines is None or breaklines.empty:
             raise ValueError("No breaklines found.")
-        else:
-            return breaklines
+
+        return breaklines
+
+    @property
+    def mesh_cells(self) -> gpd.GeoDataFrame | None:
+        mesh_cells = self.hdf_object.mesh_cell_polygons()
+
+        if mesh_cells is None or mesh_cells.empty:
+            raise ValueError("No mesh cells found.")
+
+        return mesh_cells
 
     @property
     def bc_lines(self) -> gpd.GeoDataFrame | None:
@@ -1183,8 +1195,8 @@ class RASHDFFile:
 
         if bc_lines is None or bc_lines.empty:
             raise ValueError("No boundary condition lines found.")
-        else:
-            return bc_lines
+
+        return bc_lines
 
     @property
     def landcover_filename(self) -> str | None:
@@ -1211,8 +1223,6 @@ class PlanHDFFile(RASHDFFile):
 
     @property
     def plan_information_base_output_interval(self) -> str | None:
-        # example property to show pattern: if attributes in which property is found is not loaded, load them
-        # then use key for the property in the dictionary of attributes to retrieve the property
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Base Output Interval")
