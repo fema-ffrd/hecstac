@@ -8,18 +8,16 @@ from pyproj import CRS, Transformer
 from pystac import Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
-from shapely import Geometry, Polygon, box, simplify, to_geojson, union_all
+from shapely import Geometry, Polygon, simplify, to_geojson, union_all
 from shapely.ops import transform
 
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.ras.parser import ProjectFile
-
-NULL_DATETIME = datetime.datetime(9999, 9, 9)
-NULL_GEOMETRY = Polygon()
-NULL_STAC_GEOMETRY = json.loads(to_geojson(NULL_GEOMETRY))
-NULL_BBOX = box(0, 0, 0, 0)
-NULL_STAC_BBOX = NULL_BBOX.bounds
-PLACEHOLDER_ID = "id"
+from hecstac.ras.consts import (
+    NULL_DATETIME,
+    NULL_STAC_GEOMETRY,
+    NULL_STAC_BBOX,
+)
 
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.ras.assets import (
@@ -72,19 +70,21 @@ class RASModelItem(Item):
             Path(self.ras_project_file).stem,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
-            self._datetime,
+            NULL_DATETIME,
             self._properties,
             href=self._href,
         )
-        # derived_assets  = self.add_model_thumbnail() TODO: implement this method
+
         ras_asset_files = self.scan_model_dir()
 
         for fpath in ras_asset_files:
             if fpath and fpath != self._href:
-                logging.info(f"processing {fpath}")
+                logging.info(f"Processing asset: {fpath}")
                 self.add_ras_asset(fpath)
 
+        # Update geometry and datetime after assets have been added
         self._geometry
+        self._datetime
 
     def _register_extensions(self) -> None:
         ProjectionExtension.add_to(self)
@@ -103,31 +103,23 @@ class RASModelItem(Item):
         properties[self.PROJECT_STATUS] = self.pf.project_status
         properties[self.MODEL_UNITS] = self.pf.project_units
 
-        # self.properties[RAS_DATETIME_SOURCE] = self.datetime_source
         # TODO: once all assets are created, populate associations between assets
         return properties
 
     @property
     def _geometry(self) -> dict | None:
-        """
-        gets geometry using either list of geom assets or list of hdf assets, perhaps simplified to
-        a given tolerance to reduce replication of data
-        (ie item would record simplified geometry used when searching collection,
-        asset would have more exact geometry representing contents of geom or hdf files)
-        """
-        # if geometry is equal to null placeholder, continue, else return current value
+        """Parses geometries from 2d hdf files and updates the stac item geometry, simplifying them if needed."""
         geometries = []
 
         if self.has_2d:
             geometries.append(self.parse_2d_geom())
 
-        # if hdf file is not present, get concave hull of cross sections and use as geometry
-        if self.has_1d:
-            geometries.append(self.parse_1d_geom())
+        # if self.has_1d:
+        #     geometries.append(self.parse_1d_geom())
 
         if len(geometries) == 0:
             logging.error("No geometry found for RAS item.")
-            return NULL_STAC_GEOMETRY
+            return
 
         unioned_geometry = union_all(geometries)
         if self._simplify_geometry:
@@ -138,27 +130,43 @@ class RASModelItem(Item):
 
     @property
     def _datetime(self) -> datetime:
-        """The datetime for the HMS STAC item."""
-        # date = datetime.datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
-        # time = datetime.datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
-        return datetime.datetime.now()
+        """The datetime for the RAS STAC item."""
+        item_datetime = None
 
-    @property
-    def datetime_source(self) -> str:
-        if self._datetime_source == None:
-            if self._dts == None:
-                self.populate()
-            if len(self._dts) == 0:
-                self._datetime_source = "processing_time"
-            else:
-                self._datetime_source = "model_geometry"
-        return self._datetime_source
+        for geom_file in self._geom_files:
+            if isinstance(geom_file, GeometryHdfAsset):
+                geom_date = geom_file.hdf_object.geometry_time
+                if geom_date:
+                    item_datetime = geom_date
+                    self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+                    logging.info(f"Using item datetime from {geom_file.href}")
+                    break
 
-    def add_model_thumbnail(self, layers: list, title: str = "Model_Thumbnail"):
+        if item_datetime is None:
+            logging.warning("Could not extract item datetime from geometry, using item processing time.")
+            item_datetime = datetime.datetime.now()
+            self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
+
+        self.datetime = item_datetime
+
+    def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail"):
+        """Generates model thumbnail asset for each geometry file.
+
+        Parameters
+        ----------
+        layers : list
+            List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines'
+        title_prefix : str, optional
+            Thumbnail title prefix, by default "Model_Thumbnail".
+        """
 
         for geom in self._geom_files:
             if isinstance(geom, GeometryHdfAsset):
-                self.assets["thumbnail"] = geom.thumbnail(layers=layers, title=title, thumbnail_dest=self._href)
+                self.assets[f"{geom.href[4:]}_thumbnail"] = geom.thumbnail(
+                    layers=layers, title=title_prefix, thumbnail_dest=self._href
+                )
+
+        # TODO: Add 1d model thumbnails
 
     def add_ras_asset(self, fpath: str = "") -> None:
         """Add an asset to the HMS STAC item."""
@@ -181,26 +189,29 @@ class RASModelItem(Item):
                     )
                 self._project = asset
             elif isinstance(asset, GeometryHdfAsset):
-                # if crs is None, use the crs from the 2d geom hdf file if it exists.
+                # if item and asset crs are None, pass and use null geometry
                 if self.crs is None and asset.crs is None:
                     pass
+                # Use asset crs as item crs if there is no item crs
                 elif self.crs is None and asset.crs is not None:
                     self.crs = asset.crs
-                    self._geom_files.append(asset)
+                # If item has crs, use it as the asset crs
                 elif self.crs:
                     asset.crs = self.crs
-                    self._geom_files.append(asset)
 
                 if asset.check_2d:
+                    self._geom_files.append(asset)
                     self.has_2d = True
                     self.properties[self.RAS_HAS_2D] = True
-            elif isinstance(asset, GeometryAsset):
-                if asset.geomf.has_1d:
-                    self.has_1d = False
-                    self.properties[self.RAS_HAS_1D] = True
-                    self._geom_files.append(asset)
+            # elif isinstance(asset, GeometryAsset):
+            # if asset.geomf.has_1d:
+            #     self.has_1d = False TODO: Implement 1d functionality
+            #     self.properties[self.RAS_HAS_1D] = True
+            #     self._geom_files.append(asset)
 
     def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
+        """Convert geometry CRS to EPSG:4326 for stac item geometry."""
+
         pyproj_crs = CRS.from_user_input(self.crs)
         wgs_crs = CRS.from_authority("EPSG", "4326")
         if pyproj_crs != wgs_crs:
@@ -209,16 +220,15 @@ class RASModelItem(Item):
         return geom
 
     def parse_1d_geom(self):
+        """Read 1d geometry from concave hull."""
+
         logging.info("Creating geometry using 1d text file cross sections")
         concave_hull_polygons: list[Polygon] = []
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryAsset):
                 try:
-                    logging.info("Getting concave hull")
                     geom_asset.crs = self.crs
-                    logging.info(geom_asset.crs)
                     concave_hull = geom_asset.geomf.concave_hull
-                    logging.info("Concave hull retrieved")
                     concave_hull = self._geometry_to_wgs84(concave_hull)
                     concave_hull_polygons.append(concave_hull)
                 except ValueError:
@@ -227,10 +237,12 @@ class RASModelItem(Item):
         return union_all(concave_hull_polygons)
 
     def parse_2d_geom(self):
-        logging.info("Creating 2D geometry elements using hdf file mesh areas")
+        """Read 2d geometry from hdf file mesh areas."""
+
         mesh_area_polygons: list[Polygon] = []
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryHdfAsset):
+                logging.info(f"Extracting geom from mesh areas in {geom_asset.href}")
 
                 mesh_areas = self._geometry_to_wgs84(geom_asset.hdf_object.mesh_areas(self.crs))
                 mesh_area_polygons.append(mesh_areas)
@@ -241,6 +253,7 @@ class RASModelItem(Item):
         ProjectionExtension.ensure_has_extension(self, True)
 
     def scan_model_dir(self):
+        """Find all files in the project folder."""
         base_dir = os.path.dirname(self.ras_project_file)
         files = []
         for root, _, filenames in os.walk(base_dir):
