@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pystac import MediaType
 from pyproj import CRS
-
+from pyproj.exceptions import CRSError
+import json
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.ras.parser import (
     GeometryFile,
@@ -27,6 +28,7 @@ PLAN_SHORT_ID = "ras:short_plan_id"
 TITLE = "ras:title"
 UNITS = "ras:units"
 VERSION = "ras:version"
+PROJECTION = "proj:wkt"
 
 PLAN_FILE = "ras:plan_file"
 GEOMETRY_FILE = "ras:geometry_file"
@@ -344,34 +346,46 @@ class GeometryHdfAsset(GenericAsset):
     regex_parse_str = r".+\.g\d{2}\.hdf$"
 
     def __init__(self, href: str, crs: str = None, **kwargs):
-        logging.info("Initializing hdf class")
         roles = kwargs.get("roles", []) + ["geometry-hdf-file"]
         description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
-        logging.info("initializing hdf file")
+        self.hdf_object = GeometryHDFFile(self.href)
         self.crs = crs
-
-        logging.warning(f"crs has been set to {self.crs}")
-        self.hdf_object = GeometryHDFFile(self.href, self.crs)
-        logging.info("reading mesh areas...")
-        try:
-            if self.hdf_object.mesh_areas():
-                self.has_2d = True
-        except ValueError:
-            logging.info(f"Could not read mesh areas for {self.href}")
-            self.has_2d = False
+        self.has_2d = None
+        if self.crs is None:
+            try:
+                self.crs = CRS.from_user_input(self.hdf_object.projection)
+                logging.info(f"crs has been set to {self.crs}")
+            except CRSError:
+                logging.warning(f"Could not extract crs from {self.href}")
 
         self.extra_fields = {
             key: value
             for key, value in {
                 VERSION: self.hdf_object.file_version,
                 UNITS: self.hdf_object.units_system,
-                # "proj:wkt": json.load(self.hdf_object.crs),
-                REFERENCE_LINES: list(self.hdf_object.reference_lines["refln_name"]),
+                PROJECTION: self.crs.to_wkt() if self.crs is not None else None,
+                REFERENCE_LINES: (
+                    list(self.hdf_object.reference_lines["refln_name"])
+                    if not self.hdf_object.reference_lines.empty
+                    else None
+                ),
             }.items()
             if value
         }
+
+    @property
+    def check_2d(self):
+        try:
+            logging.info("reading mesh areas...")
+            logging.info("crs is {self.crs}")
+
+            if self.hdf_object.mesh_areas(self.crs):
+                return True
+        except ValueError:
+            logging.info(f"No mesh areas found for {self.href}")
+            return False
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """

@@ -181,19 +181,22 @@ class RASModelItem(Item):
                     )
                 self._project = asset
             elif isinstance(asset, GeometryHdfAsset):
-                # if crs is None, use the crs from the 2d geom hdf file.
-                if self.crs is None:
-                    self.crs = asset.hdf_object.crs
-                else:
-                    logging.warning("settomg crs")
+                # if crs is None, use the crs from the 2d geom hdf file if it exists.
+                if self.crs is None and asset.crs is None:
+                    pass
+                elif self.crs is None and asset.crs is not None:
+                    self.crs = asset.crs
+                    self._geom_files.append(asset)
+                elif self.crs:
                     asset.crs = self.crs
-                if asset.has_2d:
+                    self._geom_files.append(asset)
+
+                if asset.check_2d:
                     self.has_2d = True
                     self.properties[self.RAS_HAS_2D] = True
-                    self._geom_files.append(asset)
             elif isinstance(asset, GeometryAsset):
                 if asset.geomf.has_1d:
-                    self.has_1d = True
+                    self.has_1d = False
                     self.properties[self.RAS_HAS_1D] = True
                     self._geom_files.append(asset)
 
