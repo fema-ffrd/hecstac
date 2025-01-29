@@ -114,14 +114,14 @@ class RASModelItem(Item):
             return ras_project_file
         # if no ras_project_file given, try to pull the filename from assets within the kwargs
         if not assets:
-            raise ValueError(f"No project file given as parameter and no assets")
+            raise ValueError("No project file given as parameter and no assets")
         for asset in assets:
             asset_roles = asset["roles"]
             if "project-file" in asset_roles:
                 filename = asset["href"]
                 return filename
         raise ValueError(
-            f"No project file given as parameter and kwargs passed don't contain asset with role 'project-file'"
+            "No project file given as parameter and kwargs passed don't contain asset with role 'project-file'"
         )
 
     @staticmethod
