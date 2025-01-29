@@ -1,4 +1,3 @@
-import io
 import logging
 import os
 import re
@@ -10,7 +9,6 @@ from matplotlib.lines import Line2D
 from pystac import MediaType
 from pyproj import CRS
 from pyproj.exceptions import CRSError
-import json
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.ras.parser import (
     GeometryFile,
@@ -368,7 +366,7 @@ class GeometryHdfAsset(GenericAsset):
                 PROJECTION: self.crs.to_wkt() if self.crs is not None else None,
                 REFERENCE_LINES: (
                     list(self.hdf_object.reference_lines["refln_name"])
-                    if not self.hdf_object.reference_lines.empty
+                    if self.hdf_object.reference_lines is not None and not self.hdf_object.reference_lines.empty
                     else None
                 ),
             }.items()
@@ -377,14 +375,16 @@ class GeometryHdfAsset(GenericAsset):
 
     @property
     def check_2d(self):
+        """Check if the geometry asset has 2d geometry, if yes then return True and set has_2d to True."""
         try:
-            logging.info("reading mesh areas...")
-            logging.info("crs is {self.crs}")
+            logging.debug(f"reading mesh areas using crs {self.crs}...")
 
             if self.hdf_object.mesh_areas(self.crs):
+                self.has_2d = True
                 return True
         except ValueError:
-            logging.info(f"No mesh areas found for {self.href}")
+            logging.warning(f"No mesh areas found for {self.href}")
+            self.has_2d = False
             return False
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
@@ -474,7 +474,7 @@ class GeometryHdfAsset(GenericAsset):
 
         return GenericAsset(
             href=filename,
-            title="Model Thumbnail",
+            title=filename.split(".")[0],
             description="Thumbnail image for the model",
             media_type=media_type,
             roles=["thumbnail"],
@@ -488,7 +488,7 @@ class GeometryHdfAsset(GenericAsset):
         crs="EPSG:4326",
         thumbnail_dest: str = None,
     ):
-        """Create a thumbnail figure for each geometry hdf file, including
+        """Create a thumbnail figure for a geometry hdf file, including
         various geospatial layers such as USGS gages, mesh areas,
         breaklines, and boundary condition (BC) lines.
 
@@ -506,25 +506,17 @@ class GeometryHdfAsset(GenericAsset):
 
         for layer in layers:
             try:
-                # if layer == "usgs_gages":
-                #     if add_usgs_properties:
-                #         gages_gdf = self.get_usgs_data(True, geom_asset=geom_asset)
-                #     else:
-                #         gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
-                #     gages_gdf_geo = gages_gdf.to_crs(self.crs)
-                #     legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
-
                 if layer == "mesh_areas":
-                    mesh_areas_data = self.hdf_object.mesh_areas(crs, return_gdf=True)
-                    mesh_areas_geo = mesh_areas_data.to_crs(crs)
+                    mesh_areas_data = self.hdf_object.mesh_cells
+                    mesh_areas_geo = mesh_areas_data.set_crs(self.crs)
                     legend_handles += self._plot_mesh_areas(ax, mesh_areas_geo)
                 elif layer == "breaklines":
                     breaklines_data = self.hdf_object.breaklines
-                    breaklines_data_geo = breaklines_data.to_crs(crs)
+                    breaklines_data_geo = breaklines_data.set_crs(self.crs)
                     legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
                 elif layer == "bc_lines":
                     bc_lines_data = self.hdf_object.bc_lines
-                    bc_lines_data_geo = bc_lines_data.to_crs(crs)
+                    bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
                     legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:
                 logging.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
@@ -532,7 +524,7 @@ class GeometryHdfAsset(GenericAsset):
         # Add OpenStreetMap basemap
         ctx.add_basemap(
             ax,
-            crs=crs,
+            crs=self.crs,
             source=ctx.providers.OpenStreetMap.Mapnik,
             alpha=0.4,
         )
@@ -547,10 +539,12 @@ class GeometryHdfAsset(GenericAsset):
         filepath = os.path.join(base_dir, filename)
 
         if filepath.startswith("s3://"):
-            img_data = io.BytesIO()
-            fig.savefig(img_data, format="png", bbox_inches="tight")
-            img_data.seek(0)
-            save_bytes_s3(img_data, filepath)
+            pass
+            # TODO add thumbnail s3 functionality
+            # img_data = io.BytesIO()
+            # fig.savefig(img_data, format="png", bbox_inches="tight")
+            # img_data.seek(0)
+            # save_bytes_s3(img_data, filepath)
         else:
             os.makedirs(base_dir, exist_ok=True)
             fig.savefig(filepath, dpi=80, bbox_inches="tight")
@@ -851,8 +845,6 @@ class RasMapperFileAsset(GenericAsset):
     def __init__(self, href: str, *args, **kwargs):
         roles = ["ras-mapper-file", "ras-file", MediaType.TEXT]
         description = "RAS Mapper file."
-        media_type = MediaType.TEXT
-        extra_fields = kwargs.get("extra_fields", {})
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
