@@ -3,9 +3,10 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from pyproj import CRS, Transformer
-from pystac import Item
+from pystac import Asset, Collection, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import Geometry, Polygon, box, simplify, to_geojson, union_all
@@ -52,21 +53,28 @@ class RASModelItem(Item):
         item_id: str | None = None,
         crs: str | None = None,
         simplify_geometry: bool = True,
-        **kwargs,
+        geometry: dict[str, Any] | None = None,
+        bbox: list[float] | None = None,
+        datetime: datetime.datetime | None = None,
+        properties: dict[str, Any] = None,
+        start_datetime: datetime.datetime | None = None,
+        end_datetime: datetime.datetime | None = None,
+        stac_extensions: list[str] | None = None,
+        href: str | None = None,
+        collection: str | Collection | None = None,
+        extra_fields: dict[str, Any] | None = None,
+        assets: dict[str, Asset] | None = None,
     ):
 
         self._project = None
-        self.assets = {}
         self.links = []
         self.thumbnail_paths = []
         self.geojson_paths = []
-        self.extra_fields = {}
         self._geom_files = []
-        self.stac_extensions = None
-        self.ras_project_file = self.__get_ras_project(ras_project_file, **kwargs)
+        self.ras_project_file = self.__get_ras_project(ras_project_file, assets)
         self.pm = LocalPathManager(Path(ras_project_file).parent)
-        self._href = self.__get_href(item_id, self.pm, **kwargs)
-        self.crs = self.__get_crs(crs, **kwargs)
+        self._href = self.__get_href(item_id, self.pm, href)
+        self.crs = self.__get_crs(crs, properties)
         self._simplify_geometry = simplify_geometry
 
         self.pf = ProjectFile(self.ras_project_file)
@@ -77,11 +85,17 @@ class RASModelItem(Item):
 
         super().__init__(
             id=Path(self.ras_project_file).stem,
-            geometry=kwargs.get("geometry", NULL_STAC_GEOMETRY),
-            bbox=kwargs.get("bbox", NULL_STAC_BBOX),
-            datetime=kwargs.get("datetime", self._datetime),
-            properties=kwargs.get("properties", self._properties),
-            href=kwargs.get("href", href=self._href),
+            geometry=geometry or NULL_GEOMETRY,
+            bbox=bbox or NULL_STAC_BBOX,
+            datetime=self._datetime or datetime,
+            properties=self._properties or properties,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            stac_extensions=stac_extensions,
+            href=self._href or href,
+            collection=collection,
+            extra_fields=extra_fields,
+            assets=assets,
         )
         # derived_assets  = self.add_model_thumbnail() TODO: implement this method
         ras_asset_files = self.scan_model_dir()
@@ -94,12 +108,13 @@ class RASModelItem(Item):
         self._geometry
 
     @staticmethod
-    def __get_ras_project(ras_project_file: str | None, **kwargs) -> str:
+    def __get_ras_project(ras_project_file: str | None, assets: list[dict] | None) -> str:
         # if ras_project_file given, return it
         if ras_project_file:
             return ras_project_file
         # if no ras_project_file given, try to pull the filename from assets within the kwargs
-        assets: list[dict] = kwargs["assets"]
+        if not assets:
+            raise ValueError(f"No project file given as parameter and no assets")
         for asset in assets:
             asset_roles = asset["roles"]
             if "project-file" in asset_roles:
@@ -110,21 +125,19 @@ class RASModelItem(Item):
         )
 
     @staticmethod
-    def __get_crs(crs: str | None, **kwargs) -> str | None:
+    def __get_crs(crs: str | None, properties: dict[str, Any]) -> str | None:
         # if crs provided, return it
         if crs:
             return crs
         # if no crs provided, try to find proj:wkt2 property in properties and return that instead
-        properties: dict = kwargs["properties"]
         crs = properties.get("proj:wkt2", None)
         return crs
 
     @staticmethod
-    def __get_href(item_id: str | None, path_manager: LocalPathManager, **kwargs) -> str:
+    def __get_href(item_id: str | None, path_manager: LocalPathManager, href: str | None) -> str:
         if item_id:
-            href = path_manager.item_path(item_id)
-            return href
-        href = kwargs["href"]
+            parsed_href = path_manager.item_path(item_id)
+            return parsed_href
         return href
 
     def _register_extensions(self) -> None:
