@@ -16,10 +16,10 @@ from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.ras.assets import RAS_EXTENSION_MAPPING
 
 
-class EventItem(Item):
-    REALIZATION = "montecarlo:realization"
-    BLOCK_GROUP = "montecarlo:block_group"
-    MC_EVENT = "montecarlo:event"
+class FFRDEventItem(Item):
+    FFRD_REALIZATION = "FFRD:realization"
+    FFRD_BLOCK_GROUP = "FFRD:block_group"
+    FFRD_EVENT = "FFRD:event"
 
     def __init__(
         self,

@@ -17,14 +17,14 @@ have Python already installed and setup:
 
 
 Note that it is highly recommended to create a python `virtual environment
-<https://docs.python.org/3/library/venv.html>`_ to install, test, and run hecstac. 
+<https://docs.python.org/3/library/venv.html>`_ to install, test, and run hecstac.
 
 
 
 Workflows
 ---------
 
-The following snippets provide examples for creating stac items from HEC model data. 
+The following snippets provide examples for creating stac items from HEC model data.
 
 .. code-block:: python
 
@@ -56,14 +56,14 @@ The following snippets provide examples for creating stac items from HEC model d
       ras_item.save_object(ras_item.pm.item_path(item_id))
 
 
-The following snippet provides an example of how to create stac items for an event based simulation. 
+The following snippet provides an example of how to create stac items for an event based simulation.
 
 .. code-block:: python
 
    from pystac import Item
 
    from hecstac.common.logger import initialize_logger
-   from hecstac.events.ffrd import EventItem
+   from hecstac.events.ffrd import FFRDEventItem
 
    if __name__ == "__main__":
       initialize_logger()
@@ -79,7 +79,7 @@ The following snippet provides an example of how to create stac items for an eve
          "<local-file-dr>/hms-model.met",
          "<local-file-dr>/Precip.dss",
       ]
-      
+
 
       # RAS Info
       ras_source_model_item_path = "/<local-file-dr>/authoritative-ras-model.json"
@@ -98,14 +98,14 @@ The following snippet provides an example of how to create stac items for an eve
       ffrd_event_item_id = f"{realization}-{block_group}-{event_id}"
       dest_href = f"/<local-file-dr>/{ffrd_event_item_id}.json"
 
-      ffrd_event_item = EventItem(
+      ffrd_event_item = FFRDEventItem(
          realization=realization,
          block_group=block_group,
          event_id=event_id,
          source_model_items=[
                hms_source_model_item,
                ras_source_model_item
-         ],  
+         ],
          hms_simulation_files=hms_simulation_files,
          ras_simulation_files=ras_simulation_files,
       )
