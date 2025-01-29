@@ -485,7 +485,6 @@ class GeometryHdfAsset(GenericAsset):
         self,
         layers: list,
         title: str = "Model_Thumbnail",
-        crs="EPSG:4326",
         thumbnail_dest: str = None,
     ):
         """Create a thumbnail figure for a geometry hdf file, including
