@@ -24,7 +24,7 @@ def sanitize_catalog_assets(item: RASModelItem) -> RASModelItem:
 
 if __name__ == "__main__":
     initialize_logger()
-    ras_project_file = "ElkMiddle/ElkMiddle.prj"
+    ras_project_file = "Example_Projects_6_6/2D Unsteady Flow Hydraulics/Muncie/Muncie.prj"
     item_id = Path(ras_project_file).stem
 
     ras_item = RASModelItem(ras_project_file, item_id, crs=None)
