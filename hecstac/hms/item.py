@@ -29,6 +29,7 @@ class HMSModelItem(Item):
     PROJECT_VERSION = "hms:version"
     PROJECT_DESCRIPTION = "hms:description"
     PROJECT_UNITS = "hms:unit_system"
+    SUMMARY = "hms:summary"
 
     def __init__(self, hms_project_file, item_id: str, simplify_geometry: bool = True):
 
@@ -85,7 +86,7 @@ class HMSModelItem(Item):
         if self.pf.basins[0].epsg:
             logging.warning("No EPSG code found in basin file.")
         properties["proj:wkt"] = self.pf.basins[0].wkt
-        properties["hms:summary"] = self.pf.file_counts
+        properties[SUMMARY] = self.pf.file_counts
         return properties
 
     @property

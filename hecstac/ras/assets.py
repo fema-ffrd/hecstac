@@ -7,7 +7,8 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pystac import MediaType
-
+from pyproj import CRS
+from pyproj.exceptions import CRSError
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.ras.parser import (
     GeometryFile,
@@ -25,6 +26,7 @@ PLAN_SHORT_ID = "ras:short_plan_id"
 TITLE = "ras:title"
 UNITS = "ras:units"
 VERSION = "ras:version"
+PROJECTION = "proj:wkt"
 
 PLAN_FILE = "ras:plan_file"
 GEOMETRY_FILE = "ras:geometry_file"
@@ -168,6 +170,7 @@ class GeometryAsset(GenericAsset):
 
     def __init__(self, href: str, crs: str = None, **kwargs):
         # self.pyproj_crs = self.validate_crs(crs)
+        self.crs = crs
         roles = kwargs.get("roles", []) + ["geometry-file", "ras-file"]
         description = kwargs.get(
             "description",
@@ -177,7 +180,7 @@ class GeometryAsset(GenericAsset):
         super().__init__(href, roles=roles, description=description, **kwargs)
 
         self.href = href
-        self.geomf = GeometryFile(self.href)
+        self.geomf = GeometryFile(self.href, self.crs)
         self.extra_fields = {
             key: value
             for key, value in {
@@ -185,11 +188,11 @@ class GeometryAsset(GenericAsset):
                 VERSION: self.geomf.geom_version,
                 HAS_1D: self.geomf.has_1d,
                 HAS_2D: self.geomf.has_2d,
-                RIVERS: self.geomf.rivers,
-                REACHES: self.geomf.reaches,
-                JUNCTIONS: self.geomf.junctions,
-                CROSS_SECTIONS: self.geomf.cross_sections,
-                STRUCTURES: self.geomf.structures,
+                # RIVERS: self.geomf.rivers,
+                # REACHES: self.geomf.reaches,
+                # JUNCTIONS: self.geomf.junctions,
+                # CROSS_SECTIONS: self.geomf.cross_sections,
+                # STRUCTURES: self.geomf.structures,
                 # STORAGE_AREAS: self.geomf.storage_areas, #TODO: fix this
                 # CONNECTIONS: self.geomf.connections,#TODO: fix this
                 # BREACH_LOCATIONS: self.planf.breach_locations,
@@ -217,7 +220,7 @@ class SteadyFlowAsset(GenericAsset):
         self.extra_fields = {
             key: value
             for key, value in {
-                TITLE: self.flowf.geom_title,
+                TITLE: self.flowf.flow_title,
                 N_PROFILES: self.flowf.n_profiles,
             }.items()
             if value
@@ -340,22 +343,49 @@ class GeometryHdfAsset(GenericAsset):
 
     regex_parse_str = r".+\.g\d{2}\.hdf$"
 
-    def __init__(self, href: str, **kwargs):
+    def __init__(self, href: str, crs: str = None, **kwargs):
         roles = kwargs.get("roles", []) + ["geometry-hdf-file"]
         description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
-
         self.hdf_object = GeometryHDFFile(self.href)
+        self.crs = crs
+        self.has_2d = None
+        if self.crs is None:
+            try:
+                self.crs = CRS.from_user_input(self.hdf_object.projection)
+                logging.info(f"crs has been set to {self.crs}")
+            except CRSError:
+                logging.warning(f"Could not extract crs from {self.href}")
+
         self.extra_fields = {
             key: value
             for key, value in {
                 VERSION: self.hdf_object.file_version,
                 UNITS: self.hdf_object.units_system,
-                # REFERENCE_LINES: self.hdf_object.reference_lines,#TODO: fix this
+                PROJECTION: self.crs.to_wkt() if self.crs is not None else None,
+                REFERENCE_LINES: (
+                    list(self.hdf_object.reference_lines["refln_name"])
+                    if self.hdf_object.reference_lines is not None and not self.hdf_object.reference_lines.empty
+                    else None
+                ),
             }.items()
             if value
         }
+
+    @property
+    def check_2d(self):
+        """Check if the geometry asset has 2d geometry, if yes then return True and set has_2d to True."""
+        try:
+            logging.debug(f"reading mesh areas using crs {self.crs}...")
+
+            if self.hdf_object.mesh_areas(self.crs):
+                self.has_2d = True
+                return True
+        except ValueError:
+            logging.warning(f"No mesh areas found for {self.href}")
+            self.has_2d = False
+            return False
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """
@@ -444,7 +474,7 @@ class GeometryHdfAsset(GenericAsset):
 
         return GenericAsset(
             href=filename,
-            title="Model Thumbnail",
+            title=filename.split(".")[0],
             description="Thumbnail image for the model",
             media_type=media_type,
             roles=["thumbnail"],
@@ -453,33 +483,21 @@ class GeometryHdfAsset(GenericAsset):
 
     def thumbnail(
         self,
-        add_asset: bool,
-        write: bool,
         layers: list,
         title: str = "Model_Thumbnail",
-        add_usgs_properties: bool = False,
-        crs="EPSG:4326",
         thumbnail_dest: str = None,
     ):
-        """Create a thumbnail figure for each geometry hdf file, including
+        """Create a thumbnail figure for a geometry hdf file, including
         various geospatial layers such as USGS gages, mesh areas,
-        breaklines, and boundary condition (BC) lines. If `add_asset` or `write`
-        is `True`, the function saves the thumbnail to a file and optionally
-        adds it as an asset.
+        breaklines, and boundary condition (BC) lines.
 
         Parameters
         ----------
-        add_asset : bool
-            Whether to add the thumbnail as an asset in the asset dictionary. If true then it also writes the thumbnail to a file.
-        write : bool
-            Whether to save the thumbnail image to a file.
         layers : list
             A list of model layers to include in the thumbnail plot.
             Options include "usgs_gages", "mesh_areas", "breaklines", and "bc_lines".
         title : str, optional
             Title of the figure, by default "Model Thumbnail".
-        add_usgs_properties : bool, optional
-            If usgs_gages is included in layers, adds USGS metadata to the STAC item properties. Defaults to false.
         """
 
         fig, ax = plt.subplots(figsize=(12, 12))
@@ -487,36 +505,17 @@ class GeometryHdfAsset(GenericAsset):
 
         for layer in layers:
             try:
-                # if layer == "usgs_gages":
-                #     if add_usgs_properties:
-                #         gages_gdf = self.get_usgs_data(True, geom_asset=geom_asset)
-                #     else:
-                #         gages_gdf = self.get_usgs_data(False, geom_asset=geom_asset)
-                #     gages_gdf_geo = gages_gdf.to_crs(self.crs)
-                #     legend_handles += self._plot_usgs_gages(ax, gages_gdf_geo)
-                # else:
-                #     if not hasattr(geom_asset, layer):
-                #         raise AttributeError(f"Layer {layer} not found in {geom_asset.hdf_file}")
-
-                # if layer == "mesh_areas":
-                #     layer_data = geom_asset.mesh_areas(self.crs, return_gdf=True)
-                # else:
-                #     layer_data = getattr(geom_asset, layer)
-
-                # if layer_data.crs is None:
-                #     layer_data.set_crs(self.crs, inplace=True)
-                # layer_data_geo = layer_data.to_crs(self.crs)
-
                 if layer == "mesh_areas":
-                    mesh_areas_data = self.mesh_areas(crs, return_gdf=True)
-                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_data)
+                    mesh_areas_data = self.hdf_object.mesh_cells
+                    mesh_areas_geo = mesh_areas_data.set_crs(self.crs)
+                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_geo)
                 elif layer == "breaklines":
-                    breaklines_data = self.breaklines
-                    breaklines_data_geo = breaklines_data.to_crs(crs)
+                    breaklines_data = self.hdf_object.breaklines
+                    breaklines_data_geo = breaklines_data.set_crs(self.crs)
                     legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
                 elif layer == "bc_lines":
-                    bc_lines_data = self.bc_lines
-                    bc_lines_data_geo = bc_lines_data.to_crs(crs)
+                    bc_lines_data = self.hdf_object.bc_lines
+                    bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
                     legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:
                 logging.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
@@ -524,7 +523,7 @@ class GeometryHdfAsset(GenericAsset):
         # Add OpenStreetMap basemap
         ctx.add_basemap(
             ax,
-            crs=crs,
+            crs=self.crs,
             source=ctx.providers.OpenStreetMap.Mapnik,
             alpha=0.4,
         )
@@ -533,23 +532,22 @@ class GeometryHdfAsset(GenericAsset):
         ax.set_ylabel("Latitude")
         ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
 
-        if add_asset or write:
-            hdf_ext = os.path.basename(self.href).split(".")[-2]
-            filename = f"thumbnail_{hdf_ext}.png"
-            base_dir = os.path.dirname(thumbnail_dest)
-            filepath = os.path.join(base_dir, filename)
+        hdf_ext = os.path.basename(self.href).split(".")[-2]
+        filename = f"thumbnail_{hdf_ext}.png"
+        base_dir = os.path.dirname(thumbnail_dest)
+        filepath = os.path.join(base_dir, filename)
 
-            # if filepath.startswith("s3://"):
-            #     img_data = io.BytesIO()
-            #     fig.savefig(img_data, format="png", bbox_inches="tight")
-            #     img_data.seek(0)
-            #     save_bytes_s3(img_data, filepath)
-            # else:
+        if filepath.startswith("s3://"):
+            pass
+            # TODO add thumbnail s3 functionality
+            # img_data = io.BytesIO()
+            # fig.savefig(img_data, format="png", bbox_inches="tight")
+            # img_data.seek(0)
+            # save_bytes_s3(img_data, filepath)
+        else:
             os.makedirs(base_dir, exist_ok=True)
             fig.savefig(filepath, dpi=80, bbox_inches="tight")
-
-            if add_asset:
-                return self._add_thumbnail_asset(filepath)
+        return self._add_thumbnail_asset(filepath)
 
 
 class RunFileAsset(GenericAsset):
@@ -846,8 +844,6 @@ class RasMapperFileAsset(GenericAsset):
     def __init__(self, href: str, *args, **kwargs):
         roles = ["ras-mapper-file", "ras-file", MediaType.TEXT]
         description = "RAS Mapper file."
-        media_type = MediaType.TEXT
-        extra_fields = kwargs.get("extra_fields", {})
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 

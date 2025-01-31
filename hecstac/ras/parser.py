@@ -9,8 +9,9 @@ from typing import Iterator
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from pyproj.exceptions import CRSError
 from pystac import Asset
-from rashdf import RasHdf, RasPlanHdf
+from rashdf import RasGeomHdf, RasPlanHdf
 from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
@@ -655,11 +656,11 @@ class ProjectFile:
 
     @property
     def project_description(self) -> str:
-        return search_contents(self.file_lines, "Model Description", token=":")
+        return search_contents(self.file_lines, "Model Description", token=":", require_one=False)
 
     @property
     def project_status(self) -> str:
-        return search_contents(self.file_lines, "Status of Model", token=":")
+        return search_contents(self.file_lines, "Status of Model", token=":", require_one=False)
 
     @property
     def project_units(self) -> str | None:
@@ -670,7 +671,7 @@ class ProjectFile:
     @property
     def plan_current(self) -> str | None:
         try:
-            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True)
+            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False)
             return self.name_from_suffix(suffix)
         except Exception:
             logging.warning("Ras model has no current plan")
@@ -678,9 +679,11 @@ class ProjectFile:
 
     @property
     def ras_version(self) -> str | None:
-        version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False)
+        version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
         if version == []:
-            version = search_contents(self.file_lines, "Program and Version", token=":", expect_one=False)
+            version = search_contents(
+                self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
+            )
         if version == []:
             logging.warning("Unable to parse project version")
             return "N/A"
@@ -689,27 +692,27 @@ class ProjectFile:
 
     @property
     def plan_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Plan File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Plan File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def geometry_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Geom File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Geom File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def steady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Flow File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Flow File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def quasi_unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def unsteady_flow_files(self) -> list[str]:
-        suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False)
+        suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
 
@@ -751,7 +754,7 @@ class PlanFile:
         Breach Loc=                ,                ,        ,True,HH_DamEmbankment
         """
         breach_dict = {}
-        matches = search_contents(self.file_lines, "Breach Loc", expect_one=False)
+        matches = search_contents(self.file_lines, "Breach Loc", expect_one=False, require_one=False)
         for line in matches:
             parts = line.split(",")
             if len(parts) >= 4:
@@ -764,9 +767,10 @@ class PlanFile:
 class GeometryFile:
     """HEC-RAS Geometry file asset."""
 
-    def __init__(self, fpath):
+    def __init__(self, fpath, crs):
         # TODO: Compare with HMS implementation
         self.fpath = fpath
+        self.crs = crs
         with open(fpath, "r") as f:
             self.file_lines = f.readlines()
 
@@ -794,7 +798,7 @@ class GeometryFile:
     @property
     def reaches(self) -> dict[str, "Reach"]:
         """A dictionary of the reaches contained in the HEC-RAS geometry file."""
-        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False)
+        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False, require_one=False)
         return {river_reach: Reach(self.file_lines, river_reach, self.crs) for river_reach in river_reaches}
 
     @property
@@ -861,23 +865,26 @@ class GeometryFile:
     def concave_hull(self) -> Polygon:
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
-        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
-        for river_reach in xs_gdf["river_reach"].unique():
-            xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
-            points = xs_subset.boundary.explode(index_parts=True).unstack()
-            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
-            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
-            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
-            if isinstance(polygon, MultiPolygon):
-                polygons += list(polygon.geoms)
-            else:
-                polygons.append(polygon)
-        if len(self.junctions) > 0:
-            for junction in self.junctions.values():
-                for _, j in junction.gdf.iterrows():
-                    polygons.append(self.junction_hull(xs_gdf, j))
-        out_hull = union_all([make_valid(p) for p in polygons])
-        return out_hull
+        if self.cross_sections:
+            xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+            for river_reach in xs_gdf["river_reach"].unique():
+                xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
+                points = xs_subset.boundary.explode(index_parts=True).unstack()
+                points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
+                points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
+                polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
+                if isinstance(polygon, MultiPolygon):
+                    polygons += list(polygon.geoms)
+                else:
+                    polygons.append(polygon)
+            if len(self.junctions) > 0:
+                for junction in self.junctions.values():
+                    for _, j in junction.gdf.iterrows():
+                        polygons.append(self.junction_hull(xs_gdf, j))
+            out_hull = union_all([make_valid(p) for p in polygons])
+            return out_hull
+        else:
+            raise ValueError(f"No cross sections found for {self.fpath}. Cannot calculate geometry")
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
@@ -989,7 +996,9 @@ class UnsteadyFlowFile:
 
     @property
     def reference_lines(self):
-        return search_contents(self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False)
+        return search_contents(
+            self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False, require_one=False
+        )
 
 
 class QuasiUnsteadyFlowFile:
@@ -1007,31 +1016,14 @@ class QuasiUnsteadyFlowFile:
 class RASHDFFile:
     """Base class for HDF assets (Plan and Geometry HDF files)."""
 
-    def __init__(self, fpath):
+    def __init__(self, fpath, hdf_constructor):
         self.fpath = fpath
 
-        self.hdf_object = RasHdf(fpath)
+        self.hdf_object = hdf_constructor(fpath)
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
         self._2d_flow_attrs: dict | None = None
-
-    # def populate(
-    #     self,
-    #     optional_property_dict: dict[str, str],
-    #     required_property_dict: dict[str, str],
-    # ) -> dict:
-    #     extra_fields = {}
-    #     # go through dictionary of stac property names and class property names, only adding property to extra fields if the value is not None
-    #     for stac_property_name, class_property_name in optional_property_dict.items():
-    #         property_value = getattr(self, class_property_name)
-    #         if property_value != None:
-    #             extra_fields[stac_property_name] = property_value
-    #     # go through dictionary of stac property names and class property names, adding all properties to extra fields regardless of value
-    #     for stac_property_name, class_property_name in required_property_dict.items():
-    #         property_value = getattr(self, class_property_name)
-    #         extra_fields[stac_property_name] = property_value
-    #     return extra_fields
 
     @property
     def file_version(self) -> str | None:
@@ -1049,7 +1041,7 @@ class RASHDFFile:
     def geometry_time(self) -> datetime.datetime | None:
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
-        return self._geom_attrs.get("Geometry Time").isoformat()
+        return self._geom_attrs.get("Geometry Time")
 
     @property
     def landcover_date_last_modified(self) -> datetime.datetime | None:
@@ -1153,14 +1145,25 @@ class RASHDFFile:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Minimum Size")))
 
-    def mesh_areas(self, crs, return_gdf=False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
+    def mesh_areas(self, crs: str = None, return_gdf: bool = False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
+        """Retrieves and processes mesh area geometries.
 
-        mesh_areas = self.hdf_object.mesh_cell_polygons()
+        Parameters
+        ----------
+        crs : str, optional
+            The coordinate reference system (CRS) to set if the mesh areas do not have one. Defaults to None
+        return_gdf : bool, optional
+            If True, returns a GeoDataFrame of the mesh areas. If False, returns a unified Polygon or Multipolygon geometry. Defaults to False.
+        """
+        mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
             raise ValueError("No mesh areas found.")
 
-        if mesh_areas.crs and mesh_areas.crs != crs:
-            mesh_areas = mesh_areas.to_crs(crs)
+        if mesh_areas.crs is None and crs is not None:
+            mesh_areas = mesh_areas.set_crs(crs)
+
+        elif mesh_areas.crs is None and crs is None:
+            raise CRSError("Mesh areas have no CRS and have none to be set to")
 
         if return_gdf:
             return mesh_areas
@@ -1174,8 +1177,17 @@ class RASHDFFile:
 
         if breaklines is None or breaklines.empty:
             raise ValueError("No breaklines found.")
-        else:
-            return breaklines
+
+        return breaklines
+
+    @property
+    def mesh_cells(self) -> gpd.GeoDataFrame | None:
+        mesh_cells = self.hdf_object.mesh_cell_polygons()
+
+        if mesh_cells is None or mesh_cells.empty:
+            raise ValueError("No mesh cells found.")
+
+        return mesh_cells
 
     @property
     def bc_lines(self) -> gpd.GeoDataFrame | None:
@@ -1183,8 +1195,8 @@ class RASHDFFile:
 
         if bc_lines is None or bc_lines.empty:
             raise ValueError("No boundary condition lines found.")
-        else:
-            return bc_lines
+
+        return bc_lines
 
     @property
     def landcover_filename(self) -> str | None:
@@ -1202,7 +1214,7 @@ class RASHDFFile:
 class PlanHDFFile(RASHDFFile):
 
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, **kwargs)
+        super().__init__(fpath, RasPlanHdf, **kwargs)
 
         self.hdf_object = RasPlanHdf(fpath)
         self._plan_info_attrs = None
@@ -1211,8 +1223,6 @@ class PlanHDFFile(RASHDFFile):
 
     @property
     def plan_information_base_output_interval(self) -> str | None:
-        # example property to show pattern: if attributes in which property is found is not loaded, load them
-        # then use key for the property in the dictionary of attributes to retrieve the property
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Base Output Interval")
@@ -1443,12 +1453,16 @@ class PlanHDFFile(RASHDFFile):
 class GeometryHDFFile(RASHDFFile):
 
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, **kwargs)
+        super().__init__(fpath, RasGeomHdf, **kwargs)
 
-        self.hdf_object = RasPlanHdf(fpath)
+        self.hdf_object = RasGeomHdf(fpath)
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
+
+    @property
+    def projection(self):
+        return self.hdf_object.projection()
 
     @property
     def cross_sections(self) -> int | None:
@@ -1460,6 +1474,6 @@ class GeometryHDFFile(RASHDFFile):
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            raise ValueError("No reference lines found.")
+            logging.warning("No reference lines found.")
         else:
             return ref_lines

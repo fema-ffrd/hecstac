@@ -19,7 +19,9 @@ def is_ras_prj(url: str) -> bool:
         return False
 
 
-def search_contents(lines: list[str], search_string: str, token: str = "=", expect_one: bool = True) -> list[str] | str:
+def search_contents(
+    lines: list[str], search_string: str, token: str = "=", expect_one: bool = True, require_one: bool = True
+) -> list[str] | str:
     """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
     results = []
     for line in lines:
@@ -27,9 +29,9 @@ def search_contents(lines: list[str], search_string: str, token: str = "=", expe
             results.append(line.split(token)[1])
 
     if expect_one and len(results) > 1:
-        raise ValueError(f"expected 1 result, got {len(results)}")
-    elif expect_one and len(results) == 0:
-        raise ValueError("expected 1 result, no results found")
+        raise ValueError(f"expected 1 result for {search_string}, got {len(results)} results")
+    elif require_one and len(results) == 0:
+        raise ValueError(f"1 result for {search_string} is required, no results found")
     elif expect_one and len(results) == 1:
         return results[0]
     else:
