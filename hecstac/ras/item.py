@@ -44,58 +44,54 @@ class RASModelItem(Item):
     RAS_HAS_2D = "ras:has_2d"
     RAS_DATETIME_SOURCE = "ras:datetime_source"
 
-    def __init__(self, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
+    @classmethod
+    def from_prj(cls, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
+        """Create an item from a RAS .prj file."""
+        properties = {"ras_project_file": ras_project_file}
+        pm = LocalPathManager(Path(ras_project_file).parent)
 
-        self._project = None
-        self.assets = {}
-        self.links = []
-        self.thumbnail_paths = []
-        self.geojson_paths = []
-        self.extra_fields = {}
-        self._geom_files = []
-        self.stac_extensions = None
-        self.pm = LocalPathManager(Path(ras_project_file).parent)
-        self._href = self.pm.item_path(item_id)
-        self.crs = crs
-        self.ras_project_file = ras_project_file
-        self._simplify_geometry = simplify_geometry
+        href = pm.item_path(item_id)
 
-        self.pf = ProjectFile(self.ras_project_file)
-
-        self.factory = AssetFactory(RAS_EXTENSION_MAPPING)
-        self.has_1d = False
-        self.has_2d = False
-
-        super().__init__(
-            Path(self.ras_project_file).stem,
+        stac = cls(
+            Path(ras_project_file).stem,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
-            self._properties,
-            href=self._href,
+            properties,
+            href=href,
         )
+        stac._href = href
+        stac.factory = AssetFactory(RAS_EXTENSION_MAPPING)
+        stac.crs = crs
+        stac._project = None
+        stac.pm = pm
+        stac.pf = ProjectFile(ras_project_file)
 
-        ras_asset_files = self.scan_model_dir()
+        ras_asset_files = stac.scan_model_dir(ras_project_file)
 
         for fpath in ras_asset_files:
-            if fpath and fpath != self._href:
+            if fpath and fpath != href:
                 logging.info(f"Processing asset: {fpath}")
-                self.add_ras_asset(fpath)
+                stac.add_ras_asset(fpath)
 
-        # Update geometry and datetime after assets have been added
-        self._geometry
-        self._datetime
+        stac.add_geometry(simplify_geometry)
+        stac.properties.update(stac.add_properties)
+        stac.datetime = stac._datetime
+        if stac.crs:
+            stac.apply_projection_extension(stac.crs)
+
+        return stac
 
     def _register_extensions(self) -> None:
         ProjectionExtension.add_to(self)
         StorageExtension.add_to(self)
 
     @property
-    def _properties(self) -> None:
+    def add_properties(self) -> None:
         """Properties for the RAS STAC item."""
 
         properties = {}
-        properties[self.RAS_HAS_1D] = self.has_1d
+        # properties[self.RAS_HAS_1D] = self.has_1d
         properties[self.RAS_HAS_2D] = self.has_2d
         properties[self.PROJECT_TITLE] = self.pf.project_title
         properties[self.PROJECT_VERSION] = self.pf.ras_version
@@ -106,8 +102,7 @@ class RASModelItem(Item):
         # TODO: once all assets are created, populate associations between assets
         return properties
 
-    @property
-    def _geometry(self) -> dict | None:
+    def add_geometry(self, simplify_geometry: bool) -> dict | None:
         """Parses geometries from 2d hdf files and updates the stac item geometry, simplifying them if needed."""
         geometries = []
 
@@ -122,7 +117,7 @@ class RASModelItem(Item):
             return
 
         unioned_geometry = union_all(geometries)
-        if self._simplify_geometry:
+        if simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
 
         self.geometry = json.loads(to_geojson(unioned_geometry))
@@ -146,8 +141,7 @@ class RASModelItem(Item):
             logging.warning("Could not extract item datetime from geometry, using item processing time.")
             item_datetime = datetime.datetime.now()
             self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
-
-        self.datetime = item_datetime
+        return item_datetime
 
     def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail"):
         """Generates model thumbnail asset for each geometry file.
@@ -162,7 +156,7 @@ class RASModelItem(Item):
 
         for geom in self._geom_files:
             if isinstance(geom, GeometryHdfAsset):
-                self.assets[f"{geom.href[4:]}_thumbnail"] = geom.thumbnail(
+                self.assets[f"{geom.href}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=self._href
                 )
 
@@ -200,6 +194,8 @@ class RASModelItem(Item):
                     asset.crs = self.crs
 
                 if asset.check_2d:
+                    if not getattr(self, "_geom_files", None):
+                        self._geom_files = []
                     self._geom_files.append(asset)
                     self.has_2d = True
                     self.properties[self.RAS_HAS_2D] = True
@@ -252,9 +248,9 @@ class RASModelItem(Item):
     def ensure_projection_schema(self) -> None:
         ProjectionExtension.ensure_has_extension(self, True)
 
-    def scan_model_dir(self):
+    def scan_model_dir(self, ras_project_file):
         """Find all files in the project folder."""
-        base_dir = os.path.dirname(self.ras_project_file)
+        base_dir = os.path.dirname(ras_project_file)
         files = []
         for root, _, filenames in os.walk(base_dir):
             depth = root[len(base_dir) :].count(os.sep)
@@ -263,3 +259,9 @@ class RASModelItem(Item):
             for filename in filenames:
                 files.append(os.path.join(root, filename))
         return files
+
+    def apply_projection_extension(self, crs: str):
+        """Apply the projection extension to this item given a CRS."""
+        prj_ext = ProjectionExtension.ext(self, add_if_missing=True)
+        og_crs = CRS(crs)
+        prj_ext.apply(epsg=og_crs.to_epsg(), wkt2=og_crs.to_wkt())
