@@ -63,7 +63,6 @@ class RASModelItem(Item):
         stac._href = href
         stac.factory = AssetFactory(RAS_EXTENSION_MAPPING)
         stac.crs = crs
-        stac._project = None
         stac.pm = pm
         stac.pf = ProjectFile(ras_project_file)
 
@@ -74,7 +73,7 @@ class RASModelItem(Item):
                 logging.info(f"Processing asset: {fpath}")
                 stac.add_ras_asset(fpath)
 
-        stac.add_geometry(simplify_geometry)
+        stac.geometry, stac.bbox = stac.add_geometry(simplify_geometry)
         stac.properties.update(stac.add_properties)
         stac.datetime = stac._datetime
         if stac.crs:
@@ -120,8 +119,10 @@ class RASModelItem(Item):
         if simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
 
-        self.geometry = json.loads(to_geojson(unioned_geometry))
-        self.bbox = unioned_geometry.bounds
+        geometry = json.loads(to_geojson(unioned_geometry))
+        bbox = unioned_geometry.bounds
+
+        return geometry, bbox
 
     @property
     def _datetime(self) -> datetime:
@@ -143,7 +144,7 @@ class RASModelItem(Item):
             self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
         return item_datetime
 
-    def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail"):
+    def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail", thumbnail_dir=None):
         """Generates model thumbnail asset for each geometry file.
 
         Parameters
@@ -153,17 +154,21 @@ class RASModelItem(Item):
         title_prefix : str, optional
             Thumbnail title prefix, by default "Model_Thumbnail".
         """
+        if thumbnail_dir:
+            thumbnail_dest = thumbnail_dir
+        else:
+            thumbnail_dest = self._href
 
         for geom in self._geom_files:
             if isinstance(geom, GeometryHdfAsset):
                 self.assets[f"{geom.href}_thumbnail"] = geom.thumbnail(
-                    layers=layers, title=title_prefix, thumbnail_dest=self._href
+                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
 
         # TODO: Add 1d model thumbnails
 
     def add_ras_asset(self, fpath: str = "") -> None:
-        """Add an asset to the HMS STAC item."""
+        """Add an asset to the RAS STAC item."""
         if not os.path.exists(fpath):
             logging.warning(f"File not found: {fpath}")
             return
@@ -176,13 +181,8 @@ class RASModelItem(Item):
 
         if asset:
             self.add_asset(asset.title, asset)
-            if isinstance(asset, ProjectAsset):
-                if self._project is not None:
-                    logging.error(
-                        f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
-                    )
-                self._project = asset
-            elif isinstance(asset, GeometryHdfAsset):
+
+            if isinstance(asset, GeometryHdfAsset):
                 # if item and asset crs are None, pass and use null geometry
                 if self.crs is None and asset.crs is None:
                     pass
