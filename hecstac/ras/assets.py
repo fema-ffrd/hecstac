@@ -463,8 +463,6 @@ class GeometryHdfAsset(GenericAsset):
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
 
-        filename = os.path.basename(filepath)
-
         if filepath.startswith("s3://"):
             media_type = "image/png"
         else:
@@ -473,8 +471,8 @@ class GeometryHdfAsset(GenericAsset):
             media_type = "image/png"
 
         return GenericAsset(
-            href=filename,
-            title=filename.split(".")[0],
+            href=filepath,
+            title=filepath.split("/")[-1],
             description="Thumbnail image for the model",
             media_type=media_type,
             roles=["thumbnail"],
