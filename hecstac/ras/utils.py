@@ -236,7 +236,8 @@ def multithreading_enabled(func):
     ndarrays to False.
 
     NB: multithreading also requires the GIL to be released, which is done in
-    the C extension (ufuncs.c)."""
+    the C extension (ufuncs.c).
+    """
 
     @wraps(func)
     def wrapped(*args, **kwargs):
@@ -273,7 +274,7 @@ def reverse(geometry, **kwargs):
     **kwargs
         See :ref:`NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
 
-    See also
+    See Also
     --------
     is_ccw : Checks if a Geometry is clockwise.
 
@@ -287,5 +288,4 @@ def reverse(geometry, **kwargs):
     >>> reverse(None) is None
     True
     """
-
     return lib.reverse(geometry, **kwargs)
