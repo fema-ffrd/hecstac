@@ -750,7 +750,7 @@ class PlanFile:
     @property
     def breach_locations(self) -> dict:
         """
-        example file line:
+        Example file line:
         Breach Loc=                ,                ,        ,True,HH_DamEmbankment
         """
         breach_dict = {}
@@ -980,11 +980,11 @@ class UnsteadyFlowFile:
     @property
     def boundary_locations(self) -> list:
         """
-        example file line:
+        Example file line:
         Boundary Location=                ,                ,        ,        ,                ,Perimeter 1     ,                ,PugetSound_Ocean_Boundary       ,
         """
         boundary_dict = []
-        matches = search_contents(self.file_lines, "Boundary Location", expect_one=False)
+        matches = search_contents(self.file_lines, "Boundary Location", expect_one=False, require_one=False)
         for line in matches:
             parts = line.split(",")
             if len(parts) >= 7:
