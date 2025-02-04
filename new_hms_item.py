@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hecstac.common.logger import initialize_logger
+from hecstac.hms.logger import initialize_logger
 from hecstac.hms.item import HMSModelItem
 
 
