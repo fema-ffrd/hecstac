@@ -65,6 +65,9 @@ class RASModelItem(Item):
         stac.crs = crs
         stac.pm = pm
         stac.pf = ProjectFile(ras_project_file)
+        stac.has_2d = False
+        stac.has_1d = False
+        stac._geom_files = []
 
         ras_asset_files = stac.scan_model_dir(ras_project_file)
 
@@ -81,14 +84,9 @@ class RASModelItem(Item):
 
         return stac
 
-    def _register_extensions(self) -> None:
-        ProjectionExtension.add_to(self)
-        StorageExtension.add_to(self)
-
     @property
     def add_properties(self) -> None:
         """Properties for the RAS STAC item."""
-
         properties = {}
         # properties[self.RAS_HAS_1D] = self.has_1d
         properties[self.RAS_HAS_2D] = self.has_2d
@@ -113,7 +111,7 @@ class RASModelItem(Item):
 
         if len(geometries) == 0:
             logging.error("No geometry found for RAS item.")
-            return
+            return NULL_STAC_GEOMETRY, NULL_STAC_BBOX
 
         unioned_geometry = union_all(geometries)
         if simplify_geometry:
@@ -194,8 +192,7 @@ class RASModelItem(Item):
                     asset.crs = self.crs
 
                 if asset.check_2d:
-                    if not getattr(self, "_geom_files", None):
-                        self._geom_files = []
+                    self._geom_files = []
                     self._geom_files.append(asset)
                     self.has_2d = True
                     self.properties[self.RAS_HAS_2D] = True
@@ -207,7 +204,6 @@ class RASModelItem(Item):
 
     def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
         """Convert geometry CRS to EPSG:4326 for stac item geometry."""
-
         pyproj_crs = CRS.from_user_input(self.crs)
         wgs_crs = CRS.from_authority("EPSG", "4326")
         if pyproj_crs != wgs_crs:
@@ -217,7 +213,6 @@ class RASModelItem(Item):
 
     def parse_1d_geom(self):
         """Read 1d geometry from concave hull."""
-
         logging.info("Creating geometry using 1d text file cross sections")
         concave_hull_polygons: list[Polygon] = []
         for geom_asset in self._geom_files:
@@ -234,7 +229,6 @@ class RASModelItem(Item):
 
     def parse_2d_geom(self):
         """Read 2d geometry from hdf file mesh areas."""
-
         mesh_area_polygons: list[Polygon] = []
         for geom_asset in self._geom_files:
             if isinstance(geom_asset, GeometryHdfAsset):
