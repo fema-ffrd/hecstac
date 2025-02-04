@@ -112,8 +112,8 @@ class ProjectAsset(GenericAsset):
     regex_parse_str = r".+\.prj$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["project-file", "ras-file"]
-        description = kwargs.get("description", "The HEC-RAS project file.")
+        roles = kwargs.pop("roles", []) + ["project-file", "ras-file"]
+        description = kwargs.pop("description", "The HEC-RAS project file.")
 
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
@@ -139,8 +139,8 @@ class PlanAsset(GenericAsset):
     regex_parse_str = r".+\.p\d{2}$"
 
     def __init__(self, href: str, **kwargs):
-        roles = kwargs.get("roles", []) + ["plan-file", "ras-file"]
-        description = kwargs.get(
+        roles = kwargs.pop("roles", []) + ["plan-file", "ras-file"]
+        description = kwargs.pop(
             "description",
             "The plan file which contains a list of associated input files and all simulation options.",
         )
@@ -171,8 +171,8 @@ class GeometryAsset(GenericAsset):
     def __init__(self, href: str, crs: str = None, **kwargs):
         # self.pyproj_crs = self.validate_crs(crs)
         self.crs = crs
-        roles = kwargs.get("roles", []) + ["geometry-file", "ras-file"]
-        description = kwargs.get(
+        roles = kwargs.pop("roles", []) + ["geometry-file", "ras-file"]
+        description = kwargs.pop(
             "description",
             "The geometry file which contains cross-sectional, 2D, hydraulic structures, and other geometric data",
         )
@@ -207,8 +207,8 @@ class SteadyFlowAsset(GenericAsset):
     regex_parse_str = r".+\.f\d{2}$"
 
     def __init__(self, href: str, **kwargs):
-        roles = kwargs.get("roles", []) + ["steady-flow-file", "ras-file"]
-        description = kwargs.get(
+        roles = kwargs.pop("roles", []) + ["steady-flow-file", "ras-file"]
+        description = kwargs.pop(
             "description",
             "Steady Flow file which contains profile information, flow data, and boundary conditions.",
         )
@@ -235,8 +235,8 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
     regex_parse_str = r".+\.q\d{2}$"
 
     def __init__(self, href: str, **kwargs):
-        roles = kwargs.get("roles", []) + ["quasi-unsteady-flow-file", "ras-file"]
-        description = kwargs.get("description", "Quasi-Unsteady Flow file.")
+        roles = kwargs.pop("roles", []) + ["quasi-unsteady-flow-file", "ras-file"]
+        description = kwargs.pop("description", "Quasi-Unsteady Flow file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
 
@@ -257,8 +257,8 @@ class UnsteadyFlowAsset(GenericAsset):
     regex_parse_str = r".+\.u\d{2}$"
 
     def __init__(self, href: str, **kwargs):
-        roles = kwargs.get("roles", []) + ["unsteady-flow-file", "ras-file"]
-        description = kwargs.get(
+        roles = kwargs.pop("roles", []) + ["unsteady-flow-file", "ras-file"]
+        description = kwargs.pop(
             "description",
             "The unsteady file contains hydrographs, initial conditions, and any flow options.",
         )
@@ -284,8 +284,8 @@ class PlanHdfAsset(GenericAsset):
     regex_parse_str = r".+\.p\d{2}\.hdf$"
 
     def __init__(self, href: str, **kwargs):
-        roles = kwargs.get("roles", []) + ["ras-file"]
-        description = kwargs.get("description", "The HEC-RAS plan HDF file.")
+        roles = kwargs.pop("roles", []) + ["ras-file"]
+        description = kwargs.pop("description", "The HEC-RAS plan HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
 
@@ -344,8 +344,8 @@ class GeometryHdfAsset(GenericAsset):
     regex_parse_str = r".+\.g\d{2}\.hdf$"
 
     def __init__(self, href: str, crs: str = None, **kwargs):
-        roles = kwargs.get("roles", []) + ["geometry-hdf-file"]
-        description = kwargs.get("description", "The HEC-RAS geometry HDF file.")
+        roles = kwargs.pop("roles", []) + ["geometry-hdf-file"]
+        description = kwargs.pop("description", "The HEC-RAS geometry HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
         self.hdf_object = GeometryHDFFile(self.href)
@@ -552,8 +552,11 @@ class RunFileAsset(GenericAsset):
     regex_parse_str = r".+\.r\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["run-file", "ras-file", MediaType.TEXT]
-        description = "Run file for steady flow analysis which contains all the necessary input data required for the RAS computational engine."
+        roles = kwargs.pop("roles", ["run-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop(
+            "description",
+            "Run file for steady flow analysis which contains all the necessary input data required for the RAS computational engine.",
+        )
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -563,8 +566,8 @@ class ComputationalLevelOutputAsset(GenericAsset):
     regex_parse_str = r".+\.hyd\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["computational-level-output-file", "ras-file", MediaType.TEXT]
-        description = "Detailed Computational Level output file."
+        roles = kwargs.pop("roles", ["computational-level-output-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Detailed Computational Level output file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -574,8 +577,11 @@ class GeometricPreprocessorAsset(GenericAsset):
     regex_parse_str = r".+\.c\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["geometric-preprocessor", "ras-file", MediaType.TEXT]
-        description = "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more."
+        roles = kwargs.pop("roles", ["geometric-preprocessor", "ras-file", MediaType.TEXT])
+        description = kwargs.pop(
+            "description",
+            "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more.",
+        )
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -585,8 +591,8 @@ class BoundaryConditionAsset(GenericAsset):
     regex_parse_str = r".+\.b\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["boundary-condition-file", "ras-file", MediaType.TEXT]
-        description = "Boundary Condition file."
+        roles = kwargs.pop("roles", ["boundary-condition-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Boundary Condition file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -596,8 +602,8 @@ class UnsteadyFlowLogAsset(GenericAsset):
     regex_parse_str = r".+\.bco\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["unsteady-flow-log-file", "ras-file", MediaType.TEXT]
-        description = "Unsteady Flow Log output file."
+        roles = kwargs.pop("roles", ["unsteady-flow-log-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Unsteady Flow Log output file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -607,8 +613,10 @@ class SedimentDataAsset(GenericAsset):
     regex_parse_str = r".+\.s\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["sediment-data-file", "ras-file", MediaType.TEXT]
-        description = "Sediment data file containing flow data, boundary conditions, and sediment data."
+        roles = kwargs.pop("roles", ["sediment-data-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop(
+            "description", "Sediment data file containing flow data, boundary conditions, and sediment data."
+        )
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -618,8 +626,8 @@ class HydraulicDesignAsset(GenericAsset):
     regex_parse_str = r".+\.h\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["hydraulic-design-file", "ras-file", MediaType.TEXT]
-        description = "Hydraulic Design data file."
+        roles = kwargs.pop("roles", ["hydraulic-design-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Hydraulic Design data file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -629,8 +637,10 @@ class WaterQualityAsset(GenericAsset):
     regex_parse_str = r".+\.w\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["water-quality-file", "ras-file", MediaType.TEXT]
-        description = "Water Quality file containing temperature boundary conditions and meteorological data."
+        roles = kwargs.pop("roles", ["water-quality-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop(
+            "description", "Water Quality file containing temperature boundary conditions and meteorological data."
+        )
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -640,8 +650,8 @@ class SedimentTransportCapacityAsset(GenericAsset):
     regex_parse_str = r".+\.SedCap\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["sediment-transport-capacity-file", "ras-file", MediaType.TEXT]
-        description = "Sediment Transport Capacity data."
+        roles = kwargs.pop("roles", ["sediment-transport-capacity-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Sediment Transport Capacity data.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -651,8 +661,8 @@ class XSOutputAsset(GenericAsset):
     regex_parse_str = r".+\.SedXS\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["xs-output-file", "ras-file", MediaType.TEXT]
-        description = "Cross section output file."
+        roles = kwargs.pop("roles", ["xs-output-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Cross section output file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -662,8 +672,8 @@ class XSOutputHeaderAsset(GenericAsset):
     regex_parse_str = r".+\.SedHeadXS\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["xs-output-header-file", "ras-file", MediaType.TEXT]
-        description = "Header file for the cross section output."
+        roles = kwargs.pop("roles", ["xs-output-header-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Header file for the cross section output.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -673,8 +683,8 @@ class WaterQualityRestartAsset(GenericAsset):
     regex_parse_str = r".+\.wqrst\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["water-quality-restart-file", "ras-file", MediaType.TEXT]
-        description = "The water quality restart file."
+        roles = kwargs.pop("roles", ["water-quality-restart-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "The water quality restart file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -684,8 +694,8 @@ class SedimentOutputAsset(GenericAsset):
     regex_parse_str = r".+\.sed$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["sediment-output-file", "ras-file", MediaType.TEXT]
-        description = "Detailed sediment output file."
+        roles = kwargs.pop("roles", ["sediment-output-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Detailed sediment output file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -695,8 +705,8 @@ class BinaryLogAsset(GenericAsset):
     regex_parse_str = r".+\.blf$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["binary-log-file", "ras-file", MediaType.TEXT]
-        description = "Binary Log file."
+        roles = kwargs.pop("roles", ["binary-log-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Binary Log file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -706,8 +716,8 @@ class DSSAsset(GenericAsset):
     regex_parse_str = r".+\.dss$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["ras-dss", "ras-file", MediaType.TEXT]
-        description = "The DSS file contains results and other simulation information."
+        roles = kwargs.pop("roles", ["ras-dss", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "The DSS file contains results and other simulation information.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -717,8 +727,8 @@ class LogAsset(GenericAsset):
     regex_parse_str = r".+\.log$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["ras-log", "ras-file", MediaType.TEXT]
-        description = "The log file contains information related to simulation processes."
+        roles = kwargs.pop("roles", ["ras-log", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "The log file contains information related to simulation processes.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -728,8 +738,8 @@ class RestartAsset(GenericAsset):
     regex_parse_str = r".+\.rst$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["restart-file", "ras-file", MediaType.TEXT]
-        description = "Restart file for resuming simulation runs."
+        roles = kwargs.pop("roles", ["restart-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Restart file for resuming simulation runs.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -739,8 +749,8 @@ class SiamInputAsset(GenericAsset):
     regex_parse_str = r".+\.SiamInput$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["siam-input-file", "ras-file", MediaType.TEXT]
-        description = "SIAM Input Data file."
+        roles = kwargs.pop("roles", ["siam-input-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "SIAM Input Data file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -750,8 +760,8 @@ class SiamOutputAsset(GenericAsset):
     regex_parse_str = r".+\.SiamOutput$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["siam-output-file", "ras-file", MediaType.TEXT]
-        description = "SIAM Output Data file."
+        roles = kwargs.pop("roles", ["siam-output-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "SIAM Output Data file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -761,8 +771,8 @@ class WaterQualityLogAsset(GenericAsset):
     regex_parse_str = r".+\.bco$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["water-quality-log", "ras-file", MediaType.TEXT]
-        description = "Water quality log file."
+        roles = kwargs.pop("roles", ["water-quality-log", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Water quality log file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -772,8 +782,8 @@ class ColorScalesAsset(GenericAsset):
     regex_parse_str = r".+\.color-scales$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["color-scales", "ras-file", MediaType.TEXT]
-        description = "File that contains the water quality color scale."
+        roles = kwargs.pop("roles", ["color-scales", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "File that contains the water quality color scale.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -783,8 +793,10 @@ class ComputationalMessageAsset(GenericAsset):
     regex_parse_str = r".+\.comp-msgs.txt$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["computational-message-file", "ras-file", MediaType.TEXT]
-        description = "Computational Message text file which contains messages from the computation process."
+        roles = kwargs.pop("roles", ["computational-message-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop(
+            "description", "Computational Message text file which contains messages from the computation process."
+        )
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -794,8 +806,8 @@ class UnsteadyRunFileAsset(GenericAsset):
     regex_parse_str = r".+\.x\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["run-file", "ras-file", MediaType.TEXT]
-        description = "Run file for Unsteady Flow simulations."
+        roles = kwargs.pop("roles", ["run-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Run file for Unsteady Flow simulations.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -805,8 +817,8 @@ class OutputFileAsset(GenericAsset):
     regex_parse_str = r".+\.o\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["output-file", "ras-file", MediaType.TEXT]
-        description = "Output RAS file which contains all computed results."
+        roles = kwargs.pop("roles", ["output-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Output RAS file which contains all computed results.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -816,8 +828,8 @@ class InitialConditionsFileAsset(GenericAsset):
     regex_parse_str = r".+\.IC\.O\d{2}$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["initial-conditions-file", "ras-file", MediaType.TEXT]
-        description = "Initial conditions file for unsteady flow plan."
+        roles = kwargs.pop("roles", ["initial-conditions-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Initial conditions file for unsteady flow plan.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -827,8 +839,8 @@ class PlanRestartFileAsset(GenericAsset):
     regex_parse_str = r".+\.p\d{2}\.rst$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["restart-file", "ras-file", MediaType.TEXT]
-        description = "Restart file for unsteady flow plan."
+        roles = kwargs.pop("roles", ["restart-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Restart file for unsteady flow plan.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -838,8 +850,8 @@ class RasMapperFileAsset(GenericAsset):
     regex_parse_str = r".+\.rasmap$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["ras-mapper-file", "ras-file", MediaType.TEXT]
-        description = "RAS Mapper file."
+        roles = kwargs.pop("roles", ["ras-mapper-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "RAS Mapper file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -849,8 +861,8 @@ class RasMapperBackupFileAsset(GenericAsset):
     regex_parse_str = r".+\.rasmap\.backup$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["ras-mapper-file", "ras-file", MediaType.TEXT]
-        description = "Backup RAS Mapper file."
+        roles = kwargs.pop("roles", ["ras-mapper-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Backup RAS Mapper file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -860,8 +872,8 @@ class RasMapperOriginalFileAsset(GenericAsset):
     regex_parse_str = r".+\.rasmap\.original$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = ["ras-mapper-file", "ras-file", MediaType.TEXT]
-        description = "Original RAS Mapper file."
+        roles = kwargs.pop("roles", ["ras-mapper-file", "ras-file", MediaType.TEXT])
+        description = kwargs.pop("description", "Original RAS Mapper file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -871,8 +883,8 @@ class MiscTextFileAsset(GenericAsset):
     regex_parse_str = r".+\.txt$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = [MediaType.TEXT]
-        description = "Miscellaneous text file."
+        roles = kwargs.pop("roles", [MediaType.TEXT])
+        description = kwargs.pop("description", "Miscellaneous text file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
@@ -882,8 +894,8 @@ class MiscXMLFileAsset(GenericAsset):
     regex_parse_str = r".+\.xml$"
 
     def __init__(self, href: str, *args, **kwargs):
-        roles = [MediaType.XML]
-        description = "Miscellaneous XML file."
+        roles = kwargs.pop("roles", [MediaType.XML])
+        description = kwargs.pop("description", "Miscellaneous XML file.")
         super().__init__(href, roles=roles, description=description, *args, **kwargs)
 
 
