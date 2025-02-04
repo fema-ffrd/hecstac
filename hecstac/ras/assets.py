@@ -462,7 +462,6 @@ class GeometryHdfAsset(GenericAsset):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-
         if filepath.startswith("s3://"):
             media_type = "image/png"
         else:
@@ -497,7 +496,6 @@ class GeometryHdfAsset(GenericAsset):
         title : str, optional
             Title of the figure, by default "Model Thumbnail".
         """
-
         fig, ax = plt.subplots(figsize=(12, 12))
         legend_handles = []
 

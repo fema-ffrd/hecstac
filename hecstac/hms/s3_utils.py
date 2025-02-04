@@ -63,10 +63,12 @@ def split_s3_key(s3_path: str) -> tuple[str, str]:
     """
     This function splits an S3 path into the bucket name and the key.
 
-    Parameters:
+    Parameters
+    ----------
         s3_path (str): The S3 path to split. It should be in the format 's3://bucket/key'.
 
-    Returns:
+    Returns
+    -------
         tuple: A tuple containing the bucket name and the key. If the S3 path does not contain a key, the second element
           of the tuple will be None.
 
@@ -112,10 +114,12 @@ def get_basic_object_metadata(obj: ObjectSummary) -> dict:
     """
     This function retrieves basic metadata of an AWS S3 object.
 
-    Parameters:
+    Parameters
+    ----------
         obj (ObjectSummary): The AWS S3 object.
 
-    Returns:
+    Returns
+    -------
         dict: A dictionary with the size, ETag, last modified date, storage platform, region, and
               storage tier of the object.
     """

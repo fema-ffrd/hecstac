@@ -168,7 +168,8 @@ class HMSModelItem(Item):
 
     def make_thumbnail(self, gdfs: dict):
         """Create a png from the geodataframes (values of the dictionary).
-        The dictionary keys are used to label the layers in the legend."""
+        The dictionary keys are used to label the layers in the legend.
+        """
         cdict = {
             "Subbasin": "black",
             "Reach": "blue",
