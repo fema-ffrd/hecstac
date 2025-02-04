@@ -1,3 +1,5 @@
+"""Contains classes and methods to parse HEC-RAS files."""
+
 import datetime
 import logging
 import math
@@ -31,6 +33,7 @@ def name_from_suffix(fpath: str, suffix: str) -> str:
 
 
 class River:
+    """HEC-RAS River."""
 
     def __init__(self, river: str, reaches: list[str] = []):
         self.river = river
@@ -193,6 +196,7 @@ class XS:
 
     @property
     def is_interpolated(self) -> bool:
+        """Check if xs is interpolated."""
         if self._is_interpolated == None:
             self._is_interpolated = "*" in self.split_xs_header(1)
         return self._is_interpolated
@@ -284,6 +288,8 @@ class XS:
 
 
 class StructureType(Enum):
+    """Structure types."""
+
     XS = 1
     CULVERT = 2
     BRIDGE = 3
@@ -293,7 +299,7 @@ class StructureType(Enum):
 
 
 class Structure:
-    """Structure."""
+    """HEC-RAS Structures."""
 
     def __init__(
         self,
@@ -626,6 +632,7 @@ class Junction:
 
 
 class StorageArea:
+    """HEC-RAS StorageArea."""
 
     def __init__(self, ras_data: list[str], crs: str):
         self.crs = crs
@@ -634,6 +641,7 @@ class StorageArea:
 
 
 class Connection:
+    """HEC-RAS Connection."""
 
     def __init__(self, ras_data: list[str], crs: str):
         self.crs = crs
@@ -652,24 +660,29 @@ class ProjectFile:
 
     @property
     def project_title(self) -> str:
+        """Return the project title."""
         return search_contents(self.file_lines, "Proj Title")
 
     @property
     def project_description(self) -> str:
+        """Return the model description."""
         return search_contents(self.file_lines, "Model Description", token=":", require_one=False)
 
     @property
     def project_status(self) -> str:
+        """Return the model status."""
         return search_contents(self.file_lines, "Status of Model", token=":", require_one=False)
 
     @property
     def project_units(self) -> str | None:
+        """Return the project units."""
         for line in self.file_lines:
             if "Units" in line:
                 return " ".join(line.split(" ")[:-1])
 
     @property
     def plan_current(self) -> str | None:
+        """Return the current plan."""
         try:
             suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False)
             return self.name_from_suffix(suffix)
@@ -679,6 +692,7 @@ class ProjectFile:
 
     @property
     def ras_version(self) -> str | None:
+        """Return the ras version."""
         version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
         if version == []:
             version = search_contents(
@@ -692,26 +706,31 @@ class ProjectFile:
 
     @property
     def plan_files(self) -> list[str]:
+        """Return the plan files."""
         suffixes = search_contents(self.file_lines, "Plan File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def geometry_files(self) -> list[str]:
+        """Return the geometry files."""
         suffixes = search_contents(self.file_lines, "Geom File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def steady_flow_files(self) -> list[str]:
+        """Return the flow files."""
         suffixes = search_contents(self.file_lines, "Flow File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def quasi_unsteady_flow_files(self) -> list[str]:
+        """Return the quasisteady flow files."""
         suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
     def unsteady_flow_files(self) -> list[str]:
+        """Return the unsteady flow files."""
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
@@ -727,29 +746,36 @@ class PlanFile:
 
     @property
     def plan_title(self) -> str:
+        """Return plan title."""
         return search_contents(self.file_lines, "Plan Title")
 
     @property
     def plan_version(self) -> str:
+        """Return program version."""
         return search_contents(self.file_lines, "Program Version")
 
     @property
     def geometry_file(self) -> str:
+        """Return geometry file."""
         suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
         return name_from_suffix(self.fpath, suffix)
 
     @property
     def flow_file(self) -> str:
+        """Return flow file."""
         suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
         return name_from_suffix(self.fpath, suffix)
 
     @property
     def short_identifier(self) -> str:
+        """Return short identifier."""
         return search_contents(self.file_lines, "Short Identifier", expect_one=True)
 
     @property
     def breach_locations(self) -> dict:
         """
+        Return breach locations.
+
         Example file line:
         Breach Loc=                ,                ,        ,True,HH_DamEmbankment
         """
@@ -776,10 +802,12 @@ class GeometryFile:
 
     @property
     def geom_title(self) -> str:
+        """Return geometry title."""
         return search_contents(self.file_lines, "Geom Title")
 
     @property
     def geom_version(self) -> str:
+        """Return program version."""
         return search_contents(self.file_lines, "Program Version")
 
     @property
@@ -837,7 +865,7 @@ class GeometryFile:
 
     @property
     def datetimes(self) -> list[datetime.datetime]:
-        """Get the latest node last updated entry for this geometry"""
+        """Get the latest node last updated entry for this geometry."""
         dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False)
         if len(dts) >= 1:
             try:
@@ -849,7 +877,7 @@ class GeometryFile:
 
     @property
     def has_2d(self) -> bool:
-        """Check if RAS geometry has any 2D areas"""
+        """Check if RAS geometry has any 2D areas."""
         for line in self.file_lines:
             if line.startswith("Storage Area Is2D=") and int(line[len("Storage Area Is2D=") :].strip()) in (1, -1):
                 # RAS mostly uses "-1" to indicate True and "0" to indicate False. Checking for "1" also here.
@@ -858,7 +886,7 @@ class GeometryFile:
 
     @property
     def has_1d(self) -> bool:
-        """Check if RAS geometry has any 1D components"""
+        """Check if RAS geometry has any 1D components."""
         return len(self.cross_sections) > 0
 
     @property
@@ -938,6 +966,7 @@ class GeometryFile:
         )  # TODO: may need to add some logic here for empty dicts
 
     def iter_labeled_gdfs(self) -> Iterator[tuple[str, gpd.GeoDataFrame]]:
+        """Return gdf and associated property."""
         for property in self.PROPERTIES_WITH_GDF:
             gdf = self.get_subtype_gdf(property)
             yield property, gdf
@@ -958,10 +987,12 @@ class SteadyFlowFile:
 
     @property
     def flow_title(self) -> str:
+        """Return flow title."""
         return search_contents(self.file_lines, "Flow Title")
 
     @property
     def n_profiles(self) -> int:
+        """Return number of profiles."""
         return int(search_contents(self.file_lines, "Number of Profiles"))
 
 
@@ -975,11 +1006,14 @@ class UnsteadyFlowFile:
 
     @property
     def flow_title(self) -> str:
+        """Return flow title."""
         return search_contents(self.file_lines, "Flow Title")
 
     @property
     def boundary_locations(self) -> list:
         """
+        Return boundary locations.
+
         Example file line:
         Boundary Location=                ,                ,        ,        ,                ,Perimeter 1     ,                ,PugetSound_Ocean_Boundary       ,
         """
@@ -996,6 +1030,7 @@ class UnsteadyFlowFile:
 
     @property
     def reference_lines(self):
+        """Return reference lines."""
         return search_contents(
             self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False, require_one=False
         )
@@ -1014,7 +1049,7 @@ class QuasiUnsteadyFlowFile:
 
 
 class RASHDFFile:
-    """Base class for HDF assets (Plan and Geometry HDF files)."""
+    """Base class for parsing HDF assets (Plan and Geometry HDF files)."""
 
     def __init__(self, fpath, hdf_constructor):
         self.fpath = fpath
@@ -1027,126 +1062,146 @@ class RASHDFFile:
 
     @property
     def file_version(self) -> str | None:
+        """Return File Version."""
         if self._root_attrs == None:
             self._root_attrs = self.hdf_object.get_root_attrs()
         return self._root_attrs.get("File Version")
 
     @property
     def units_system(self) -> str | None:
+        """Return Units System."""
         if self._root_attrs == None:
             self._root_attrs = self.hdf_object.get_root_attrs()
         return self._root_attrs.get("Units System")
 
     @property
     def geometry_time(self) -> datetime.datetime | None:
+        """Return Geometry Time."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Geometry Time")
 
     @property
     def landcover_date_last_modified(self) -> datetime.datetime | None:
+        """Return Land Cover Date Last Modified."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Land Cover Date Last Modified")
 
     @property
     def landcover_filename(self) -> str | None:
+        """Return Land Cover Filename."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Land Cover Filename")
 
     @property
     def landcover_layername(self) -> str | None:
+        """Return Land Cover Layername."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Land Cover Layername")
 
     @property
     def rasmapperlibdll_date(self) -> datetime.datetime | None:
+        """Return RasMapperLib.dll Date."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("RasMapperLib.dll Date").isoformat()
 
     @property
     def si_units(self) -> bool | None:
+        """Return SI Units."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("SI Units")
 
     @property
     def terrain_file_date(self) -> datetime.datetime | None:
+        """Return Terrain File Date."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Terrain File Date").isoformat()
 
     @property
     def terrain_filename(self) -> str | None:
+        """Return Terrain Filename."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Terrain Filename")
 
     @property
     def terrain_layername(self) -> str | None:
+        """Return Terrain Layername."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Terrain Layername")
 
     @property
     def geometry_version(self) -> str | None:
+        """Return Version."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Version")
 
     @property
     def bridges_culverts(self) -> int | None:
+        """Return Bridge/Culvert Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Bridge/Culvert Count")
 
     @property
     def connections(self) -> int | None:
+        """Return Connection Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Connection Count")
 
     @property
     def inline_structures(self) -> int | None:
+        """Return Inline Structure Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Inline Structure Count")
 
     @property
     def lateral_structures(self) -> int | None:
+        """Return Lateral Structure Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Lateral Structure Count")
 
     @property
     def two_d_flow_cell_average_size(self) -> float | None:
+        """Return Cell Average Size."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Average Size")))
 
     @property
     def two_d_flow_cell_maximum_index(self) -> int | None:
+        """Return Cell Maximum Index."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return self._2d_flow_attrs.get("Cell Maximum Index")
 
     @property
     def two_d_flow_cell_maximum_size(self) -> int | None:
+        """Return Cell Maximum Size."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Maximum Size")))
 
     @property
     def two_d_flow_cell_minimum_size(self) -> int | None:
+        """Return Cell Minimum Size."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Minimum Size")))
 
     def mesh_areas(self, crs: str = None, return_gdf: bool = False) -> gpd.GeoDataFrame | Polygon | MultiPolygon:
-        """Retrieves and processes mesh area geometries.
+        """Retrieve and process mesh area geometries.
 
         Parameters
         ----------
@@ -1173,6 +1228,7 @@ class RASHDFFile:
 
     @property
     def breaklines(self) -> gpd.GeoDataFrame | None:
+        """Return breaklines."""
         breaklines = self.hdf_object.breaklines()
 
         if breaklines is None or breaklines.empty:
@@ -1182,6 +1238,7 @@ class RASHDFFile:
 
     @property
     def mesh_cells(self) -> gpd.GeoDataFrame | None:
+        """Return mesh cell polygons."""
         mesh_cells = self.hdf_object.mesh_cell_polygons()
 
         if mesh_cells is None or mesh_cells.empty:
@@ -1191,6 +1248,7 @@ class RASHDFFile:
 
     @property
     def bc_lines(self) -> gpd.GeoDataFrame | None:
+        """Return boundary condition lines."""
         bc_lines = self.hdf_object.bc_lines()
 
         if bc_lines is None or bc_lines.empty:
@@ -1198,20 +1256,9 @@ class RASHDFFile:
 
         return bc_lines
 
-    @property
-    def landcover_filename(self) -> str | None:
-        # broken example property which would give a filename to use when linking assets together
-        if self._geom_attrs == None:
-            self._geom_attrs = self.hdf_object.get_attrs("geom_or_something")
-        return self._geom_attrs.get("land_cover_filename")
-
-    def associate_related_assets(self, asset_dict: dict[str, Asset]) -> None:
-        if self.landcover_filename:
-            landcover_asset = asset_dict[self.parent.joinpath(self.landcover_filename).resolve()]
-            self.extra_fields["ras:landcover_file"] = landcover_asset.href
-
 
 class PlanHDFFile(RASHDFFile):
+    """Class to parse data from Plan HDF files."""
 
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasPlanHdf, **kwargs)
@@ -1223,234 +1270,273 @@ class PlanHDFFile(RASHDFFile):
 
     @property
     def plan_information_base_output_interval(self) -> str | None:
+        """Return Base Output Interval."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Base Output Interval")
 
     @property
     def plan_information_computation_time_step_base(self):
+        """Return Computation Time Step Base."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Computation Time Step Base")
 
     @property
     def plan_information_flow_filename(self):
+        """Return Flow Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Flow Filename")
 
     @property
     def plan_information_geometry_filename(self):
+        """Return Geometry Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Geometry Filename")
 
     @property
     def plan_information_plan_filename(self):
+        """Return Plan Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Plan Filename")
 
     @property
     def plan_information_plan_name(self):
+        """Return Plan Name."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Plan Name")
 
     @property
     def plan_information_project_filename(self):
+        """Return Project Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Project Filename")
 
     @property
     def plan_information_project_title(self):
+        """Return Project Title."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Project Title")
 
     @property
     def plan_information_simulation_end_time(self):
+        """Return Simulation End Time."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Simulation End Time").isoformat()
 
     @property
     def plan_information_simulation_start_time(self):
+        """Return Simulation Start Time."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Simulation Start Time").isoformat()
 
     @property
     def plan_parameters_1d_flow_tolerance(self):
+        """Return 1D Flow Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Flow Tolerance")
 
     @property
     def plan_parameters_1d_maximum_iterations(self):
+        """Return 1D Maximum Iterations."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Maximum Iterations")
 
     @property
     def plan_parameters_1d_maximum_iterations_without_improvement(self):
+        """Return 1D Maximum Iterations Without Improvement."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Maximum Iterations Without Improvement")
 
     @property
     def plan_parameters_1d_maximum_water_surface_error_to_abort(self):
+        """Return 1D Maximum Water Surface Error To Abort."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Maximum Water Surface Error To Abort")
 
     @property
     def plan_parameters_1d_storage_area_elevation_tolerance(self):
+        """Return 1D Storage Area Elevation Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Storage Area Elevation Tolerance")
 
     @property
     def plan_parameters_1d_theta(self):
+        """Return 1D Theta."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Theta")
 
     @property
     def plan_parameters_1d_theta_warmup(self):
+        """Return 1D Theta Warmup."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Theta Warmup")
 
     @property
     def plan_parameters_1d_water_surface_elevation_tolerance(self):
+        """Return 1D Water Surface Elevation Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Water Surface Elevation Tolerance")
 
     @property
     def plan_parameters_1d2d_gate_flow_submergence_decay_exponent(self):
+        """Return 1D-2D Gate Flow Submergence Decay Exponent."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Gate Flow Submergence Decay Exponent")
 
     @property
     def plan_parameters_1d2d_is_stablity_factor(self):
+        """Return 1D-2D IS Stablity Factor."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D IS Stablity Factor")
 
     @property
     def plan_parameters_1d2d_ls_stablity_factor(self):
+        """Return 1D-2D LS Stablity Factor."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D LS Stablity Factor")
 
     @property
     def plan_parameters_1d2d_maximum_number_of_time_slices(self):
+        """Return 1D-2D Maximum Number of Time Slices."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Maximum Number of Time Slices")
 
     @property
     def plan_parameters_1d2d_minimum_time_step_for_slicinghours(self):
+        """Return 1D-2D Minimum Time Step for Slicing(hours)."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Minimum Time Step for Slicing(hours)")
 
     @property
     def plan_parameters_1d2d_number_of_warmup_steps(self):
+        """Return 1D-2D Number of Warmup Steps."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Number of Warmup Steps")
 
     @property
     def plan_parameters_1d2d_warmup_time_step_hours(self):
+        """Return 1D-2D Warmup Time Step (hours)."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Warmup Time Step (hours)")
 
     @property
     def plan_parameters_1d2d_weir_flow_submergence_decay_exponent(self):
+        """Return 1D-2D Weir Flow Submergence Decay Exponent."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Weir Flow Submergence Decay Exponent")
 
     @property
     def plan_parameters_1d2d_maxiter(self):
+        """Return 1D2D MaxIter."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D2D MaxIter")
 
     @property
     def plan_parameters_2d_equation_set(self):
+        """Return 2D Equation Set."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Equation Set")
 
     @property
     def plan_parameters_2d_names(self):
+        """Return 2D Names."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Names")
 
     @property
     def plan_parameters_2d_volume_tolerance(self):
+        """Return 2D Volume Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Volume Tolerance")
 
     @property
     def plan_parameters_2d_water_surface_tolerance(self):
+        """Return 2D Water Surface Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Water Surface Tolerance")
 
     @property
     def meteorology_dss_filename(self):
+        """Return meteorology precip DSS Filename."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("DSS Filename")
 
     @property
     def meteorology_dss_pathname(self):
+        """Return meteorology precip DSS Pathname."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("DSS Pathname")
 
     @property
     def meteorology_data_type(self):
+        """Return meteorology precip Data Type."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Data Type")
 
     @property
     def meteorology_mode(self):
+        """Return meteorology precip Mode."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Mode")
 
     @property
     def meteorology_raster_cellsize(self):
+        """Return meteorology precip Raster Cellsize."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Raster Cellsize")
 
     @property
     def meteorology_source(self):
+        """Return meteorology precip Source."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Source")
 
     @property
     def meteorology_units(self):
+        """Return meteorology precip units."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Units")
 
 
 class GeometryHDFFile(RASHDFFile):
+    """Class to parse data from Geometry HDF files."""
 
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
@@ -1462,15 +1548,17 @@ class GeometryHDFFile(RASHDFFile):
 
     @property
     def projection(self):
+        """Return geometry projection."""
         return self.hdf_object.projection()
 
     @property
     def cross_sections(self) -> int | None:
-        pass
+        """Return geometry cross sections."""
+        return self.hdf_object.cross_sections()
 
     @property
     def reference_lines(self) -> gpd.GeoDataFrame | None:
-
+        """Return geometry reference lines."""
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:

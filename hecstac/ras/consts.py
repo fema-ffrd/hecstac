@@ -1,3 +1,5 @@
+"""Constants."""
+
 import datetime
 from shapely import Polygon, to_geojson, box
 import json

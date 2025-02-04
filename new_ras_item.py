@@ -1,13 +1,13 @@
+"""Creates a STAC Item from a HEC-RAS model .prj file."""
+
 import logging
 from pathlib import Path
-from hecstac.common.logger import initialize_logger
-from hecstac.ras.item import RASModelItem
+from hecstac.ras.logger import initialize_logger
+from hecstac import RASModelItem
 
 
 def sanitize_catalog_assets(item: RASModelItem) -> RASModelItem:
-    """
-    Forces the asset paths in the catalog to be relative to the item root.
-    """
+    """Force the asset paths in the catalog to be relative to the item root."""
     item_dir = Path(item.pm.item_dir).resolve()
     for _, asset in item.assets.items():
 
@@ -30,8 +30,5 @@ if __name__ == "__main__":
     ras_item = RASModelItem(ras_project_file, item_id, crs=None)
     ras_item = sanitize_catalog_assets(ras_item)
     # ras_item.add_model_thumbnails(["mesh_areas", "breaklines", "bc_lines"])
-    fs = ras_item.scan_model_dir()
-
-    ras_item.add_ras_asset()
     ras_item.save_object(ras_item.pm.item_path(item_id))
     logging.info(f"Saved {ras_item.pm.item_path(item_id)}")

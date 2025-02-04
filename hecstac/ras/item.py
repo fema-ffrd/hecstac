@@ -1,3 +1,5 @@
+"""HEC-RAS STAC Item creation class."""
+
 import datetime
 import json
 import logging
@@ -101,7 +103,7 @@ class RASModelItem(Item):
         return properties
 
     def add_geometry(self, simplify_geometry: bool) -> dict | None:
-        """Parses geometries from 2d hdf files and updates the stac item geometry, simplifying them if needed."""
+        """Parse geometries from 2d hdf files and updates the stac item geometry, simplifying them if needed."""
         geometries = []
 
         if self.has_2d:
@@ -144,7 +146,7 @@ class RASModelItem(Item):
         return item_datetime
 
     def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail", thumbnail_dir=None):
-        """Generates model thumbnail asset for each geometry file.
+        """Generate model thumbnail asset for each geometry file.
 
         Parameters
         ----------
@@ -152,6 +154,8 @@ class RASModelItem(Item):
             List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines'
         title_prefix : str, optional
             Thumbnail title prefix, by default "Model_Thumbnail".
+        thumbnail_dir : str, optional
+            Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
         """
         if thumbnail_dir:
             thumbnail_dest = thumbnail_dir
@@ -239,9 +243,6 @@ class RASModelItem(Item):
                 mesh_area_polygons.append(mesh_areas)
 
         return union_all(mesh_area_polygons)
-
-    def ensure_projection_schema(self) -> None:
-        ProjectionExtension.ensure_has_extension(self, True)
 
     def scan_model_dir(self, ras_project_file):
         """Find all files in the project folder."""
