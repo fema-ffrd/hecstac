@@ -1,12 +1,22 @@
 import logging
 import os
 from functools import wraps
+from pathlib import Path
+from typing import Optional
 
 import geopandas as gpd
 import numpy as np
 from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
+
+
+def find_model_files(ras_prj: str) -> list[str]:
+    """Find all files with same base name."""
+    ras_prj = Path(ras_prj)
+    parent = ras_prj.parent
+    stem = Path(ras_prj).name.split(".")[0]
+    return [str(i.as_posix()) for i in parent.glob(f"{stem}*") if i != ras_prj]
 
 
 def is_ras_prj(url: str) -> bool:

@@ -5,11 +5,12 @@ import os
 from collections import UserDict
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 import pystac
 import pystac.errors
 from pyproj import CRS, Transformer
-from pystac import Item
+from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from rashdf import RasGeomHdf
@@ -32,6 +33,7 @@ from hecstac.ras.consts import (
     NULL_STAC_GEOMETRY,
 )
 from hecstac.ras.parser import ProjectFile
+from hecstac.ras.utils import find_model_files
 
 
 class RASModelItem(Item):
@@ -60,6 +62,7 @@ class RASModelItem(Item):
         """Create an item from a RAS .prj file."""
         pm = LocalPathManager(Path(ras_project_file).parent)
         href = pm.item_path(item_id)
+        assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
 
         stac = cls(
             Path(ras_project_file).stem,
@@ -68,16 +71,13 @@ class RASModelItem(Item):
             NULL_DATETIME,
             {"ras_project_file": ras_project_file},
             href=href,
+            assets=assets,
         )
         stac.crs
         if crs:
             stac.crs = crs
         stac.simplify_geometry = simplify_geometry
 
-        for fpath in stac.scan_model_dir():
-            if fpath and fpath != href:
-                logging.info(f"Processing asset: {fpath}")
-                stac.add_ras_asset(fpath)
         return stac
 
     @property
@@ -213,25 +213,12 @@ class RASModelItem(Item):
 
         # TODO: Add 1d model thumbnails
 
-    def add_ras_asset(self, fpath: str = "") -> None:
-        """Add an asset to the RAS STAC item."""
-        if not os.path.exists(fpath):
-            logging.warning(f"File not found: {fpath}")
-            return
-        try:
-            asset = self.factory.create_ras_asset(fpath)
-            self.add_asset(asset.title, asset)
-            if self.crs is None and isinstance(asset, GeometryHdfAsset) and asset.hdf_object.projection is not None:
-                self.crs = asset.hdf_object.projection
-            logging.debug(f"Adding asset {str(asset)}")
-        except TypeError as e:
-            logging.error(f"Error creating asset for {fpath}: {e}")
-
-    def scan_model_dir(self):
-        """Find all files in the project folder."""
-        parent = Path(self.ras_project_file).parent
-        stem = Path(self.ras_project_file).name.split(".")[0]
-        return [str(i.as_posix()) for i in parent.glob(f"{stem}*")]
+    def add_asset(self, key, asset):
+        """Subclass asset then add."""
+        asset = self.factory.asset_from_dict(asset)
+        if self.crs is None and isinstance(asset, GeometryHdfAsset) and asset.hdf_object.projection is not None:
+            self.crs = asset.hdf_object.projection
+        return super().add_asset(key, asset)
 
     ### Some properties are dynamically generated.  Ignore external updates ###
 

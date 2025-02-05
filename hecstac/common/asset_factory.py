@@ -82,3 +82,10 @@ class AssetFactory:
 
         logging.warning(f"Unable to pattern match asset for file {fpath}")
         return GenericAsset(href=fpath, title=Path(fpath).name)
+
+    def asset_from_dict(self, asset: Asset):
+        fpath = asset.href
+        for pattern, asset_class in self.extension_to_asset.items():
+            if pattern.match(fpath):
+                logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
+                return asset_class.from_dict(asset.to_dict())
