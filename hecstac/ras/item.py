@@ -215,10 +215,12 @@ class RASModelItem(Item):
 
     def add_asset(self, key, asset):
         """Subclass asset then add."""
-        asset = self.factory.asset_from_dict(asset)
-        if self.crs is None and isinstance(asset, GeometryHdfAsset) and asset.hdf_object.projection is not None:
-            self.crs = asset.hdf_object.projection
-        return super().add_asset(key, asset)
+        subclass = self.factory.asset_from_dict(asset)
+        if subclass is None:
+            return
+        if self.crs is None and isinstance(asset, GeometryHdfAsset) and asset.file.projection is not None:
+            self.crs = subclass.file.projection
+        return super().add_asset(key, subclass)
 
     ### Some properties are dynamically generated.  Ignore external updates ###
 
