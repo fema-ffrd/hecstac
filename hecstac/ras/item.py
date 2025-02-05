@@ -100,15 +100,15 @@ class RASModelItem(Item):
     @property
     def has_2d(self) -> bool:
         """Whether any geometry file has 2D elements."""
-        return any([a.check_2d() for a in self.geometry_assets])
+        return any([a.has_2d for a in self.geometry_assets])
 
     @property
     def has_1d(self) -> bool:
         """Whether any geometry file has 2D elements."""
-        return any([a.check_1d() for a in self.geometry_assets])
+        return any([a.has_1d for a in self.geometry_assets])
 
     @property
-    def geometry_assets(self) -> list[RasGeomHdf]:
+    def geometry_assets(self) -> list[RasGeomHdf | GeometryAsset]:
         """Return any RasGeomHdf in assets."""
         return [a for a in self.assets.values() if isinstance(a, (RasGeomHdf, GeometryAsset))]
 
@@ -137,8 +137,7 @@ class RASModelItem(Item):
             logging.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
 
-        crs = CRS.from_authority("EPSG", "4326")
-        geometries = [i.geometry(crs) for i in self.geometry_assets]
+        geometries = [i.geometry_wgs84 for i in self.geometry_assets]
         unioned_geometry = union_all(geometries)
         if self.simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)

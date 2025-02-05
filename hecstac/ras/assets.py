@@ -15,6 +15,7 @@ from pystac.extensions.projection import ProjectionExtension
 from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
+from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.ras.parser import (
     GeometryFile,
     GeometryHDFFile,
@@ -206,9 +207,28 @@ class GeometryAsset(GenericAsset):
 
     @property
     @lru_cache
-    def geometry(self, crs: CRS) -> Polygon | MultiPolygon:
+    def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
-        return gpd.GeoDataFrame()  # TODO:  fill this in.
+        return Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])  # TODO:  fill this in.
+
+    @property
+    @lru_cache
+    def has_1d(self) -> bool:
+        """Check if geometry has any river centerlines."""
+        return False  # TODO: implement
+
+    @property
+    @lru_cache
+    def has_2d(self) -> bool:
+        """Check if geometry has any 2D areas."""
+        return False  # TODO: implement
+
+    @property
+    @lru_cache
+    def geometry_wgs84(self) -> Polygon | MultiPolygon:
+        """Reproject geometry to wgs84."""
+        # TODO: this could be generalized to be a function that takes argument for CRS.
+        return reproject_to_wgs84(self.geometry, self.crs)
 
 
 class SteadyFlowAsset(GenericAsset):
@@ -359,7 +379,6 @@ class GeometryHdfAsset(GenericAsset):
 
         super().__init__(href, roles=roles, description=description, **kwargs)
         self.hdf_object = GeometryHDFFile(self.href)
-        self.has_2d = None
 
         self.extra_fields = {
             key: value
@@ -385,24 +404,36 @@ class GeometryHdfAsset(GenericAsset):
     #         prj_ext.apply(epsg=crs.to_epsg(), wkt2=crs.to_wkt())
 
     @property
-    def check_2d(self):
-        """Check if the geometry asset has 2d geometry, if yes then return True and set has_2d to True."""
+    @lru_cache
+    def has_2d(self) -> bool:
+        """Check if the geometry asset has 2d geometry."""
         try:
             logging.debug(f"reading mesh areas using crs {self.crs}...")
 
             if self.hdf_object.mesh_areas(self.crs):
-                self.has_2d = True
                 return True
         except ValueError:
             logging.warning(f"No mesh areas found for {self.href}")
-            self.has_2d = False
             return False
+
+    @property
+    @lru_cache
+    def has_1d(self) -> bool:
+        """Check if the geometry asset has 2d geometry."""
+        return False  # TODO: implement
 
     @property
     @lru_cache
     def geometry(self, crs: CRS) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
         return self.hdf_object.mesh_areas(crs)
+
+    @property
+    @lru_cache
+    def geometry_wgs84(self) -> Polygon | MultiPolygon:
+        """Reproject geometry to wgs84."""
+        # TODO: this could be generalized to be a function that takes argument for CRS.
+        return reproject_to_wgs84(self.geometry, self.crs)
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """
