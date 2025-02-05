@@ -9,6 +9,16 @@ from pystac import Asset
 from hecstac.hms.s3_utils import check_storage_extension
 
 
+def is_ras_prj(url: str) -> bool:
+    """Check if a file is a HEC-RAS project file."""
+    with open(url) as f:
+        file_str = f.read()
+    if "Proj Title" in file_str.split("\n")[0]:
+        return True
+    else:
+        return False
+
+
 class GenericAsset(Asset):
     """Provides a base structure for assets."""
 
@@ -65,6 +75,14 @@ class AssetFactory:
     def create_ras_asset(self, fpath: str):
         """Create an asset instance based on the file extension."""
         logging.debug(f"Creating asset for {fpath}")
+        from hecstac.ras.assets import ProjectAsset
+
+        if fpath.lower().endswith(".prj"):
+            if is_ras_prj(fpath):
+                return ProjectAsset(href=fpath, title=Path(fpath).name)
+            else:
+                return GenericAsset(href=fpath, title=Path(fpath).name)
+
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
                 logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
