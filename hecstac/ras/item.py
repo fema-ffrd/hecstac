@@ -65,10 +65,9 @@ class RASModelItem(Item):
             Whether to simplify geometry. Defaults to True.
 
         Returns
-        ----------
+        -------
         stac : RASModelItem
             An instance of the class representing the STAC item.
-
         """
         pm = LocalPathManager(Path(ras_project_file).parent)
 
