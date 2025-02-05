@@ -231,7 +231,8 @@ class RASModelItem(Item):
         try:
             asset = self.factory.create_ras_asset(fpath)
             self.add_asset(asset.title, asset)
-            # TODO:  add feature to set crs from geom hdf
+            if self.crs is None and isinstance(asset, GeometryHdfAsset) and asset.hdf_object.projection is not None:
+                self.crs = asset.hdf_object.projection
             logging.debug(f"Adding asset {str(asset)}")
         except TypeError as e:
             logging.error(f"Error creating asset for {fpath}: {e}")

@@ -351,12 +351,6 @@ class GeometryHdfAsset(GenericAsset):
         super().__init__(href, roles=roles, description=description, **kwargs)
         self.hdf_object = GeometryHDFFile(self.href)
         self.has_2d = None
-        if self.crs is None:
-            try:
-                self.crs = CRS.from_user_input(self.hdf_object.projection)
-                logging.info(f"crs has been set to {self.crs}")
-            except CRSError:
-                logging.warning(f"Could not extract crs from {self.href}")
 
         self.extra_fields = {
             key: value
