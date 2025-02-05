@@ -268,7 +268,7 @@ class RASModelItem(Item):
         """Find all files in the project folder."""
         parent = Path(self.ras_project_file).parent
         stem = Path(self.ras_project_file).name.split(".")[0]
-        return [str(i) for i in parent.glob(f"{stem}*")]
+        return [str(i.as_posix()) for i in parent.glob(f"{stem}*")]
 
     ### Some properties are dynamically generated.  Ignore external updates ###
 
