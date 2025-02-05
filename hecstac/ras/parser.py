@@ -3,6 +3,7 @@ import logging
 import math
 from collections import defaultdict
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterator
 
@@ -651,33 +652,39 @@ class ProjectFile:
             self.file_lines = f.readlines()
 
     @property
+    @lru_cache
     def project_title(self) -> str:
         return search_contents(self.file_lines, "Proj Title")
 
     @property
+    @lru_cache
     def project_description(self) -> str:
         return search_contents(self.file_lines, "Model Description", token=":", require_one=False)
 
     @property
+    @lru_cache
     def project_status(self) -> str:
         return search_contents(self.file_lines, "Status of Model", token=":", require_one=False)
 
     @property
+    @lru_cache
     def project_units(self) -> str | None:
         for line in self.file_lines:
             if "Units" in line:
                 return " ".join(line.split(" ")[:-1])
 
     @property
+    @lru_cache
     def plan_current(self) -> str | None:
         try:
-            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False)
-            return self.name_from_suffix(suffix)
+            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False).strip()
+            return name_from_suffix(self.fpath, suffix)
         except Exception:
             logging.warning("Ras model has no current plan")
             return None
 
     @property
+    @lru_cache
     def ras_version(self) -> str | None:
         version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
         if version == []:
@@ -691,26 +698,31 @@ class ProjectFile:
             return version[0]
 
     @property
+    @lru_cache
     def plan_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Plan File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def geometry_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Geom File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def steady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Flow File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def quasi_unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def unsteady_flow_files(self) -> list[str]:
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
