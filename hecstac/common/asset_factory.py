@@ -2,6 +2,8 @@ import logging
 from pathlib import Path
 from typing import Dict, Type
 
+import pystac
+from pyproj import CRS
 from pystac import Asset
 
 from hecstac.hms.s3_utils import check_storage_extension
@@ -21,6 +23,18 @@ class GenericAsset(Asset):
     def name_from_suffix(self, suffix: str) -> str:
         """Generate a name by appending a suffix to the file stem."""
         return f"{self.stem}.{suffix}"
+
+    @property
+    def crs(self) -> CRS:
+        """Get the authority code for the model CRS."""
+        try:
+            wkt2 = self.ext.proj.wkt2
+            if wkt2 is None:
+                return
+            else:
+                return CRS(wkt2)
+        except pystac.errors.ExtensionNotImplemented:
+            return None
 
     def __repr__(self):
         return f"<{self.__class__.__name__} name={self.name}>"

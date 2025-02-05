@@ -6,9 +6,11 @@ import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from pystac import MediaType
 from pyproj import CRS
 from pyproj.exceptions import CRSError
+from pystac import MediaType
+from pystac.extensions.projection import ProjectionExtension
+
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.ras.parser import (
     GeometryFile,
@@ -168,9 +170,8 @@ class GeometryAsset(GenericAsset):
     regex_parse_str = r".+\.g\d{2}$"
     PROPERTIES_WITH_GDF = ["reaches", "junctions", "cross_sections", "structures"]
 
-    def __init__(self, href: str, crs: str = None, **kwargs):
+    def __init__(self, href: str, **kwargs):
         # self.pyproj_crs = self.validate_crs(crs)
-        self.crs = crs
         roles = kwargs.pop("roles", []) + ["geometry-file", "ras-file"]
         description = kwargs.pop(
             "description",
@@ -343,13 +344,12 @@ class GeometryHdfAsset(GenericAsset):
 
     regex_parse_str = r".+\.g\d{2}\.hdf$"
 
-    def __init__(self, href: str, crs: str = None, **kwargs):
+    def __init__(self, href: str, **kwargs):
         roles = kwargs.pop("roles", []) + ["geometry-hdf-file"]
         description = kwargs.pop("description", "The HEC-RAS geometry HDF file.")
 
         super().__init__(href, roles=roles, description=description, **kwargs)
         self.hdf_object = GeometryHDFFile(self.href)
-        self.crs = crs
         self.has_2d = None
         if self.crs is None:
             try:
@@ -372,6 +372,14 @@ class GeometryHdfAsset(GenericAsset):
             }.items()
             if value
         }
+
+    # @GenericAsset.crs.setter
+    # def crs(self, crs):
+    #     """Add projection extension."""
+    #     if crs is not None:
+    #         prj_ext = ProjectionExtension.ext(self, add_if_missing=True)
+    #         crs = CRS(crs)
+    #         prj_ext.apply(epsg=crs.to_epsg(), wkt2=crs.to_wkt())
 
     @property
     def check_2d(self):
