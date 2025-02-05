@@ -110,7 +110,7 @@ class RASModelItem(Item):
     @property
     def geometry_assets(self) -> list[RasGeomHdf]:
         """Return any RasGeomHdf in assets."""
-        return [a for a in self.assets.values() if isinstance(a, RasGeomHdf)]
+        return [a for a in self.assets.values() if isinstance(a, (RasGeomHdf, GeometryAsset))]
 
     @property
     def crs(self) -> CRS:
@@ -133,24 +133,15 @@ class RASModelItem(Item):
         if self.crs is None:
             logging.warning("Geometry requested for model with no spatial reference.")
             return NULL_STAC_GEOMETRY
-
-        geometries = []
-
-        if self.has_2d:
-            geometries.append(self.parse_2d_geom())
-
-        # if self.has_1d:
-        #     geometries.append(self.parse_1d_geom())
-
-        if len(geometries) == 0:
+        if len(self.geometry_assets) == 0:
             logging.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
 
+        crs = CRS.from_authority("EPSG", "4326")
+        geometries = [i.geometry(crs) for i in self.geometry_assets]
         unioned_geometry = union_all(geometries)
         if self.simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
-
-        unioned_geometry = reproject_to_wgs84(unioned_geometry, self.crs)
         return json.loads(to_geojson(unioned_geometry))
 
     @property
@@ -236,34 +227,6 @@ class RASModelItem(Item):
             logging.debug(f"Adding asset {str(asset)}")
         except TypeError as e:
             logging.error(f"Error creating asset for {fpath}: {e}")
-
-    def parse_1d_geom(self):
-        """Read 1d geometry from concave hull."""
-        logging.info("Creating geometry using 1d text file cross sections")
-        concave_hull_polygons: list[Polygon] = []
-        for geom_asset in self._geom_files:
-            if isinstance(geom_asset, GeometryAsset):
-                try:
-                    geom_asset.crs = self.crs
-                    concave_hull = geom_asset.geomf.concave_hull
-                    concave_hull = self._geometry_to_wgs84(concave_hull)
-                    concave_hull_polygons.append(concave_hull)
-                except ValueError:
-                    logging.warning(f"Could not extract geometry from {geom_asset.href}")
-
-        return union_all(concave_hull_polygons)
-
-    def parse_2d_geom(self):
-        """Read 2d geometry from hdf file mesh areas."""
-        mesh_area_polygons: list[Polygon] = []
-        for geom_asset in self._geom_files:
-            if isinstance(geom_asset, GeometryHdfAsset):
-                logging.info(f"Extracting geom from mesh areas in {geom_asset.href}")
-
-                mesh_areas = self._geometry_to_wgs84(geom_asset.hdf_object.mesh_areas(self.crs))
-                mesh_area_polygons.append(mesh_areas)
-
-        return union_all(mesh_area_polygons)
 
     def scan_model_dir(self):
         """Find all files in the project folder."""

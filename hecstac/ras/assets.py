@@ -1,15 +1,18 @@
 import logging
 import os
 import re
+from functools import lru_cache
 
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from pandas import lreshape
 from pyproj import CRS
 from pyproj.exceptions import CRSError
 from pystac import MediaType
 from pystac.extensions.projection import ProjectionExtension
+from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.ras.parser import (
@@ -201,6 +204,12 @@ class GeometryAsset(GenericAsset):
             if value
         }
 
+    @property
+    @lru_cache
+    def geometry(self, crs: CRS) -> Polygon | MultiPolygon:
+        """Retrieves concave hull of cross-sections."""
+        return gpd.GeoDataFrame()  # TODO:  fill this in.
+
 
 class SteadyFlowAsset(GenericAsset):
     """HEC-RAS Steady Flow file asset."""
@@ -388,6 +397,12 @@ class GeometryHdfAsset(GenericAsset):
             logging.warning(f"No mesh areas found for {self.href}")
             self.has_2d = False
             return False
+
+    @property
+    @lru_cache
+    def geometry(self, crs: CRS) -> Polygon | MultiPolygon:
+        """Retrieves concave hull of cross-sections."""
+        return self.hdf_object.mesh_areas(crs)
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """
