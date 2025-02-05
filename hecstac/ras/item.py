@@ -49,19 +49,11 @@ class RASModelItem(Item):
     @classmethod
     def from_prj(cls, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
         """Create an item from a RAS .prj file."""
-        stac.pf = ProjectFile(ras_project_file)
-        stac.has_2d = False
-        stac.has_1d = False
-        stac._geom_files = []
-        stac.crs = crs
-        stac.factory = AssetFactory(RAS_EXTENSION_MAPPING)
 
         properties = {"ras_project_file": ras_project_file}
         pm = LocalPathManager(Path(ras_project_file).parent)
-        stac.pm = pm
 
         href = pm.item_path(item_id)
-        stac._href = href
 
         stac = cls(
             Path(ras_project_file).stem,
@@ -71,6 +63,15 @@ class RASModelItem(Item):
             properties,
             href=href,
         )
+
+        stac.pf = ProjectFile(ras_project_file)
+        stac.has_2d = False
+        stac.has_1d = False
+        stac._geom_files = []
+        stac.crs = crs
+        stac.factory = AssetFactory(RAS_EXTENSION_MAPPING)
+        stac.pm = pm
+        stac._href = href
 
         ras_asset_files = stac.scan_model_dir(ras_project_file)
 
