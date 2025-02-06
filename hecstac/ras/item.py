@@ -97,7 +97,6 @@ class RASModelItem(Item):
             href=href,
             assets=assets,
         )
-        stac.crs
         if crs:
             stac.crs = crs
         stac.simplify_geometry = simplify_geometry
