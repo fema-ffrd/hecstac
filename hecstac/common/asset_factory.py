@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, Type
+from typing import ClassVar, Dict, Generic, Type, TypeVar
 
 import pystac
 from pyproj import CRS
@@ -11,6 +11,8 @@ from pystac import Asset
 from hecstac.hms.s3_utils import check_storage_extension
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")  # Generic for asset file accessor classes
 
 
 def is_ras_prj(url: str) -> bool:
@@ -23,8 +25,13 @@ def is_ras_prj(url: str) -> bool:
         return False
 
 
-class GenericAsset(Asset):
+class GenericAsset(Asset, Generic[T]):
     """Provides a base structure for assets."""
+
+    regex_parse_str: str
+    __roles__: list[str]
+    __description__: str
+    __file_class__: T
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -58,7 +65,7 @@ class GenericAsset(Asset):
         self._extra_fields = extra_fields
 
     @property
-    def file(self):
+    def file(self) -> T:
         """Return class to access asset file contents."""
         return self.__file_class__(self.href)
 

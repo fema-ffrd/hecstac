@@ -142,7 +142,7 @@ class ProjectionAsset(GenericAsset):
     __file_class__ = None
 
 
-class ProjectAsset(GenericAsset):
+class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
     __roles__ = ["project-file", "ras-file"]
@@ -161,7 +161,7 @@ class ProjectAsset(GenericAsset):
         return self._extra_fields
 
 
-class PlanAsset(GenericAsset):
+class PlanAsset(GenericAsset[PlanFile]):
     """HEC-RAS Plan file asset."""
 
     regex_parse_str = r".+\.p\d{2}$"
@@ -180,7 +180,7 @@ class PlanAsset(GenericAsset):
         return self._extra_fields
 
 
-class GeometryAsset(GenericAsset):
+class GeometryAsset(GenericAsset[GeometryFile]):
     """HEC-RAS Geometry file asset."""
 
     regex_parse_str = r".+\.g\d{2}$"
@@ -198,38 +198,32 @@ class GeometryAsset(GenericAsset):
         self._extra_fields[VERSION] = self.file.geom_version
         self._extra_fields[HAS_1D] = self.file.has_1d
         self._extra_fields[HAS_2D] = self.file.has_2d
-        # self._extra_fields[RIVERS] = self.file.rivers
-        # self._extra_fields[REACHES] = self.file.reaches
-        # self._extra_fields[JUNCTIONS] = self.file.junctions
-        # self._extra_fields[CROSS_SECTIONS] = self.file.cross_sections
-        # self._extra_fields[STRUCTURES] = self.file.structures
-        # self._extra_fields[STORAGE_AREAS] = self.file.storage_areas
-        # self._extra_fields[CONNECTIONS] = self.file.connections
-        # self._extra_fields[BREACH_LOCATIONS] = self.file.breach_locations
+        self._extra_fields[RIVERS] = list(self.file.rivers.keys())
+        self._extra_fields[REACHES] = list(self.file.reaches.keys())
+        self._extra_fields[JUNCTIONS] = list(self.file.junctions.keys())
+        self._extra_fields[CROSS_SECTIONS] = list(self.file.cross_sections.keys())
+        self._extra_fields[STRUCTURES] = list(self.file.structures.keys())
+        self._extra_fields[STORAGE_AREAS] = list(self.file.storage_areas.keys())
+        self._extra_fields[CONNECTIONS] = list(self.file.connections.keys())
         return self._extra_fields
-
-    @property
-    def file(self):
-        """Return class to access asset file contents."""
-        return self.__file_class__(self.href, self.owner.crs)
 
     @property
     @lru_cache
     def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
-        return Polygon([(0, 0), (0, 1), (1, 1), (1, 0)])  # TODO:  fill this in.
+        return self.file.concave_hull
 
     @property
     @lru_cache
     def has_1d(self) -> bool:
         """Check if geometry has any river centerlines."""
-        return False  # TODO: implement
+        return self.file.has_1d
 
     @property
     @lru_cache
     def has_2d(self) -> bool:
         """Check if geometry has any 2D areas."""
-        return False  # TODO: implement
+        return self.file.has_2d
 
     @property
     @lru_cache
@@ -239,7 +233,7 @@ class GeometryAsset(GenericAsset):
         return reproject_to_wgs84(self.geometry, self.crs)
 
 
-class SteadyFlowAsset(GenericAsset):
+class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     """HEC-RAS Steady Flow file asset."""
 
     regex_parse_str = r".+\.f\d{2}$"
@@ -255,7 +249,7 @@ class SteadyFlowAsset(GenericAsset):
         return self._extra_fields
 
 
-class QuasiUnsteadyFlowAsset(GenericAsset):
+class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     """HEC-RAS Quasi-Unsteady Flow file asset."""
 
     # TODO: implement this class
@@ -269,21 +263,10 @@ class QuasiUnsteadyFlowAsset(GenericAsset):
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
         self._extra_fields[TITLE] = self.file.flow_title
-        self._extra_fields[VERSION] = self.file.geom_version
-        self._extra_fields[HAS_1D] = self.file.has_1d
-        self._extra_fields[HAS_2D] = self.file.has_2d
-        self._extra_fields[RIVERS] = self.file.rivers
-        self._extra_fields[REACHES] = self.file.reaches
-        self._extra_fields[JUNCTIONS] = self.file.junctions
-        self._extra_fields[CROSS_SECTIONS] = self.file.cross_sections
-        self._extra_fields[STRUCTURES] = self.file.structures
-        self._extra_fields[STORAGE_AREAS] = self.file.storage_areas
-        self._extra_fields[CONNECTIONS] = self.file.connections
-        self._extra_fields[BREACH_LOCATIONS] = self.file.breach_locations
         return self._extra_fields
 
 
-class UnsteadyFlowAsset(GenericAsset):
+class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     """HEC-RAS Unsteady Flow file asset."""
 
     regex_parse_str = r".+\.u\d{2}$"
@@ -300,7 +283,7 @@ class UnsteadyFlowAsset(GenericAsset):
         return self._extra_fields
 
 
-class PlanHdfAsset(GenericAsset):
+class PlanHdfAsset(GenericAsset[PlanHDFFile]):
     """HEC-RAS Plan HDF file asset."""
 
     regex_parse_str = r".+\.p\d{2}\.hdf$"
@@ -378,7 +361,7 @@ class PlanHdfAsset(GenericAsset):
         return self._extra_fields
 
 
-class GeometryHdfAsset(GenericAsset):
+class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     """HEC-RAS Geometry HDF file asset."""
 
     regex_parse_str = r".+\.g\d{2}\.hdf$"
@@ -391,14 +374,13 @@ class GeometryHdfAsset(GenericAsset):
         """Return extra fields with added dynamic keys/values."""
         self._extra_fields[VERSION] = self.file.file_version
         self._extra_fields[UNITS] = self.file.units_system
-        self._extra_fields[PROJECTION] = self.owner.crs.to_wkt()
-        self._extra_fields[UNITS] = self.file.units_system
+        self._extra_fields[REFERENCE_LINES] = self.file.reference_lines
         return self._extra_fields
 
     @property
     def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
         """Docstring."""  # TODO: fill out
-        if self.hdf_object.reference_lines is not None and not self.hdf_object.reference_lines.empty:
+        if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
     @property
@@ -408,7 +390,7 @@ class GeometryHdfAsset(GenericAsset):
         try:
             logger.debug(f"reading mesh areas using crs {self.crs}...")
 
-            if self.hdf_object.mesh_areas(self.crs):
+            if self.file.mesh_areas(self.crs):
                 return True
         except ValueError:
             logger.warning(f"No mesh areas found for {self.href}")
@@ -424,7 +406,7 @@ class GeometryHdfAsset(GenericAsset):
     @lru_cache
     def geometry(self, crs: CRS) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
-        return self.hdf_object.mesh_areas(crs)
+        return self.file.mesh_areas(crs)
 
     @property
     @lru_cache
