@@ -76,7 +76,7 @@ class RASModelItem(Item):
             Whether to simplify geometry. Defaults to True.
 
         Returns
-        ----------
+        -------
         stac : RASModelItem
             An instance of the class representing the STAC item.
 
@@ -86,13 +86,11 @@ class RASModelItem(Item):
         href = pm.item_path(item_id)
         assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
 
-
         stac = cls(
             Path(ras_project_file).stem,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
-            {"ras_project_file": ras_project_file},
             {"ras_project_file": ras_project_file},
             href=href,
             assets=assets,
@@ -196,11 +194,9 @@ class RASModelItem(Item):
 
     @property
     def datetime(self) -> datetime:
-    def datetime(self) -> datetime:
         """The datetime for the RAS STAC item."""
         item_datetime = None
 
-        for geom_file in self.geometry_assets:
         for geom_file in self.geometry_assets:
             if isinstance(geom_file, GeometryHdfAsset):
                 geom_date = geom_file.hdf_object.geometry_time
