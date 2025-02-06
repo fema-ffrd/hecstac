@@ -165,6 +165,8 @@ class RASModelItem(Item):
         unioned_geometry = union_all(geometries)
         if self.simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
+            if unioned_geometry.interiors:
+                unioned_geometry = Polygon(list(unioned_geometry.exterior.coords))
         return json.loads(to_geojson(unioned_geometry))
 
     @property
