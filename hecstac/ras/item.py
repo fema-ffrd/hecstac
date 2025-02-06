@@ -37,6 +37,8 @@ from hecstac.ras.consts import (
 from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files
 
+logger = logging.getLogger(__name__)
+
 
 class RASModelItem(Item):
     """An object representation of a HEC-RAS model."""
@@ -153,10 +155,10 @@ class RASModelItem(Item):
     def geometry(self) -> dict:
         """Return footprint of model as a geojson."""
         if self.crs is None:
-            logging.warning("Geometry requested for model with no spatial reference.")
+            logger.warning("Geometry requested for model with no spatial reference.")
             return NULL_STAC_GEOMETRY
         if len(self.geometry_assets) == 0:
-            logging.error("No geometry found for RAS item.")
+            logger.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
 
         geometries = [i.geometry_wgs84 for i in self.geometry_assets]
@@ -203,11 +205,11 @@ class RASModelItem(Item):
                 if geom_date:
                     item_datetime = geom_date
                     self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
-                    logging.info(f"Using item datetime from {geom_file.href}")
+                    logger.info(f"Using item datetime from {geom_file.href}")
                     break
 
         if item_datetime is None:
-            logging.warning("Could not extract item datetime from geometry, using item processing time.")
+            logger.warning("Could not extract item datetime from geometry, using item processing time.")
             item_datetime = datetime.datetime.now()
             self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
         return item_datetime

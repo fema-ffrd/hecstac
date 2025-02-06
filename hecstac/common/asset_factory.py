@@ -10,6 +10,8 @@ from pystac import Asset
 
 from hecstac.hms.s3_utils import check_storage_extension
 
+logger = logging.getLogger(__name__)
+
 
 def is_ras_prj(url: str) -> bool:
     """Check if a file is a HEC-RAS project file."""
@@ -114,7 +116,7 @@ class AssetFactory:
 
     def create_ras_asset(self, fpath: str):
         """Create an asset instance based on the file extension."""
-        logging.debug(f"Creating asset for {fpath}")
+        logger.debug(f"Creating asset for {fpath}")
         from hecstac.ras.assets import ProjectAsset
 
         if fpath.lower().endswith(".prj"):
@@ -125,15 +127,15 @@ class AssetFactory:
 
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
-                logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
+                logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class(href=fpath, title=Path(fpath).name)
 
-        logging.warning(f"Unable to pattern match asset for file {fpath}")
+        logger.warning(f"Unable to pattern match asset for file {fpath}")
         return GenericAsset(href=fpath, title=Path(fpath).name)
 
     def asset_from_dict(self, asset: Asset):
         fpath = asset.href
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
-                logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
+                logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class.from_dict(asset.to_dict())

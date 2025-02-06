@@ -2,8 +2,11 @@
 
 import logging
 from pathlib import Path
-from hecstac.ras.logger import initialize_logger
+
 from hecstac import RASModelItem
+from hecstac.ras.logger import initialize_logger
+
+logger = logging.getLogger(__name__)
 
 
 def sanitize_catalog_assets(item: RASModelItem) -> RASModelItem:
@@ -31,4 +34,4 @@ if __name__ == "__main__":
     ras_item = sanitize_catalog_assets(ras_item)
     # ras_item.add_model_thumbnails(["mesh_areas", "breaklines", "bc_lines"])
     ras_item.save_object(ras_item.pm.item_path(item_id))
-    logging.info(f"Saved {ras_item.pm.item_path(item_id)}")
+    logger.info(f"Saved {ras_item.pm.item_path(item_id)}")

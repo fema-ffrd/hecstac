@@ -18,6 +18,8 @@ from hecstac.common.path_manager import LocalPathManager
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING, ProjectAsset
 from hecstac.hms.parser import BasinFile, ProjectFile
 
+logger = logging.getLogger(__name__)
+
 
 class HMSModelItem(Item):
     """An object representation of a HEC-HMS model."""
@@ -84,7 +86,7 @@ class HMSModelItem(Item):
 
         properties["proj:code"] = self.pf.basins[0].epsg
         if self.pf.basins[0].epsg:
-            logging.warning("No EPSG code found in basin file.")
+            logger.warning("No EPSG code found in basin file.")
         properties["proj:wkt"] = self.pf.basins[0].wkt
         properties[SUMMARY] = self.pf.file_counts
         return properties
@@ -121,7 +123,7 @@ class HMSModelItem(Item):
 
         for file in files:
             if not os.path.exists(file):
-                logging.warning(f"File not found {file}")
+                logger.warning(f"File not found {file}")
 
     def make_thumbnails(self, basins: list[BasinFile], overwrite: bool = False):
         """Create a png for each basin. Optionally overwrite existing files."""
@@ -129,9 +131,9 @@ class HMSModelItem(Item):
             thumbnail_path = self.pm.derived_item_asset(f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
 
             if not overwrite and os.path.exists(thumbnail_path):
-                logging.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
+                logger.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
             else:
-                logging.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
+                logger.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
                 fig = self.make_thumbnail(bf.hms_schematic_2_gdfs)
                 fig.savefig(thumbnail_path)
                 fig.clf()
@@ -140,14 +142,14 @@ class HMSModelItem(Item):
     def write_element_geojsons(self, basins: list[BasinFile], overwrite: bool = False):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
         for element_type in basins.elements.element_types:
-            logging.debug(f"Checking if geojson for {element_type} exists")
+            logger.debug(f"Checking if geojson for {element_type} exists")
             path = self.pm.derived_item_asset(f"{element_type}.geojson")
             if not overwrite and os.path.exists(path):
-                logging.info(f"Geojson for {element_type} already exists. Skipping creation.")
+                logger.info(f"Geojson for {element_type} already exists. Skipping creation.")
             else:
-                logging.info(f"Creating geojson for {element_type}")
+                logger.info(f"Creating geojson for {element_type}")
                 gdf = self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
-                logging.debug(gdf.columns)
+                logger.debug(gdf.columns)
                 keep_columns = ["name", "geometry", "Last Modified Date", "Last Modified Time", "Number Subreaches"]
                 gdf = gdf[[col for col in keep_columns if col in gdf.columns]]
                 gdf.to_file(path)
@@ -161,7 +163,7 @@ class HMSModelItem(Item):
                 self.add_asset(asset.title, asset)
                 if isinstance(asset, ProjectAsset):
                     if self._project is not None:
-                        logging.error(
+                        logger.error(
                             f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
                         )
                     self._project = asset

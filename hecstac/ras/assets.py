@@ -30,6 +30,8 @@ from hecstac.ras.parser import (
 )
 from hecstac.ras.utils import is_ras_prj
 
+logger = logging.getLogger(__name__)
+
 CURRENT_PLAN = "ras:current_plan"
 PLAN_SHORT_ID = "ras:short_plan_id"
 TITLE = "ras:title"
@@ -404,12 +406,12 @@ class GeometryHdfAsset(GenericAsset):
     def has_2d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
         try:
-            logging.debug(f"reading mesh areas using crs {self.crs}...")
+            logger.debug(f"reading mesh areas using crs {self.crs}...")
 
             if self.hdf_object.mesh_areas(self.crs):
                 return True
         except ValueError:
-            logging.warning(f"No mesh areas found for {self.href}")
+            logger.warning(f"No mesh areas found for {self.href}")
             return False
 
     @property
@@ -553,7 +555,7 @@ class GeometryHdfAsset(GenericAsset):
                     bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
                     legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:
-                logging.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
+                logger.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
 
         # Add OpenStreetMap basemap
         ctx.add_basemap(

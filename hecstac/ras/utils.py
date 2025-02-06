@@ -12,6 +12,8 @@ from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
 
+logger = logging.getLogger(__name__)
+
 
 def find_model_files(ras_prj: str) -> list[str]:
     """Find all files with same base name."""
@@ -181,7 +183,7 @@ def check_xs_direction(cross_sections: gpd.GeoDataFrame, reach: LineString):
                     river_reach_rs.append(xs["river_reach_rs"])
 
         except IndexError as e:
-            logging.debug(
+            logger.debug(
                 f"cross section does not intersect river-reach: {xs['river']} {xs['reach']} {xs['river_station']}: error: {e}"
             )
             continue

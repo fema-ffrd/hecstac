@@ -27,6 +27,8 @@ from hecstac.ras.utils import (
     text_block_from_start_str_to_empty_line,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
@@ -693,7 +695,7 @@ class ProjectFile:
             suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False).strip()
             return name_from_suffix(self.fpath, suffix)
         except Exception:
-            logging.warning("Ras model has no current plan")
+            logger.warning("Ras model has no current plan")
             return None
 
     @property
@@ -706,7 +708,7 @@ class ProjectFile:
                 self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
             )
         if version == []:
-            logging.warning("Unable to parse project version")
+            logger.warning("Unable to parse project version")
             return "N/A"
         else:
             return version[0]
@@ -798,7 +800,7 @@ class PlanFile:
             if len(parts) >= 4:
                 key = parts[4].strip()
                 breach_dict[key] = eval(parts[3].strip())
-        logging.debug(f"breach_dict {breach_dict}")
+        logger.debug(f"breach_dict {breach_dict}")
         return breach_dict
 
 
@@ -1037,7 +1039,7 @@ class UnsteadyFlowFile:
                 flow_area = parts[5].strip()
                 bc_line = parts[7].strip()
                 boundary_dict.append({flow_area: bc_line})
-        logging.debug(f"boundary_dict:{boundary_dict}")
+        logger.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
     @property
@@ -1574,6 +1576,6 @@ class GeometryHDFFile(RASHDFFile):
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            logging.warning("No reference lines found.")
+            logger.warning("No reference lines found.")
         else:
             return ref_lines
