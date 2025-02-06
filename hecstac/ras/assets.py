@@ -112,7 +112,7 @@ METEOROLOGY_SOURCE = "ras:meteorology_source"
 METEOROLOGY_UNITS = "ras:meteorology_units"
 
 
-class ProjectAsset(GenericAsset):
+class ProjectAsset(GenericAsset):  # TODO:  add super class PrjAsset that subplasses to Project and Projection
     """HEC-RAS Project file asset."""
 
     regex_parse_str = r".+\.prj$"
