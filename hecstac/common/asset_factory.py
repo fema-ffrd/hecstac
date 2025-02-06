@@ -28,9 +28,9 @@ def is_ras_prj(url: str) -> bool:
 class GenericAsset(Asset, Generic[T]):
     """Provides a base structure for assets."""
 
-    regex_parse_str: str
-    __roles__: list[str]
-    __description__: str
+    regex_parse_str: str = r""
+    __roles__: list[str] = []
+    __description__: str = ""
     __file_class__: T
 
     def __init__(self, *args, **kwargs):
@@ -146,3 +146,4 @@ class AssetFactory:
             if pattern.match(fpath):
                 logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class.from_dict(asset.to_dict())
+        return asset

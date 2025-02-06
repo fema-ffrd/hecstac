@@ -15,7 +15,7 @@ import pandas as pd
 from pyproj.exceptions import CRSError
 from pystac import Asset
 from rashdf import RasGeomHdf, RasPlanHdf
-from shapely import GeometryCollection, LineString, MultiPolygon, Point, Polygon, make_valid, union_all
+from shapely import GeometryCollection, LineString, MultiPolygon, Point, Polygon, empty, make_valid, union_all
 from shapely.ops import unary_union
 
 from hecstac.ras.utils import (
@@ -1274,13 +1274,10 @@ class RASHDFFile:
         """
         mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
-            raise ValueError("No mesh areas found.")
+            return Polygon()
 
         if mesh_areas.crs is None and crs is not None:
             mesh_areas = mesh_areas.set_crs(crs)
-
-        elif mesh_areas.crs is None and crs is None:
-            raise CRSError("Mesh areas have no CRS and have none to be set to")
 
         if return_gdf:
             return mesh_areas

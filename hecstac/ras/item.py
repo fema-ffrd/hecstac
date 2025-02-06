@@ -133,7 +133,7 @@ class RASModelItem(Item):
     @property
     def geometry_assets(self) -> list[RasGeomHdf | GeometryAsset]:
         """Return any RasGeomHdf in assets."""
-        return [a for a in self.assets.values() if isinstance(a, (RasGeomHdf, GeometryAsset))]
+        return [a for a in self.assets.values() if isinstance(a, (GeometryHdfAsset, GeometryAsset))]
 
     @property
     def crs(self) -> CRS:
@@ -200,7 +200,7 @@ class RASModelItem(Item):
 
         for geom_file in self.geometry_assets:
             if isinstance(geom_file, GeometryHdfAsset):
-                geom_date = geom_file.hdf_object.geometry_time
+                geom_date = geom_file.file.geometry_time
                 if geom_date:
                     item_datetime = geom_date
                     self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"

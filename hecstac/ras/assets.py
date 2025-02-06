@@ -294,7 +294,7 @@ class PlanHdfAsset(GenericAsset[PlanHDFFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[VERSION] = self.file.flow_title
+        self._extra_fields[VERSION] = self.file.file_version
         self._extra_fields[UNITS] = self.file.units_system
         self._extra_fields[PLAN_INFORMATION_BASE_OUTPUT_INTERVAL] = self.file.plan_information_base_output_interval
         self._extra_fields[PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE] = (
@@ -388,12 +388,9 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     def has_2d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
         try:
-            logger.debug(f"reading mesh areas using crs {self.crs}...")
-
-            if self.file.mesh_areas(self.crs):
+            if self.file.mesh_areas():
                 return True
         except ValueError:
-            logger.warning(f"No mesh areas found for {self.href}")
             return False
 
     @property
@@ -404,9 +401,9 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     @property
     @lru_cache
-    def geometry(self, crs: CRS) -> Polygon | MultiPolygon:
+    def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
-        return self.file.mesh_areas(crs)
+        return self.file.mesh_areas(self.crs)
 
     @property
     @lru_cache
