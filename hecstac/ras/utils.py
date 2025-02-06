@@ -18,7 +18,7 @@ def find_model_files(ras_prj: str) -> list[str]:
     ras_prj = Path(ras_prj)
     parent = ras_prj.parent
     stem = Path(ras_prj).name.split(".")[0]
-    return [str(i.as_posix()) for i in parent.glob(f"{stem}*") if i != ras_prj]
+    return [str(i.as_posix()) for i in parent.glob(f"{stem}*")]
 
 
 def is_ras_prj(url: str) -> bool:

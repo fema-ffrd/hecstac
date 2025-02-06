@@ -28,6 +28,7 @@ from hecstac.ras.parser import (
     SteadyFlowFile,
     UnsteadyFlowFile,
 )
+from hecstac.ras.utils import is_ras_prj
 
 CURRENT_PLAN = "ras:current_plan"
 PLAN_SHORT_ID = "ras:short_plan_id"
@@ -114,10 +115,34 @@ METEOROLOGY_SOURCE = "ras:meteorology_source"
 METEOROLOGY_UNITS = "ras:meteorology_units"
 
 
-class ProjectAsset(GenericAsset):  # TODO:  add super class PrjAsset that subplasses to Project and Projection
-    """HEC-RAS Project file asset."""
+class PrjAsset(GenericAsset):
+    """A helper class to delegate .prj files into RAS project or Projection file classes."""
 
     regex_parse_str = r".+\.prj$"
+
+    def __new__(cls, *args, **kwargs):
+        """Delegate to Project or Projection asset."""
+        if cls is PrjAsset:  # Ensuring we don't instantiate Parent directly
+            href = kwargs.get("href") or args[0]
+            is_ras = is_ras_prj(href)
+            if is_ras:
+                return ProjectAsset(*args, **kwargs)
+            else:
+                return ProjectionAsset(*args, **kwargs)
+        return super().__new__(cls)
+
+
+class ProjectionAsset(GenericAsset):
+    """A geospatial projection file."""
+
+    __roles__ = ["projection-file", MediaType.TEXT]
+    __description__ = "A geospatial projection file."
+    __file_class__ = None
+
+
+class ProjectAsset(GenericAsset):
+    """HEC-RAS Project file asset."""
+
     __roles__ = ["project-file", "ras-file"]
     __description__ = "The HEC-RAS project file."
     __file_class__ = ProjectFile
@@ -277,60 +302,78 @@ class PlanHdfAsset(GenericAsset):
     """HEC-RAS Plan HDF file asset."""
 
     regex_parse_str = r".+\.p\d{2}\.hdf$"
+    __roles__ = ["ras-file"]
+    __description__ = "The HEC-RAS plan HDF file."
+    __file_class__ = PlanHDFFile
 
-    def __init__(self, href: str, **kwargs):
-        roles = kwargs.pop("roles", []) + ["ras-file"]
-        description = kwargs.pop("description", "The HEC-RAS plan HDF file.")
-
-        super().__init__(href, roles=roles, description=description, **kwargs)
-
-        self.hdf_object = PlanHDFFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                VERSION: self.hdf_object.file_version,
-                UNITS: self.hdf_object.units_system,
-                PLAN_INFORMATION_BASE_OUTPUT_INTERVAL: self.hdf_object.plan_information_base_output_interval,
-                PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE: self.hdf_object.plan_information_computation_time_step_base,
-                PLAN_INFORMATION_FLOW_FILENAME: self.hdf_object.plan_information_flow_filename,
-                PLAN_INFORMATION_GEOMETRY_FILENAME: self.hdf_object.plan_information_geometry_filename,
-                PLAN_INFORMATION_PLAN_FILENAME: self.hdf_object.plan_information_plan_filename,
-                PLAN_INFORMATION_PLAN_NAME: self.hdf_object.plan_information_plan_name,
-                PLAN_INFORMATION_PROJECT_FILENAME: self.hdf_object.plan_information_project_filename,
-                PLAN_INFORMATION_PROJECT_TITLE: self.hdf_object.plan_information_project_title,
-                PLAN_INFORMATION_SIMULATION_END_TIME: self.hdf_object.plan_information_simulation_end_time,
-                PLAN_INFORMATION_SIMULATION_START_TIME: self.hdf_object.plan_information_simulation_start_time,
-                PLAN_PARAMETERS_1D_FLOW_TOLERANCE: self.hdf_object.plan_parameters_1d_flow_tolerance,
-                PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS: self.hdf_object.plan_parameters_1d_maximum_iterations,
-                PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS_WITHOUT_IMPROVEMENT: self.hdf_object.plan_parameters_1d_maximum_iterations_without_improvement,
-                PLAN_PARAMETERS_1D_MAXIMUM_WATER_SURFACE_ERROR_TO_ABORT: self.hdf_object.plan_parameters_1d_maximum_water_surface_error_to_abort,
-                PLAN_PARAMETERS_1D_STORAGE_AREA_ELEVATION_TOLERANCE: self.hdf_object.plan_parameters_1d_storage_area_elevation_tolerance,
-                PLAN_PARAMETERS_1D_THETA: self.hdf_object.plan_parameters_1d_theta,
-                PLAN_PARAMETERS_1D_THETA_WARMUP: self.hdf_object.plan_parameters_1d_theta_warmup,
-                PLAN_PARAMETERS_1D_WATER_SURFACE_ELEVATION_TOLERANCE: self.hdf_object.plan_parameters_1d_water_surface_elevation_tolerance,
-                PLAN_PARAMETERS_1D2D_GATE_FLOW_SUBMERGENCE_DECAY_EXPONENT: self.hdf_object.plan_parameters_1d2d_gate_flow_submergence_decay_exponent,
-                PLAN_PARAMETERS_1D2D_IS_STABLITY_FACTOR: self.hdf_object.plan_parameters_1d2d_is_stablity_factor,
-                PLAN_PARAMETERS_1D2D_LS_STABLITY_FACTOR: self.hdf_object.plan_parameters_1d2d_ls_stablity_factor,
-                PLAN_PARAMETERS_1D2D_MAXIMUM_NUMBER_OF_TIME_SLICES: self.hdf_object.plan_parameters_1d2d_maximum_number_of_time_slices,
-                PLAN_PARAMETERS_1D2D_MINIMUM_TIME_STEP_FOR_SLICINGHOURS: self.hdf_object.plan_parameters_1d2d_minimum_time_step_for_slicinghours,
-                PLAN_PARAMETERS_1D2D_NUMBER_OF_WARMUP_STEPS: self.hdf_object.plan_parameters_1d2d_number_of_warmup_steps,
-                PLAN_PARAMETERS_1D2D_WARMUP_TIME_STEP_HOURS: self.hdf_object.plan_parameters_1d2d_warmup_time_step_hours,
-                PLAN_PARAMETERS_1D2D_WEIR_FLOW_SUBMERGENCE_DECAY_EXPONENT: self.hdf_object.plan_parameters_1d2d_weir_flow_submergence_decay_exponent,
-                PLAN_PARAMETERS_1D2D_MAXITER: self.hdf_object.plan_parameters_1d2d_maxiter,
-                PLAN_PARAMETERS_2D_EQUATION_SET: self.hdf_object.plan_parameters_2d_equation_set,
-                PLAN_PARAMETERS_2D_NAMES: self.hdf_object.plan_parameters_2d_names,
-                PLAN_PARAMETERS_2D_VOLUME_TOLERANCE: self.hdf_object.plan_parameters_2d_volume_tolerance,
-                PLAN_PARAMETERS_2D_WATER_SURFACE_TOLERANCE: self.hdf_object.plan_parameters_2d_water_surface_tolerance,
-                METEOROLOGY_DSS_FILENAME: self.hdf_object.meteorology_dss_filename,
-                METEOROLOGY_DSS_PATHNAME: self.hdf_object.meteorology_dss_pathname,
-                METEOROLOGY_DATA_TYPE: self.hdf_object.meteorology_data_type,
-                METEOROLOGY_MODE: self.hdf_object.meteorology_mode,
-                METEOROLOGY_RASTER_CELLSIZE: self.hdf_object.meteorology_raster_cellsize,
-                METEOROLOGY_SOURCE: self.hdf_object.meteorology_source,
-                METEOROLOGY_UNITS: self.hdf_object.meteorology_units,
-            }.items()
-            if value
-        }
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[VERSION] = self.file.flow_title
+        self._extra_fields[UNITS] = self.file.units_system
+        self._extra_fields[PLAN_INFORMATION_BASE_OUTPUT_INTERVAL] = self.file.plan_information_base_output_interval
+        self._extra_fields[PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE] = (
+            self.file.plan_information_computation_time_step_base
+        )
+        self._extra_fields[PLAN_INFORMATION_FLOW_FILENAME] = self.file.plan_information_flow_filename
+        self._extra_fields[PLAN_INFORMATION_GEOMETRY_FILENAME] = self.file.plan_information_geometry_filename
+        self._extra_fields[PLAN_INFORMATION_PLAN_FILENAME] = self.file.plan_information_plan_filename
+        self._extra_fields[PLAN_INFORMATION_PLAN_NAME] = self.file.plan_information_plan_name
+        self._extra_fields[PLAN_INFORMATION_PROJECT_FILENAME] = self.file.plan_information_project_filename
+        self._extra_fields[PLAN_INFORMATION_PROJECT_TITLE] = self.file.plan_information_project_title
+        self._extra_fields[PLAN_INFORMATION_SIMULATION_END_TIME] = self.file.plan_information_simulation_end_time
+        self._extra_fields[PLAN_INFORMATION_SIMULATION_START_TIME] = self.file.plan_information_simulation_start_time
+        self._extra_fields[PLAN_PARAMETERS_1D_FLOW_TOLERANCE] = self.file.plan_parameters_1d_flow_tolerance
+        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS] = self.file.plan_parameters_1d_maximum_iterations
+        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS_WITHOUT_IMPROVEMENT] = (
+            self.file.plan_parameters_1d_maximum_iterations_without_improvement
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_WATER_SURFACE_ERROR_TO_ABORT] = (
+            self.file.plan_parameters_1d_maximum_water_surface_error_to_abort
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D_STORAGE_AREA_ELEVATION_TOLERANCE] = (
+            self.file.plan_parameters_1d_storage_area_elevation_tolerance
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D_THETA] = self.file.plan_parameters_1d_theta
+        self._extra_fields[PLAN_PARAMETERS_1D_THETA_WARMUP] = self.file.plan_parameters_1d_theta_warmup
+        self._extra_fields[PLAN_PARAMETERS_1D_WATER_SURFACE_ELEVATION_TOLERANCE] = (
+            self.file.plan_parameters_1d_water_surface_elevation_tolerance
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_GATE_FLOW_SUBMERGENCE_DECAY_EXPONENT] = (
+            self.file.plan_parameters_1d2d_gate_flow_submergence_decay_exponent
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_IS_STABLITY_FACTOR] = self.file.plan_parameters_1d2d_is_stablity_factor
+        self._extra_fields[PLAN_PARAMETERS_1D2D_LS_STABLITY_FACTOR] = self.file.plan_parameters_1d2d_ls_stablity_factor
+        self._extra_fields[PLAN_PARAMETERS_1D2D_MAXIMUM_NUMBER_OF_TIME_SLICES] = (
+            self.file.plan_parameters_1d2d_maximum_number_of_time_slices
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_MINIMUM_TIME_STEP_FOR_SLICINGHOURS] = (
+            self.file.plan_parameters_1d2d_minimum_time_step_for_slicinghours
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_NUMBER_OF_WARMUP_STEPS] = (
+            self.file.plan_parameters_1d2d_number_of_warmup_steps
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_WARMUP_TIME_STEP_HOURS] = (
+            self.file.plan_parameters_1d2d_warmup_time_step_hours
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_WEIR_FLOW_SUBMERGENCE_DECAY_EXPONENT] = (
+            self.file.plan_parameters_1d2d_weir_flow_submergence_decay_exponent
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_MAXITER] = self.file.plan_parameters_1d2d_maxiter
+        self._extra_fields[PLAN_PARAMETERS_2D_EQUATION_SET] = self.file.plan_parameters_2d_equation_set
+        self._extra_fields[PLAN_PARAMETERS_2D_NAMES] = self.file.plan_parameters_2d_names
+        self._extra_fields[PLAN_PARAMETERS_2D_VOLUME_TOLERANCE] = self.file.plan_parameters_2d_volume_tolerance
+        self._extra_fields[PLAN_PARAMETERS_2D_WATER_SURFACE_TOLERANCE] = (
+            self.file.plan_parameters_2d_water_surface_tolerance
+        )
+        self._extra_fields[METEOROLOGY_DSS_FILENAME] = self.file.meteorology_dss_filename
+        self._extra_fields[METEOROLOGY_DSS_PATHNAME] = self.file.meteorology_dss_pathname
+        self._extra_fields[METEOROLOGY_DATA_TYPE] = self.file.meteorology_data_type
+        self._extra_fields[METEOROLOGY_MODE] = self.file.meteorology_mode
+        self._extra_fields[METEOROLOGY_RASTER_CELLSIZE] = self.file.meteorology_raster_cellsize
+        self._extra_fields[METEOROLOGY_SOURCE] = self.file.meteorology_source
+        self._extra_fields[METEOROLOGY_UNITS] = self.file.meteorology_units
+        return self._extra_fields
 
 
 class GeometryHdfAsset(GenericAsset):
@@ -822,7 +865,7 @@ class MiscXMLFileAsset(GenericAsset):
 
 
 RAS_ASSET_CLASSES = [
-    ProjectAsset,
+    PrjAsset,
     PlanAsset,
     GeometryAsset,
     SteadyFlowAsset,
