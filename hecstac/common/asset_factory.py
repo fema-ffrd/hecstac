@@ -2,9 +2,8 @@
 
 import logging
 from pathlib import Path
-from typing import ClassVar, Dict, Generic, Type, TypeVar
+from typing import Dict, Generic, Type, TypeVar
 
-import pystac
 from pyproj import CRS
 from pystac import Asset
 
@@ -13,16 +12,6 @@ from hecstac.hms.s3_utils import check_storage_extension
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")  # Generic for asset file accessor classes
-
-
-def is_ras_prj(url: str) -> bool:
-    """Check if a file is a HEC-RAS project file."""
-    with open(url) as f:
-        file_str = f.read()
-    if "Proj Title" in file_str.split("\n")[0]:
-        return True
-    else:
-        return False
 
 
 class GenericAsset(Asset, Generic[T]):
@@ -120,25 +109,6 @@ class AssetFactory:
         asset = asset_class(href=fpath)
         asset.title = Path(fpath).name
         return check_storage_extension(asset)
-
-    def create_ras_asset(self, fpath: str):
-        """Create an asset instance based on the file extension."""
-        logger.debug(f"Creating asset for {fpath}")
-        from hecstac.ras.assets import ProjectAsset
-
-        if fpath.lower().endswith(".prj"):
-            if is_ras_prj(fpath):
-                return ProjectAsset(href=fpath, title=Path(fpath).name)
-            else:
-                return GenericAsset(href=fpath, title=Path(fpath).name)
-
-        for pattern, asset_class in self.extension_to_asset.items():
-            if pattern.match(fpath):
-                logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
-                return asset_class(href=fpath, title=Path(fpath).name)
-
-        logger.warning(f"Unable to pattern match asset for file {fpath}")
-        return GenericAsset(href=fpath, title=Path(fpath).name)
 
     def asset_from_dict(self, asset: Asset):
         fpath = asset.href

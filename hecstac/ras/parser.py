@@ -12,10 +12,8 @@ from typing import Iterator
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from pyproj.exceptions import CRSError
-from pystac import Asset
 from rashdf import RasGeomHdf, RasPlanHdf
-from shapely import GeometryCollection, LineString, MultiPolygon, Point, Polygon, empty, make_valid, union_all
+from shapely import GeometryCollection, LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
 from hecstac.ras.utils import (

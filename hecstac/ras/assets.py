@@ -9,15 +9,12 @@ import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from pandas import lreshape
-from pyproj import CRS
-from pyproj.exceptions import CRSError
 from pystac import MediaType
-from pystac.extensions.projection import ProjectionExtension
 from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
+from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.parser import (
     GeometryFile,
     GeometryHDFFile,
@@ -230,7 +227,10 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
-        return reproject_to_wgs84(self.geometry, self.crs)
+        if self.crs is None:
+            return NULL_GEOMETRY
+        else:
+            return reproject_to_wgs84(self.geometry, self.crs)
 
 
 class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
@@ -378,6 +378,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         return self._extra_fields
 
     @property
+    @lru_cache
     def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
         """Docstring."""  # TODO: fill out
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
@@ -410,7 +411,10 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
-        return reproject_to_wgs84(self.geometry, self.crs)
+        if self.crs is None:
+            return NULL_GEOMETRY
+        else:
+            return reproject_to_wgs84(self.geometry, self.crs)
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """Plot mesh areas on the given axes."""

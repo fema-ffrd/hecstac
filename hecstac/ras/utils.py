@@ -4,7 +4,6 @@ import logging
 import os
 from functools import wraps
 from pathlib import Path
-from typing import Optional
 
 import geopandas as gpd
 import numpy as np

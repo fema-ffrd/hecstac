@@ -3,32 +3,24 @@
 import datetime
 import json
 import logging
-import os
-from collections import UserDict
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 import pystac
 import pystac.errors
-from pyproj import CRS, Transformer
+from pyproj import CRS
 from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
-from pystac.extensions.storage import StorageExtension
 from pystac.utils import datetime_to_str
-from rashdf import RasGeomHdf
-from shapely import Geometry, Polygon, simplify, to_geojson, union_all
+from shapely import Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
-from shapely.ops import transform
 
 from hecstac.common.asset_factory import AssetFactory
-from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.ras.assets import (
     RAS_EXTENSION_MAPPING,
     GeometryAsset,
     GeometryHdfAsset,
-    ProjectAsset,
 )
 from hecstac.ras.consts import (
     NULL_DATETIME,
