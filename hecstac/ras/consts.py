@@ -1,3 +1,5 @@
+"""Constants."""
+
 import datetime
 import json
 

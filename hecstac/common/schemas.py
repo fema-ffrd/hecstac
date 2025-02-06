@@ -1,3 +1,5 @@
+"""Schema parsing."""
+
 # TODO: update these, add imports, etc.
 # def extract_schema_definition(definition_name: str) -> dict[str, Any]:
 #     """Extract asset specific schema from ras extension schema"""

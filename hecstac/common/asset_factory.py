@@ -1,3 +1,5 @@
+"""Create instances of assets."""
+
 import logging
 from pathlib import Path
 from typing import Dict, Type
@@ -9,8 +11,18 @@ from pystac import Asset
 from hecstac.hms.s3_utils import check_storage_extension
 
 
+def is_ras_prj(url: str) -> bool:
+    """Check if a file is a HEC-RAS project file."""
+    with open(url) as f:
+        file_str = f.read()
+    if "Proj Title" in file_str.split("\n")[0]:
+        return True
+    else:
+        return False
+
+
 class GenericAsset(Asset):
-    """Generic Asset."""
+    """Provides a base structure for assets."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,9 +75,11 @@ class GenericAsset(Asset):
                 return CRS(wkt2)
 
     def __repr__(self):
+        """Return string representation of the GenericAsset instance."""
         return f"<{self.__class__.__name__} name={self.name}>"
 
     def __str__(self):
+        """Return string representation of assets name."""
         return f"{self.name}"
 
 
@@ -73,14 +87,13 @@ class AssetFactory:
     """Factory for creating HEC asset instances based on file extensions."""
 
     def __init__(self, extension_to_asset: Dict[str, Type[GenericAsset]]):
-        """
-        Initialize the AssetFactory with a mapping of file extensions to asset types and metadata.
-        """
+        """Initialize the AssetFactory with a mapping of file extensions to asset types and metadata."""
         self.extension_to_asset = extension_to_asset
 
     def create_hms_asset(self, fpath: str, item_type: str = "model") -> Asset:
         """
         Create an asset instance based on the file extension.
+
         item_type: str
 
         The type of item to create. This is used to determine the asset class.
@@ -100,7 +113,16 @@ class AssetFactory:
         return check_storage_extension(asset)
 
     def create_ras_asset(self, fpath: str):
+        """Create an asset instance based on the file extension."""
         logging.debug(f"Creating asset for {fpath}")
+        from hecstac.ras.assets import ProjectAsset
+
+        if fpath.lower().endswith(".prj"):
+            if is_ras_prj(fpath):
+                return ProjectAsset(href=fpath, title=Path(fpath).name)
+            else:
+                return GenericAsset(href=fpath, title=Path(fpath).name)
+
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
                 logging.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")

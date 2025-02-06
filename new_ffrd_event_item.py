@@ -1,3 +1,5 @@
+"""Creates a STAC Item from an event."""
+
 from pystac import Item
 
 from hecstac.events.logger import initialize_logger

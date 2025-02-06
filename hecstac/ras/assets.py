@@ -1,3 +1,5 @@
+"""Asset instances of HEC-RAS model files."""
+
 import logging
 import os
 import re
@@ -387,9 +389,7 @@ class GeometryHdfAsset(GenericAsset):
         return reproject_to_wgs84(self.geometry, self.crs)
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
-        """
-        Plots mesh areas on the given axes.
-        """
+        """Plot mesh areas on the given axes."""
         mesh_polygons.plot(
             ax=ax,
             edgecolor="silver",
@@ -411,9 +411,7 @@ class GeometryHdfAsset(GenericAsset):
         return legend_handle
 
     def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list[Line2D]:
-        """
-        Plots breaklines on the given axes.
-        """
+        """Plot breaklines on the given axes."""
         breaklines.plot(ax=ax, edgecolor="red", linestyle="-", alpha=0.3, label="Breaklines")
         legend_handle = [
             Line2D(
@@ -429,9 +427,7 @@ class GeometryHdfAsset(GenericAsset):
         return legend_handle
 
     def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list[Line2D]:
-        """
-        Plots boundary condition lines on the given axes.
-        """
+        """Plot boundary condition lines on the given axes."""
         legend_handles = [
             Line2D([0], [0], color="none", linestyle="None", label="BC Lines"),
         ]
@@ -483,9 +479,8 @@ class GeometryHdfAsset(GenericAsset):
         title: str = "Model_Thumbnail",
         thumbnail_dest: str = None,
     ):
-        """Create a thumbnail figure for a geometry hdf file, including
-        various geospatial layers such as USGS gages, mesh areas,
-        breaklines, and boundary condition (BC) lines.
+        """
+        Create a thumbnail figure for a geometry hdf file, includingvarious geospatial layers such as USGS gages, mesh areas, breaklines, and boundary condition (BC) lines.
 
         Parameters
         ----------
@@ -494,6 +489,8 @@ class GeometryHdfAsset(GenericAsset):
             Options include "usgs_gages", "mesh_areas", "breaklines", and "bc_lines".
         title : str, optional
             Title of the figure, by default "Model Thumbnail".
+        thumbnail_dest : str, optional
+            Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
         """
         fig, ax = plt.subplots(figsize=(12, 12))
         legend_handles = []

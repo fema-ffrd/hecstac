@@ -1,3 +1,5 @@
+"""Creates a STAC Item from a HEC-HMS model .prj file."""
+
 from pathlib import Path
 
 from hecstac.hms.logger import initialize_logger
@@ -5,9 +7,7 @@ from hecstac.hms.item import HMSModelItem
 
 
 def sanitize_catalog_assets(item: HMSModelItem) -> HMSModelItem:
-    """
-    Forces the asset paths in the catalog relative to item root.
-    """
+    """Force the asset paths in the catalog relative to item root."""
     for asset in item.assets.values():
         if item.pm.model_root_dir in asset.href:
             asset.href = asset.href.replace(item.pm.item_dir, ".")

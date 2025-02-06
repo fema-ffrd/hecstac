@@ -1,3 +1,5 @@
+"""HEC-RAS STAC Item creation class."""
+
 import datetime
 import json
 import logging
@@ -59,16 +61,38 @@ class RASModelItem(Item):
 
     @classmethod
     def from_prj(cls, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
-        """Create an item from a RAS .prj file."""
+        """
+        Create a STAC item from a HEC-RAS .prj file.
+
+        Parameters
+        ----------
+        ras_project_file : str
+            Path to the HEC-RAS project file (.prj).
+        item_id : str
+            Unique item id for the STAC item.
+        crs : str, optional
+            Coordinate reference system (CRS) to apply to the item. If None, the CRS will be extracted from the geometry .hdf file.
+        simplify_geometry : bool, optional
+            Whether to simplify geometry. Defaults to True.
+
+        Returns
+        ----------
+        stac : RASModelItem
+            An instance of the class representing the STAC item.
+
+        """
         pm = LocalPathManager(Path(ras_project_file).parent)
+
         href = pm.item_path(item_id)
         assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
+
 
         stac = cls(
             Path(ras_project_file).stem,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
+            {"ras_project_file": ras_project_file},
             {"ras_project_file": ras_project_file},
             href=href,
             assets=assets,
@@ -172,9 +196,11 @@ class RASModelItem(Item):
 
     @property
     def datetime(self) -> datetime:
+    def datetime(self) -> datetime:
         """The datetime for the RAS STAC item."""
         item_datetime = None
 
+        for geom_file in self.geometry_assets:
         for geom_file in self.geometry_assets:
             if isinstance(geom_file, GeometryHdfAsset):
                 geom_date = geom_file.hdf_object.geometry_time
@@ -191,7 +217,7 @@ class RASModelItem(Item):
         return item_datetime
 
     def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail", thumbnail_dir=None):
-        """Generates model thumbnail asset for each geometry file.
+        """Generate model thumbnail asset for each geometry file.
 
         Parameters
         ----------
@@ -199,10 +225,13 @@ class RASModelItem(Item):
             List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines'
         title_prefix : str, optional
             Thumbnail title prefix, by default "Model_Thumbnail".
+        thumbnail_dir : str, optional
+            Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
         """
         if thumbnail_dir:
             thumbnail_dest = thumbnail_dir
         else:
+            thumbnail_dest = self.self_href
             thumbnail_dest = self.self_href
 
         for geom in self.geometry_assets:
