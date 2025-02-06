@@ -15,6 +15,7 @@ from pyproj import CRS, Transformer
 from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
+from pystac.utils import datetime_to_str
 from rashdf import RasGeomHdf
 from shapely import Geometry, Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
@@ -131,7 +132,7 @@ class RASModelItem(Item):
         return any([a.has_1d for a in self.geometry_assets])
 
     @property
-    def geometry_assets(self) -> list[RasGeomHdf | GeometryAsset]:
+    def geometry_assets(self) -> list[GeometryHdfAsset | GeometryAsset]:
         """Return any RasGeomHdf in assets."""
         return [a for a in self.assets.values() if isinstance(a, (GeometryHdfAsset, GeometryAsset))]
 
@@ -177,14 +178,17 @@ class RASModelItem(Item):
         if self.ras_project_file is None:
             return self._properties
         properties = self._properties
-        # properties[self.RAS_HAS_1D] = self.has_1d
+        properties[self.RAS_HAS_1D] = self.has_1d
         properties[self.RAS_HAS_2D] = self.has_2d
         properties[self.PROJECT_TITLE] = self.pf.project_title
         properties[self.PROJECT_VERSION] = self.pf.ras_version
         properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
         properties[self.PROJECT_STATUS] = self.pf.project_status
         properties[self.MODEL_UNITS] = self.pf.project_units
-
+        if self.datetime is not None:
+            properties["datetime"] = datetime_to_str(self.datetime)
+        else:
+            properties["datetime"] = None
         # TODO: once all assets are created, populate associations between assets
         return properties
 
@@ -194,24 +198,32 @@ class RASModelItem(Item):
         self._properties = properties
 
     @property
-    def datetime(self) -> datetime:
-        """The datetime for the RAS STAC item."""
-        item_datetime = None
+    def datetime(self) -> datetime.datetime | None:
+        """Parse datetime from model geometry and return result."""
+        datetimes = []
+        for i in self.geometry_assets:
+            i = i.file.geometry_time
+            if i is None:
+                continue
+            elif isinstance(i, list):
+                datetimes.extend([j for j in i if j is not None])
+            elif isinstance(i, datetime.datetime):
+                datetimes.append(i)
 
-        for geom_file in self.geometry_assets:
-            if isinstance(geom_file, GeometryHdfAsset):
-                geom_date = geom_file.file.geometry_time
-                if geom_date:
-                    item_datetime = geom_date
-                    self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
-                    logger.info(f"Using item datetime from {geom_file.href}")
-                    break
-
-        if item_datetime is None:
+        datetimes = list(set(datetimes))
+        if len(datetimes) > 1:
+            self._properties["start_datetime"] = datetime_to_str(min(datetimes))
+            self._properties["end_datetime"] = datetime_to_str(max(datetimes))
+            self._properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+            item_time = None
+        elif len(datetimes) == 1:
+            item_time = datetimes[0]
+            self._properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+        else:
             logger.warning("Could not extract item datetime from geometry, using item processing time.")
-            item_datetime = datetime.datetime.now()
-            self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
-        return item_datetime
+            item_time = datetime.datetime.now()
+            self._properties[self.RAS_DATETIME_SOURCE] = "processing_time"
+        return item_time
 
     def add_model_thumbnails(self, layers: list, title_prefix: str = "Model_Thumbnail", thumbnail_dir=None):
         """Generate model thumbnail asset for each geometry file.

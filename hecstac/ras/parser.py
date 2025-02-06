@@ -814,7 +814,7 @@ class GeometryFile:
         return search_contents(self.file_lines, "Program Version")
 
     @property
-    def datetimes(self) -> list[datetime.datetime]:
+    def geometry_time(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry."""
         dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False, require_one=False)
         if len(dts) >= 1:
