@@ -3,12 +3,23 @@
 import logging
 import os
 from functools import wraps
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
+
+logger = logging.getLogger(__name__)
+
+
+def find_model_files(ras_prj: str) -> list[str]:
+    """Find all files with same base name."""
+    ras_prj = Path(ras_prj)
+    parent = ras_prj.parent
+    stem = Path(ras_prj).name.split(".")[0]
+    return [str(i.as_posix()) for i in parent.glob(f"{stem}*")]
 
 
 def is_ras_prj(url: str) -> bool:
@@ -171,7 +182,7 @@ def check_xs_direction(cross_sections: gpd.GeoDataFrame, reach: LineString):
                     river_reach_rs.append(xs["river_reach_rs"])
 
         except IndexError as e:
-            logging.debug(
+            logger.debug(
                 f"cross section does not intersect river-reach: {xs['river']} {xs['reach']} {xs['river_station']}: error: {e}"
             )
             continue
@@ -190,3 +201,106 @@ def validate_point(geom):
         raise IndexError(f"expected point at xs-river intersection got: {type(geom)} | {geom}")
     else:
         raise TypeError(f"expected point at xs-river intersection got: {type(geom)} | {geom}")
+
+
+class requires_geos:
+    """Unsure."""
+
+    def __init__(self, version):
+        if version.count(".") != 2:
+            raise ValueError("Version must be <major>.<minor>.<patch> format")
+        self.version = tuple(int(x) for x in version.split("."))
+
+    def __call__(self, func):
+        is_compatible = lib.geos_version >= self.version
+        is_doc_build = os.environ.get("SPHINX_DOC_BUILD") == "1"  # set in docs/conf.py
+        if is_compatible and not is_doc_build:
+            return func  # return directly, do not change the docstring
+
+        msg = "'{}' requires at least GEOS {}.{}.{}.".format(func.__name__, *self.version)
+        if is_compatible:
+
+            @wraps(func)
+            def wrapped(*args, **kwargs):
+                return func(*args, **kwargs)
+
+        else:
+
+            @wraps(func)
+            def wrapped(*args, **kwargs):
+                raise UnsupportedGEOSVersionError(msg)
+
+        doc = wrapped.__doc__
+        if doc:
+            # Insert the message at the first double newline
+            position = doc.find("\n\n") + 2
+            # Figure out the indentation level
+            indent = 0
+            while True:
+                if doc[position + indent] == " ":
+                    indent += 1
+                else:
+                    break
+            wrapped.__doc__ = doc.replace("\n\n", "\n\n{}.. note:: {}\n\n".format(" " * indent, msg), 1)
+
+        return wrapped
+
+
+def multithreading_enabled(func):
+    """
+    Prepare multithreading by setting the writable flags of object type ndarrays to False.
+
+    NB: multithreading also requires the GIL to be released, which is done in
+    the C extension (ufuncs.c).
+    """
+
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        array_args = [arg for arg in args if isinstance(arg, np.ndarray) and arg.dtype == object] + [
+            arg
+            for name, arg in kwargs.items()
+            if name not in {"where", "out"} and isinstance(arg, np.ndarray) and arg.dtype == object
+        ]
+        old_flags = [arr.flags.writeable for arr in array_args]
+        try:
+            for arr in array_args:
+                arr.flags.writeable = False
+            return func(*args, **kwargs)
+        finally:
+            for arr, old_flag in zip(array_args, old_flags):
+                arr.flags.writeable = old_flag
+
+    return wrapped
+
+
+@requires_geos("3.7.0")
+@multithreading_enabled
+def reverse(geometry, **kwargs):
+    """Returns a copy of a Geometry with the order of coordinates reversed.
+
+    If a Geometry is a polygon with interior rings, the interior rings are also
+    reversed.
+
+    Points are unchanged. None is returned where Geometry is None.
+
+    Parameters
+    ----------
+    geometry : Geometry or array_like
+    **kwargs
+        See :ref:`NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
+
+    See Also
+    --------
+    is_ccw : Checks if a Geometry is clockwise.
+
+    Examples
+    --------
+    >>> from shapely import LineString, Polygon
+    >>> reverse(LineString([(0, 0), (1, 2)]))
+    <LINESTRING (1 2, 0 0)>
+    >>> reverse(Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]))
+    <POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))>
+    >>> reverse(None) is None
+    True
+    """
+    return lib.reverse(geometry, **kwargs)

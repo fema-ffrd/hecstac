@@ -3,15 +3,18 @@
 import logging
 import os
 import re
+from functools import lru_cache
 
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pystac import MediaType
-from pyproj import CRS
-from pyproj.exceptions import CRSError
+from shapely import MultiPolygon, Polygon
+
 from hecstac.common.asset_factory import GenericAsset
+from hecstac.common.geometry import reproject_to_wgs84
+from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.parser import (
     GeometryFile,
     GeometryHDFFile,
@@ -22,6 +25,9 @@ from hecstac.ras.parser import (
     SteadyFlowFile,
     UnsteadyFlowFile,
 )
+from hecstac.ras.utils import is_ras_prj
+
+logger = logging.getLogger(__name__)
 
 CURRENT_PLAN = "ras:current_plan"
 PLAN_SHORT_ID = "ras:short_plan_id"
@@ -108,286 +114,307 @@ METEOROLOGY_SOURCE = "ras:meteorology_source"
 METEOROLOGY_UNITS = "ras:meteorology_units"
 
 
-class ProjectAsset(GenericAsset):
-    """HEC-RAS Project file asset."""
+class PrjAsset(GenericAsset):
+    """A helper class to delegate .prj files into RAS project or Projection file classes."""
 
     regex_parse_str = r".+\.prj$"
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", []) + ["project-file", "ras-file"]
-        description = kwargs.pop("description", "The HEC-RAS project file.")
-
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
-
-        self.href = href
-        self.pf = ProjectFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                CURRENT_PLAN: self.pf.plan_current,
-                PLAN_FILES: self.pf.plan_files,
-                GEOMETRY_FILES: self.pf.geometry_files,
-                STEADY_FLOW_FILES: self.pf.steady_flow_files,
-                QUASI_UNSTEADY_FLOW_FILES: self.pf.quasi_unsteady_flow_files,
-                UNSTEADY_FLOW_FILES: self.pf.unsteady_flow_files,
-            }.items()
-            if value
-        }
+    def __new__(cls, *args, **kwargs):
+        """Delegate to Project or Projection asset."""
+        if cls is PrjAsset:  # Ensuring we don't instantiate Parent directly
+            href = kwargs.get("href") or args[0]
+            is_ras = is_ras_prj(href)
+            if is_ras:
+                return ProjectAsset(*args, **kwargs)
+            else:
+                return ProjectionAsset(*args, **kwargs)
+        return super().__new__(cls)
 
 
-class PlanAsset(GenericAsset):
+class ProjectionAsset(GenericAsset):
+    """A geospatial projection file."""
+
+    __roles__ = ["projection-file", MediaType.TEXT]
+    __description__ = "A geospatial projection file."
+    __file_class__ = None
+
+
+class ProjectAsset(GenericAsset[ProjectFile]):
+    """HEC-RAS Project file asset."""
+
+    __roles__ = ["project-file", "ras-file"]
+    __description__ = "The HEC-RAS project file."
+    __file_class__ = ProjectFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[CURRENT_PLAN] = self.file.plan_current
+        self._extra_fields[PLAN_FILES] = self.file.plan_files
+        self._extra_fields[GEOMETRY_FILES] = self.file.geometry_files
+        self._extra_fields[STEADY_FLOW_FILES] = self.file.steady_flow_files
+        self._extra_fields[QUASI_UNSTEADY_FLOW_FILES] = self.file.quasi_unsteady_flow_files
+        self._extra_fields[UNSTEADY_FLOW_FILES] = self.file.unsteady_flow_files
+        return self._extra_fields
+
+
+class PlanAsset(GenericAsset[PlanFile]):
     """HEC-RAS Plan file asset."""
 
     regex_parse_str = r".+\.p\d{2}$"
+    __roles__ = ["plan-file", "ras-file"]
+    __description__ = "The plan file which contains a list of associated input files and all simulation options."
+    __file_class__ = PlanFile
 
-    def __init__(self, href: str, **kwargs):
-        roles = kwargs.pop("roles", []) + ["plan-file", "ras-file"]
-        description = kwargs.pop(
-            "description",
-            "The plan file which contains a list of associated input files and all simulation options.",
-        )
-
-        super().__init__(href, roles=roles, description=description, **kwargs)
-
-        self.href = href
-        self.planf = PlanFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                TITLE: self.planf.plan_title,
-                VERSION: self.planf.plan_version,
-                GEOMETRY_FILE: self.planf.geometry_file,
-                FLOW_FILE: self.planf.flow_file,
-                BREACH_LOCATIONS: self.planf.breach_locations,
-            }.items()
-            if value
-        }
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[TITLE] = self.file.plan_title
+        self._extra_fields[VERSION] = self.file.plan_version
+        self._extra_fields[GEOMETRY_FILE] = self.file.geometry_file
+        self._extra_fields[FLOW_FILE] = self.file.flow_file
+        self._extra_fields[BREACH_LOCATIONS] = self.file.breach_locations
+        return self._extra_fields
 
 
-class GeometryAsset(GenericAsset):
+class GeometryAsset(GenericAsset[GeometryFile]):
     """HEC-RAS Geometry file asset."""
 
     regex_parse_str = r".+\.g\d{2}$"
+    __roles__ = ["geometry-file", "ras-file"]
+    __description__ = (
+        "The geometry file which contains cross-sectional, 2D, hydraulic structures, and other geometric data."
+    )
+    __file_class__ = GeometryFile
     PROPERTIES_WITH_GDF = ["reaches", "junctions", "cross_sections", "structures"]
 
-    def __init__(self, href: str, crs: str = None, **kwargs):
-        # self.pyproj_crs = self.validate_crs(crs)
-        self.crs = crs
-        roles = kwargs.pop("roles", []) + ["geometry-file", "ras-file"]
-        description = kwargs.pop(
-            "description",
-            "The geometry file which contains cross-sectional, 2D, hydraulic structures, and other geometric data",
-        )
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[TITLE] = self.file.geom_title
+        self._extra_fields[VERSION] = self.file.geom_version
+        self._extra_fields[HAS_1D] = self.file.has_1d
+        self._extra_fields[HAS_2D] = self.file.has_2d
+        self._extra_fields[RIVERS] = list(self.file.rivers.keys())
+        self._extra_fields[REACHES] = list(self.file.reaches.keys())
+        self._extra_fields[JUNCTIONS] = list(self.file.junctions.keys())
+        self._extra_fields[CROSS_SECTIONS] = list(self.file.cross_sections.keys())
+        self._extra_fields[STRUCTURES] = list(self.file.structures.keys())
+        self._extra_fields[STORAGE_AREAS] = list(self.file.storage_areas.keys())
+        self._extra_fields[CONNECTIONS] = list(self.file.connections.keys())
+        return self._extra_fields
 
-        super().__init__(href, roles=roles, description=description, **kwargs)
+    @property
+    @lru_cache
+    def geometry(self) -> Polygon | MultiPolygon:
+        """Retrieves concave hull of cross-sections."""
+        return self.file.concave_hull
 
-        self.href = href
-        self.geomf = GeometryFile(self.href, self.crs)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                TITLE: self.geomf.geom_title,
-                VERSION: self.geomf.geom_version,
-                HAS_1D: self.geomf.has_1d,
-                HAS_2D: self.geomf.has_2d,
-                # RIVERS: self.geomf.rivers,
-                # REACHES: self.geomf.reaches,
-                # JUNCTIONS: self.geomf.junctions,
-                # CROSS_SECTIONS: self.geomf.cross_sections,
-                # STRUCTURES: self.geomf.structures,
-                # STORAGE_AREAS: self.geomf.storage_areas, #TODO: fix this
-                # CONNECTIONS: self.geomf.connections,#TODO: fix this
-                # BREACH_LOCATIONS: self.planf.breach_locations,
-            }.items()
-            if value
-        }
+    @property
+    @lru_cache
+    def has_1d(self) -> bool:
+        """Check if geometry has any river centerlines."""
+        return self.file.has_1d
+
+    @property
+    @lru_cache
+    def has_2d(self) -> bool:
+        """Check if geometry has any 2D areas."""
+        return self.file.has_2d
+
+    @property
+    @lru_cache
+    def geometry_wgs84(self) -> Polygon | MultiPolygon:
+        """Reproject geometry to wgs84."""
+        # TODO: this could be generalized to be a function that takes argument for CRS.
+        if self.crs is None:
+            return NULL_GEOMETRY
+        else:
+            return reproject_to_wgs84(self.geometry, self.crs)
 
 
-class SteadyFlowAsset(GenericAsset):
+class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     """HEC-RAS Steady Flow file asset."""
 
     regex_parse_str = r".+\.f\d{2}$"
+    __roles__ = ["steady-flow-file", "ras-file"]
+    __description__ = "Steady Flow file which contains profile information, flow data, and boundary conditions."
+    __file_class__ = SteadyFlowFile
 
-    def __init__(self, href: str, **kwargs):
-        roles = kwargs.pop("roles", []) + ["steady-flow-file", "ras-file"]
-        description = kwargs.pop(
-            "description",
-            "Steady Flow file which contains profile information, flow data, and boundary conditions.",
-        )
-
-        super().__init__(href, roles=roles, description=description, **kwargs)
-
-        self.href = href
-        self.flowf = SteadyFlowFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                TITLE: self.flowf.flow_title,
-                N_PROFILES: self.flowf.n_profiles,
-            }.items()
-            if value
-        }
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[TITLE] = self.file.flow_title
+        self._extra_fields[N_PROFILES] = self.file.n_profiles
+        return self._extra_fields
 
 
-class QuasiUnsteadyFlowAsset(GenericAsset):
+class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     """HEC-RAS Quasi-Unsteady Flow file asset."""
 
     # TODO: implement this class
 
     regex_parse_str = r".+\.q\d{2}$"
+    __roles__ = ["quasi-unsteady-flow-file", "ras-file"]
+    __description__ = "Quasi-Unsteady Flow file."
+    __file_class__ = QuasiUnsteadyFlowFile
 
-    def __init__(self, href: str, **kwargs):
-        roles = kwargs.pop("roles", []) + ["quasi-unsteady-flow-file", "ras-file"]
-        description = kwargs.pop("description", "Quasi-Unsteady Flow file.")
-
-        super().__init__(href, roles=roles, description=description, **kwargs)
-
-        self.href = href
-        self.flowf = QuasiUnsteadyFlowFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                TITLE: self.flowf.flow_title,
-            }.items()
-            if value
-        }
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[TITLE] = self.file.flow_title
+        return self._extra_fields
 
 
-class UnsteadyFlowAsset(GenericAsset):
+class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     """HEC-RAS Unsteady Flow file asset."""
 
     regex_parse_str = r".+\.u\d{2}$"
+    __roles__ = ["unsteady-flow-file", "ras-file"]
+    __description__ = "The unsteady file contains hydrographs, initial conditions, and any flow options."
+    __file_class__ = UnsteadyFlowFile
 
-    def __init__(self, href: str, **kwargs):
-        roles = kwargs.pop("roles", []) + ["unsteady-flow-file", "ras-file"]
-        description = kwargs.pop(
-            "description",
-            "The unsteady file contains hydrographs, initial conditions, and any flow options.",
-        )
-
-        super().__init__(href, roles=roles, description=description, **kwargs)
-
-        self.href = href
-        self.flowf = UnsteadyFlowFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                TITLE: self.flowf.flow_title,
-                BOUNDARY_LOCATIONS: self.flowf.boundary_locations,
-                REFERENCE_LINES: self.flowf.reference_lines,
-            }.items()
-            if value
-        }
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[TITLE] = self.file.flow_title
+        self._extra_fields[BOUNDARY_LOCATIONS] = self.file.boundary_locations
+        self._extra_fields[REFERENCE_LINES] = self.file.reference_lines
+        return self._extra_fields
 
 
-class PlanHdfAsset(GenericAsset):
+class PlanHdfAsset(GenericAsset[PlanHDFFile]):
     """HEC-RAS Plan HDF file asset."""
 
     regex_parse_str = r".+\.p\d{2}\.hdf$"
+    __roles__ = ["ras-file"]
+    __description__ = "The HEC-RAS plan HDF file."
+    __file_class__ = PlanHDFFile
 
-    def __init__(self, href: str, **kwargs):
-        roles = kwargs.pop("roles", []) + ["ras-file"]
-        description = kwargs.pop("description", "The HEC-RAS plan HDF file.")
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[VERSION] = self.file.file_version
+        self._extra_fields[UNITS] = self.file.units_system
+        self._extra_fields[PLAN_INFORMATION_BASE_OUTPUT_INTERVAL] = self.file.plan_information_base_output_interval
+        self._extra_fields[PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE] = (
+            self.file.plan_information_computation_time_step_base
+        )
+        self._extra_fields[PLAN_INFORMATION_FLOW_FILENAME] = self.file.plan_information_flow_filename
+        self._extra_fields[PLAN_INFORMATION_GEOMETRY_FILENAME] = self.file.plan_information_geometry_filename
+        self._extra_fields[PLAN_INFORMATION_PLAN_FILENAME] = self.file.plan_information_plan_filename
+        self._extra_fields[PLAN_INFORMATION_PLAN_NAME] = self.file.plan_information_plan_name
+        self._extra_fields[PLAN_INFORMATION_PROJECT_FILENAME] = self.file.plan_information_project_filename
+        self._extra_fields[PLAN_INFORMATION_PROJECT_TITLE] = self.file.plan_information_project_title
+        self._extra_fields[PLAN_INFORMATION_SIMULATION_END_TIME] = self.file.plan_information_simulation_end_time
+        self._extra_fields[PLAN_INFORMATION_SIMULATION_START_TIME] = self.file.plan_information_simulation_start_time
+        self._extra_fields[PLAN_PARAMETERS_1D_FLOW_TOLERANCE] = self.file.plan_parameters_1d_flow_tolerance
+        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS] = self.file.plan_parameters_1d_maximum_iterations
+        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS_WITHOUT_IMPROVEMENT] = (
+            self.file.plan_parameters_1d_maximum_iterations_without_improvement
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_WATER_SURFACE_ERROR_TO_ABORT] = (
+            self.file.plan_parameters_1d_maximum_water_surface_error_to_abort
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D_STORAGE_AREA_ELEVATION_TOLERANCE] = (
+            self.file.plan_parameters_1d_storage_area_elevation_tolerance
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D_THETA] = self.file.plan_parameters_1d_theta
+        self._extra_fields[PLAN_PARAMETERS_1D_THETA_WARMUP] = self.file.plan_parameters_1d_theta_warmup
+        self._extra_fields[PLAN_PARAMETERS_1D_WATER_SURFACE_ELEVATION_TOLERANCE] = (
+            self.file.plan_parameters_1d_water_surface_elevation_tolerance
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_GATE_FLOW_SUBMERGENCE_DECAY_EXPONENT] = (
+            self.file.plan_parameters_1d2d_gate_flow_submergence_decay_exponent
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_IS_STABLITY_FACTOR] = self.file.plan_parameters_1d2d_is_stablity_factor
+        self._extra_fields[PLAN_PARAMETERS_1D2D_LS_STABLITY_FACTOR] = self.file.plan_parameters_1d2d_ls_stablity_factor
+        self._extra_fields[PLAN_PARAMETERS_1D2D_MAXIMUM_NUMBER_OF_TIME_SLICES] = (
+            self.file.plan_parameters_1d2d_maximum_number_of_time_slices
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_MINIMUM_TIME_STEP_FOR_SLICINGHOURS] = (
+            self.file.plan_parameters_1d2d_minimum_time_step_for_slicinghours
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_NUMBER_OF_WARMUP_STEPS] = (
+            self.file.plan_parameters_1d2d_number_of_warmup_steps
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_WARMUP_TIME_STEP_HOURS] = (
+            self.file.plan_parameters_1d2d_warmup_time_step_hours
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_WEIR_FLOW_SUBMERGENCE_DECAY_EXPONENT] = (
+            self.file.plan_parameters_1d2d_weir_flow_submergence_decay_exponent
+        )
+        self._extra_fields[PLAN_PARAMETERS_1D2D_MAXITER] = self.file.plan_parameters_1d2d_maxiter
+        self._extra_fields[PLAN_PARAMETERS_2D_EQUATION_SET] = self.file.plan_parameters_2d_equation_set
+        self._extra_fields[PLAN_PARAMETERS_2D_NAMES] = self.file.plan_parameters_2d_names
+        self._extra_fields[PLAN_PARAMETERS_2D_VOLUME_TOLERANCE] = self.file.plan_parameters_2d_volume_tolerance
+        self._extra_fields[PLAN_PARAMETERS_2D_WATER_SURFACE_TOLERANCE] = (
+            self.file.plan_parameters_2d_water_surface_tolerance
+        )
+        self._extra_fields[METEOROLOGY_DSS_FILENAME] = self.file.meteorology_dss_filename
+        self._extra_fields[METEOROLOGY_DSS_PATHNAME] = self.file.meteorology_dss_pathname
+        self._extra_fields[METEOROLOGY_DATA_TYPE] = self.file.meteorology_data_type
+        self._extra_fields[METEOROLOGY_MODE] = self.file.meteorology_mode
+        self._extra_fields[METEOROLOGY_RASTER_CELLSIZE] = self.file.meteorology_raster_cellsize
+        self._extra_fields[METEOROLOGY_SOURCE] = self.file.meteorology_source
+        self._extra_fields[METEOROLOGY_UNITS] = self.file.meteorology_units
+        return self._extra_fields
 
-        super().__init__(href, roles=roles, description=description, **kwargs)
 
-        self.hdf_object = PlanHDFFile(self.href)
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                VERSION: self.hdf_object.file_version,
-                UNITS: self.hdf_object.units_system,
-                PLAN_INFORMATION_BASE_OUTPUT_INTERVAL: self.hdf_object.plan_information_base_output_interval,
-                PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE: self.hdf_object.plan_information_computation_time_step_base,
-                PLAN_INFORMATION_FLOW_FILENAME: self.hdf_object.plan_information_flow_filename,
-                PLAN_INFORMATION_GEOMETRY_FILENAME: self.hdf_object.plan_information_geometry_filename,
-                PLAN_INFORMATION_PLAN_FILENAME: self.hdf_object.plan_information_plan_filename,
-                PLAN_INFORMATION_PLAN_NAME: self.hdf_object.plan_information_plan_name,
-                PLAN_INFORMATION_PROJECT_FILENAME: self.hdf_object.plan_information_project_filename,
-                PLAN_INFORMATION_PROJECT_TITLE: self.hdf_object.plan_information_project_title,
-                PLAN_INFORMATION_SIMULATION_END_TIME: self.hdf_object.plan_information_simulation_end_time,
-                PLAN_INFORMATION_SIMULATION_START_TIME: self.hdf_object.plan_information_simulation_start_time,
-                PLAN_PARAMETERS_1D_FLOW_TOLERANCE: self.hdf_object.plan_parameters_1d_flow_tolerance,
-                PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS: self.hdf_object.plan_parameters_1d_maximum_iterations,
-                PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS_WITHOUT_IMPROVEMENT: self.hdf_object.plan_parameters_1d_maximum_iterations_without_improvement,
-                PLAN_PARAMETERS_1D_MAXIMUM_WATER_SURFACE_ERROR_TO_ABORT: self.hdf_object.plan_parameters_1d_maximum_water_surface_error_to_abort,
-                PLAN_PARAMETERS_1D_STORAGE_AREA_ELEVATION_TOLERANCE: self.hdf_object.plan_parameters_1d_storage_area_elevation_tolerance,
-                PLAN_PARAMETERS_1D_THETA: self.hdf_object.plan_parameters_1d_theta,
-                PLAN_PARAMETERS_1D_THETA_WARMUP: self.hdf_object.plan_parameters_1d_theta_warmup,
-                PLAN_PARAMETERS_1D_WATER_SURFACE_ELEVATION_TOLERANCE: self.hdf_object.plan_parameters_1d_water_surface_elevation_tolerance,
-                PLAN_PARAMETERS_1D2D_GATE_FLOW_SUBMERGENCE_DECAY_EXPONENT: self.hdf_object.plan_parameters_1d2d_gate_flow_submergence_decay_exponent,
-                PLAN_PARAMETERS_1D2D_IS_STABLITY_FACTOR: self.hdf_object.plan_parameters_1d2d_is_stablity_factor,
-                PLAN_PARAMETERS_1D2D_LS_STABLITY_FACTOR: self.hdf_object.plan_parameters_1d2d_ls_stablity_factor,
-                PLAN_PARAMETERS_1D2D_MAXIMUM_NUMBER_OF_TIME_SLICES: self.hdf_object.plan_parameters_1d2d_maximum_number_of_time_slices,
-                PLAN_PARAMETERS_1D2D_MINIMUM_TIME_STEP_FOR_SLICINGHOURS: self.hdf_object.plan_parameters_1d2d_minimum_time_step_for_slicinghours,
-                PLAN_PARAMETERS_1D2D_NUMBER_OF_WARMUP_STEPS: self.hdf_object.plan_parameters_1d2d_number_of_warmup_steps,
-                PLAN_PARAMETERS_1D2D_WARMUP_TIME_STEP_HOURS: self.hdf_object.plan_parameters_1d2d_warmup_time_step_hours,
-                PLAN_PARAMETERS_1D2D_WEIR_FLOW_SUBMERGENCE_DECAY_EXPONENT: self.hdf_object.plan_parameters_1d2d_weir_flow_submergence_decay_exponent,
-                PLAN_PARAMETERS_1D2D_MAXITER: self.hdf_object.plan_parameters_1d2d_maxiter,
-                PLAN_PARAMETERS_2D_EQUATION_SET: self.hdf_object.plan_parameters_2d_equation_set,
-                PLAN_PARAMETERS_2D_NAMES: self.hdf_object.plan_parameters_2d_names,
-                PLAN_PARAMETERS_2D_VOLUME_TOLERANCE: self.hdf_object.plan_parameters_2d_volume_tolerance,
-                PLAN_PARAMETERS_2D_WATER_SURFACE_TOLERANCE: self.hdf_object.plan_parameters_2d_water_surface_tolerance,
-                METEOROLOGY_DSS_FILENAME: self.hdf_object.meteorology_dss_filename,
-                METEOROLOGY_DSS_PATHNAME: self.hdf_object.meteorology_dss_pathname,
-                METEOROLOGY_DATA_TYPE: self.hdf_object.meteorology_data_type,
-                METEOROLOGY_MODE: self.hdf_object.meteorology_mode,
-                METEOROLOGY_RASTER_CELLSIZE: self.hdf_object.meteorology_raster_cellsize,
-                METEOROLOGY_SOURCE: self.hdf_object.meteorology_source,
-                METEOROLOGY_UNITS: self.hdf_object.meteorology_units,
-            }.items()
-            if value
-        }
-
-
-class GeometryHdfAsset(GenericAsset):
+class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     """HEC-RAS Geometry HDF file asset."""
 
     regex_parse_str = r".+\.g\d{2}\.hdf$"
+    __roles__ = ["geometry-hdf-file"]
+    __description__ = "The HEC-RAS geometry HDF file."
+    __file_class__ = GeometryHDFFile
 
-    def __init__(self, href: str, crs: str = None, **kwargs):
-        roles = kwargs.pop("roles", []) + ["geometry-hdf-file"]
-        description = kwargs.pop("description", "The HEC-RAS geometry HDF file.")
-
-        super().__init__(href, roles=roles, description=description, **kwargs)
-        self.hdf_object = GeometryHDFFile(self.href)
-        self.crs = crs
-        self.has_2d = None
-        if self.crs is None:
-            try:
-                self.crs = CRS.from_user_input(self.hdf_object.projection)
-                logging.info(f"crs has been set to {self.crs}")
-            except CRSError:
-                logging.warning(f"Could not extract crs from {self.href}")
-
-        self.extra_fields = {
-            key: value
-            for key, value in {
-                VERSION: self.hdf_object.file_version,
-                UNITS: self.hdf_object.units_system,
-                PROJECTION: self.crs.to_wkt() if self.crs is not None else None,
-                REFERENCE_LINES: (
-                    list(self.hdf_object.reference_lines["refln_name"])
-                    if self.hdf_object.reference_lines is not None and not self.hdf_object.reference_lines.empty
-                    else None
-                ),
-            }.items()
-            if value
-        }
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[VERSION] = self.file.file_version
+        self._extra_fields[UNITS] = self.file.units_system
+        self._extra_fields[REFERENCE_LINES] = self.file.reference_lines
+        return self._extra_fields
 
     @property
-    def check_2d(self):
-        """Check if the geometry asset has 2d geometry, if yes then return True and set has_2d to True."""
-        try:
-            logging.debug(f"reading mesh areas using crs {self.crs}...")
+    @lru_cache
+    def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
+        """Docstring."""  # TODO: fill out
+        if self.file.reference_lines is not None and not self.file.reference_lines.empty:
+            return list(self.file.reference_lines["refln_name"])
 
-            if self.hdf_object.mesh_areas(self.crs):
-                self.has_2d = True
+    @property
+    @lru_cache
+    def has_2d(self) -> bool:
+        """Check if the geometry asset has 2d geometry."""
+        try:
+            if self.file.mesh_areas():
                 return True
         except ValueError:
-            logging.warning(f"No mesh areas found for {self.href}")
-            self.has_2d = False
             return False
+
+    @property
+    @lru_cache
+    def has_1d(self) -> bool:
+        """Check if the geometry asset has 2d geometry."""
+        return False  # TODO: implement
+
+    @property
+    @lru_cache
+    def geometry(self) -> Polygon | MultiPolygon:
+        """Retrieves concave hull of cross-sections."""
+        return self.file.mesh_areas(self.crs)
+
+    @property
+    @lru_cache
+    def geometry_wgs84(self) -> Polygon | MultiPolygon:
+        """Reproject geometry to wgs84."""
+        # TODO: this could be generalized to be a function that takes argument for CRS.
+        if self.crs is None:
+            return NULL_GEOMETRY
+        else:
+            return reproject_to_wgs84(self.geometry, self.crs)
 
     def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
         """Plot mesh areas on the given axes."""
@@ -511,7 +538,7 @@ class GeometryHdfAsset(GenericAsset):
                     bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
                     legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:
-                logging.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
+                logger.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
 
         # Add OpenStreetMap basemap
         ctx.add_basemap(
@@ -547,357 +574,283 @@ class RunFileAsset(GenericAsset):
     """Run file asset for steady flow analysis."""
 
     regex_parse_str = r".+\.r\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["run-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop(
-            "description",
-            "Run file for steady flow analysis which contains all the necessary input data required for the RAS computational engine.",
-        )
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["run-file", "ras-file", MediaType.TEXT]
+    __description__ = "Run file for steady flow analysis which contains all the necessary input data required for the RAS computational engine."
+    __file_class__ = None
 
 
 class ComputationalLevelOutputAsset(GenericAsset):
     """Computational Level Output asset."""
 
     regex_parse_str = r".+\.hyd\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["computational-level-output-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Detailed Computational Level output file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["computational-level-output-file", "ras-file", MediaType.TEXT]
+    __description__ = "Detailed Computational Level output file."
+    __file_class__ = None
 
 
 class GeometricPreprocessorAsset(GenericAsset):
     """Geometric Pre-Processor asset."""
 
     regex_parse_str = r".+\.c\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["geometric-preprocessor", "ras-file", MediaType.TEXT])
-        description = kwargs.pop(
-            "description",
-            "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more.",
-        )
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["geometric-preprocessor", "ras-file", MediaType.TEXT]
+    __description__ = "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more."
+    __file_class__ = None  # TODO:  make a generic parent for these.
 
 
 class BoundaryConditionAsset(GenericAsset):
     """Boundary Condition asset."""
 
     regex_parse_str = r".+\.b\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["boundary-condition-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Boundary Condition file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["boundary-condition-file", "ras-file", MediaType.TEXT]
+    __description__ = "Boundary Condition file."
+    __file_class__ = None
 
 
 class UnsteadyFlowLogAsset(GenericAsset):
     """Unsteady Flow Log asset."""
 
     regex_parse_str = r".+\.bco\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["unsteady-flow-log-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Unsteady Flow Log output file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["unsteady-flow-log-file", "ras-file", MediaType.TEXT]
+    __description__ = "Unsteady Flow Log output file."
+    __file_class__ = None
 
 
 class SedimentDataAsset(GenericAsset):
     """Sediment Data asset."""
 
     regex_parse_str = r".+\.s\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["sediment-data-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop(
-            "description", "Sediment data file containing flow data, boundary conditions, and sediment data."
-        )
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["sediment-data-file", "ras-file", MediaType.TEXT]
+    __description__ = "Sediment data file containing flow data, boundary conditions, and sediment data."
+    __file_class__ = None
 
 
 class HydraulicDesignAsset(GenericAsset):
     """Hydraulic Design asset."""
 
     regex_parse_str = r".+\.h\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["hydraulic-design-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Hydraulic Design data file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["hydraulic-design-file", "ras-file", MediaType.TEXT]
+    __description__ = "Hydraulic Design data file."
+    __file_class__ = None
 
 
 class WaterQualityAsset(GenericAsset):
     """Water Quality asset."""
 
     regex_parse_str = r".+\.w\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["water-quality-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop(
-            "description", "Water Quality file containing temperature boundary conditions and meteorological data."
-        )
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["water-quality-file", "ras-file", MediaType.TEXT]
+    __description__ = "Water Quality file containing temperature boundary conditions and meteorological data."
+    __file_class__ = None
 
 
 class SedimentTransportCapacityAsset(GenericAsset):
     """Sediment Transport Capacity asset."""
 
     regex_parse_str = r".+\.SedCap\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["sediment-transport-capacity-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Sediment Transport Capacity data.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["sediment-transport-capacity-file", "ras-file", MediaType.TEXT]
+    __description__ = "Sediment Transport Capacity data."
+    __file_class__ = None
 
 
 class XSOutputAsset(GenericAsset):
     """Cross Section Output asset."""
 
     regex_parse_str = r".+\.SedXS\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["xs-output-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Cross section output file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["xs-output-file", "ras-file", MediaType.TEXT]
+    __description__ = "Cross section output file."
+    __file_class__ = None
 
 
 class XSOutputHeaderAsset(GenericAsset):
     """Cross Section Output Header asset."""
 
     regex_parse_str = r".+\.SedHeadXS\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["xs-output-header-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Header file for the cross section output.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["xs-output-header-file", "ras-file", MediaType.TEXT]
+    __description__ = "Header file for the cross section output."
+    __file_class__ = None
 
 
 class WaterQualityRestartAsset(GenericAsset):
     """Water Quality Restart asset."""
 
     regex_parse_str = r".+\.wqrst\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["water-quality-restart-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "The water quality restart file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["water-quality-restart-file", "ras-file", MediaType.TEXT]
+    __description__ = "The water quality restart file."
+    __file_class__ = None
 
 
 class SedimentOutputAsset(GenericAsset):
     """Sediment Output asset."""
 
     regex_parse_str = r".+\.sed$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["sediment-output-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Detailed sediment output file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["sediment-output-file", "ras-file", MediaType.TEXT]
+    __description__ = "Detailed sediment output file."
+    __file_class__ = None
 
 
 class BinaryLogAsset(GenericAsset):
     """Binary Log asset."""
 
     regex_parse_str = r".+\.blf$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["binary-log-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Binary Log file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["binary-log-file", "ras-file", MediaType.TEXT]
+    __description__ = "Binary Log file."
+    __file_class__ = None
 
 
 class DSSAsset(GenericAsset):
     """DSS asset."""
 
     regex_parse_str = r".+\.dss$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["ras-dss", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "The DSS file contains results and other simulation information.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["ras-dss", "ras-file", MediaType.TEXT]
+    __description__ = "The DSS file contains results and other simulation information."
+    __file_class__ = None
 
 
 class LogAsset(GenericAsset):
     """Log asset."""
 
     regex_parse_str = r".+\.log$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["ras-log", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "The log file contains information related to simulation processes.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["ras-log", "ras-file", MediaType.TEXT]
+    __description__ = "The log file contains information related to simulation processes."
+    __file_class__ = None
 
 
 class RestartAsset(GenericAsset):
     """Restart file asset."""
 
     regex_parse_str = r".+\.rst$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["restart-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Restart file for resuming simulation runs.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["restart-file", "ras-file", MediaType.TEXT]
+    __description__ = "Restart file for resuming simulation runs."
+    __file_class__ = None
 
 
 class SiamInputAsset(GenericAsset):
     """SIAM Input Data file asset."""
 
     regex_parse_str = r".+\.SiamInput$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["siam-input-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "SIAM Input Data file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["siam-input-file", "ras-file", MediaType.TEXT]
+    __description__ = "SIAM Input Data file."
+    __file_class__ = None
 
 
 class SiamOutputAsset(GenericAsset):
     """SIAM Output Data file asset."""
 
     regex_parse_str = r".+\.SiamOutput$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["siam-output-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "SIAM Output Data file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["siam-output-file", "ras-file", MediaType.TEXT]
+    __description__ = "SIAM Output Data file."
+    __file_class__ = None
 
 
 class WaterQualityLogAsset(GenericAsset):
     """Water Quality Log file asset."""
 
     regex_parse_str = r".+\.bco$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["water-quality-log", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Water quality log file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["water-quality-log", "ras-file", MediaType.TEXT]
+    __description__ = "Water quality log file."
+    __file_class__ = None
 
 
 class ColorScalesAsset(GenericAsset):
     """Color Scales file asset."""
 
     regex_parse_str = r".+\.color-scales$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["color-scales", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "File that contains the water quality color scale.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["color-scales", "ras-file", MediaType.TEXT]
+    __description__ = "File that contains the water quality color scale."
+    __file_class__ = None
 
 
 class ComputationalMessageAsset(GenericAsset):
     """Computational Message file asset."""
 
     regex_parse_str = r".+\.comp-msgs.txt$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["computational-message-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop(
-            "description", "Computational Message text file which contains messages from the computation process."
-        )
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["computational-message-file", "ras-file", MediaType.TEXT]
+    __description__ = "Computational Message text file which contains messages from the computation process."
+    __file_class__ = None
 
 
 class UnsteadyRunFileAsset(GenericAsset):
     """Run file for Unsteady Flow asset."""
 
     regex_parse_str = r".+\.x\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["run-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Run file for Unsteady Flow simulations.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["run-file", "ras-file", MediaType.TEXT]
+    __description__ = "Run file for Unsteady Flow simulations."
+    __file_class__ = None
 
 
 class OutputFileAsset(GenericAsset):
     """Output RAS file asset."""
 
     regex_parse_str = r".+\.o\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["output-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Output RAS file which contains all computed results.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["output-file", "ras-file", MediaType.TEXT]
+    __description__ = "Output RAS file which contains all computed results."
+    __file_class__ = None
 
 
 class InitialConditionsFileAsset(GenericAsset):
     """Initial Conditions file asset."""
 
     regex_parse_str = r".+\.IC\.O\d{2}$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["initial-conditions-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Initial conditions file for unsteady flow plan.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["initial-conditions-file", "ras-file", MediaType.TEXT]
+    __description__ = "Initial conditions file for unsteady flow plan."
+    __file_class__ = None
 
 
 class PlanRestartFileAsset(GenericAsset):
     """Restart file for Unsteady Flow Plan asset."""
 
     regex_parse_str = r".+\.p\d{2}\.rst$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["restart-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Restart file for unsteady flow plan.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["restart-file", "ras-file", MediaType.TEXT]
+    __description__ = "Restart file for unsteady flow plan."
+    __file_class__ = None
 
 
 class RasMapperFileAsset(GenericAsset):
     """RAS Mapper file asset."""
 
     regex_parse_str = r".+\.rasmap$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["ras-mapper-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "RAS Mapper file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["ras-mapper-file", "ras-file", MediaType.TEXT]
+    __description__ = "RAS Mapper file."
+    __file_class__ = None
 
 
 class RasMapperBackupFileAsset(GenericAsset):
     """Backup RAS Mapper file asset."""
 
     regex_parse_str = r".+\.rasmap\.backup$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["ras-mapper-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Backup RAS Mapper file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["ras-mapper-file", "ras-file", MediaType.TEXT]
+    __description__ = "Backup RAS Mapper file."
+    __file_class__ = None
 
 
 class RasMapperOriginalFileAsset(GenericAsset):
     """Original RAS Mapper file asset."""
 
     regex_parse_str = r".+\.rasmap\.original$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", ["ras-mapper-file", "ras-file", MediaType.TEXT])
-        description = kwargs.pop("description", "Original RAS Mapper file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = ["ras-mapper-file", "ras-file", MediaType.TEXT]
+    __description__ = "Original RAS Mapper file."
+    __file_class__ = None
 
 
 class MiscTextFileAsset(GenericAsset):
     """Miscellaneous Text file asset."""
 
     regex_parse_str = r".+\.txt$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", [MediaType.TEXT])
-        description = kwargs.pop("description", "Miscellaneous text file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = [MediaType.TEXT]
+    __description__ = "Miscellaneous text file."
+    __file_class__ = None
 
 
 class MiscXMLFileAsset(GenericAsset):
     """Miscellaneous XML file asset."""
 
     regex_parse_str = r".+\.xml$"
-
-    def __init__(self, href: str, *args, **kwargs):
-        roles = kwargs.pop("roles", [MediaType.XML])
-        description = kwargs.pop("description", "Miscellaneous XML file.")
-        super().__init__(href, roles=roles, description=description, *args, **kwargs)
+    __roles__ = [MediaType.XML]
+    __description__ = "Miscellaneous XML file."
+    __file_class__ = None
 
 
 RAS_ASSET_CLASSES = [
-    ProjectAsset,
+    PrjAsset,
     PlanAsset,
     GeometryAsset,
     SteadyFlowAsset,

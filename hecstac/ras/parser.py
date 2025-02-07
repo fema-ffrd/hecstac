@@ -5,26 +5,29 @@ import logging
 import math
 from collections import defaultdict
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterator
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from pyproj.exceptions import CRSError
-from pystac import Asset
 from rashdf import RasGeomHdf, RasPlanHdf
-from shapely import LineString, MultiPolygon, Point, Polygon, make_valid, union_all
+from shapely import GeometryCollection, LineString, MultiPolygon, Point, Polygon, make_valid, union_all
 from shapely.ops import unary_union
 
 from hecstac.ras.utils import (
+    check_xs_direction,
     data_pairs_from_text_block,
     delimited_pairs_to_lists,
+    reverse,
     search_contents,
     text_block_from_start_end_str,
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
@@ -43,9 +46,8 @@ class River:
 class XS:
     """HEC-RAS Cross Section."""
 
-    def __init__(self, ras_data: list[str], river_reach: str, river: str, reach: str, crs: str):
+    def __init__(self, ras_data: list[str], river_reach: str, river: str, reach: str):
         self.ras_data = ras_data
-        self.crs = crs
         self.river = river
         self.reach = reach
         self.river_reach = river_reach
@@ -162,7 +164,6 @@ class XS:
                 "number_of_coords": [self.number_of_coords],
                 # "coords": [self.coords],
             },
-            crs=self.crs,
             geometry="geometry",
         )
 
@@ -307,11 +308,9 @@ class Structure:
         river_reach: str,
         river: str,
         reach: str,
-        crs: str,
         us_xs: XS,
     ):
         self.ras_data = ras_data
-        self.crs = crs
         self.river = river
         self.reach = reach
         self.river_reach = river_reach
@@ -389,7 +388,6 @@ class Structure:
                 "width": [self.width],
                 "ras_data": ["\n".join(self.ras_data)],
             },
-            crs=self.crs,
             geometry="geometry",
         )
 
@@ -397,10 +395,9 @@ class Structure:
 class Reach:
     """HEC-RAS River Reach."""
 
-    def __init__(self, ras_data: list[str], river_reach: str, crs: str):
+    def __init__(self, ras_data: list[str], river_reach: str):
         reach_lines = text_block_from_start_end_str(f"River Reach={river_reach}", ["River Reach"], ras_data, -1)
         self.ras_data = reach_lines
-        self.crs = crs
         self.river_reach = river_reach
         self.river = river_reach.split(",")[0].rstrip()
         self.reach = river_reach.split(",")[1].rstrip()
@@ -466,7 +463,7 @@ class Reach:
                 ["Type RM Length L Ch R", "River Reach"],
                 self.ras_data,
             )
-            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.crs)
+            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach)
             cross_sections[cross_section.river_reach_rs] = cross_section
 
         return cross_sections
@@ -483,7 +480,7 @@ class Reach:
                     ["Type RM Length L Ch R", "River Reach"],
                     self.ras_data,
                 )
-                cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.crs)
+                cross_section = XS(xs_lines, self.river_reach, self.river, self.reach)
                 continue
             elif int(type) in [2, 3, 4, 5, 6]:  # culvert or bridge or multiple openeing
                 structure_lines = text_block_from_start_end_str(
@@ -502,7 +499,6 @@ class Reach:
                 self.river_reach,
                 self.river,
                 self.reach,
-                self.crs,
                 cross_section,
             )
             structures[structure.river_reach_rs] = structure
@@ -522,7 +518,6 @@ class Reach:
                 # "coords": [self.coords],
                 "ras_data": ["\n".join(self.ras_data)],
             },
-            crs=self.crs,
             geometry="geometry",
         )
 
@@ -540,8 +535,7 @@ class Reach:
 class Junction:
     """HEC-RAS Junction."""
 
-    def __init__(self, ras_data: list[str], junct: str, crs: str):
-        self.crs = crs
+    def __init__(self, ras_data: list[str], junct: str):
         self.name = junct
         self.ras_data = text_block_from_start_str_to_empty_line(f"Junct Name={junct}", ras_data)
 
@@ -627,15 +621,13 @@ class Junction:
                 "ras_data": ["\n".join(self.ras_data)],
             },
             geometry="geometry",
-            crs=self.crs,
         )
 
 
 class StorageArea:
     """HEC-RAS StorageArea."""
 
-    def __init__(self, ras_data: list[str], crs: str):
-        self.crs = crs
+    def __init__(self, ras_data: list[str]):
         self.ras_data = ras_data
         # TODO: Implement this
 
@@ -643,8 +635,7 @@ class StorageArea:
 class Connection:
     """HEC-RAS Connection."""
 
-    def __init__(self, ras_data: list[str], crs: str):
-        self.crs = crs
+    def __init__(self, ras_data: list[str]):
         self.ras_data = ras_data
         # TODO: Implement this
 
@@ -659,21 +650,25 @@ class ProjectFile:
             self.file_lines = f.readlines()
 
     @property
+    @lru_cache
     def project_title(self) -> str:
         """Return the project title."""
         return search_contents(self.file_lines, "Proj Title")
 
     @property
+    @lru_cache
     def project_description(self) -> str:
         """Return the model description."""
         return search_contents(self.file_lines, "Model Description", token=":", require_one=False)
 
     @property
+    @lru_cache
     def project_status(self) -> str:
         """Return the model status."""
         return search_contents(self.file_lines, "Status of Model", token=":", require_one=False)
 
     @property
+    @lru_cache
     def project_units(self) -> str | None:
         """Return the project units."""
         for line in self.file_lines:
@@ -681,16 +676,18 @@ class ProjectFile:
                 return " ".join(line.split(" ")[:-1])
 
     @property
+    @lru_cache
     def plan_current(self) -> str | None:
         """Return the current plan."""
         try:
-            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False)
-            return self.name_from_suffix(suffix)
+            suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False).strip()
+            return name_from_suffix(self.fpath, suffix)
         except Exception:
-            logging.warning("Ras model has no current plan")
+            logger.warning("Ras model has no current plan")
             return None
 
     @property
+    @lru_cache
     def ras_version(self) -> str | None:
         """Return the ras version."""
         version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
@@ -699,36 +696,41 @@ class ProjectFile:
                 self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
             )
         if version == []:
-            logging.warning("Unable to parse project version")
+            logger.warning("Unable to parse project version")
             return "N/A"
         else:
             return version[0]
 
     @property
+    @lru_cache
     def plan_files(self) -> list[str]:
         """Return the plan files."""
         suffixes = search_contents(self.file_lines, "Plan File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def geometry_files(self) -> list[str]:
         """Return the geometry files."""
         suffixes = search_contents(self.file_lines, "Geom File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def steady_flow_files(self) -> list[str]:
         """Return the flow files."""
         suffixes = search_contents(self.file_lines, "Flow File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def quasi_unsteady_flow_files(self) -> list[str]:
         """Return the quasisteady flow files."""
         suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
     @property
+    @lru_cache
     def unsteady_flow_files(self) -> list[str]:
         """Return the unsteady flow files."""
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False, require_one=False)
@@ -786,19 +788,18 @@ class PlanFile:
             if len(parts) >= 4:
                 key = parts[4].strip()
                 breach_dict[key] = eval(parts[3].strip())
-        logging.debug(f"breach_dict {breach_dict}")
+        logger.debug(f"breach_dict {breach_dict}")
         return breach_dict
 
 
 class GeometryFile:
     """HEC-RAS Geometry file asset."""
 
-    def __init__(self, fpath, crs):
+    def __init__(self, fpath):
         # TODO: Compare with HMS implementation
         self.fpath = fpath
-        self.crs = crs
         with open(fpath, "r") as f:
-            self.file_lines = f.readlines()
+            self.file_lines = f.read().splitlines()
 
     @property
     def geom_title(self) -> str:
@@ -811,62 +812,9 @@ class GeometryFile:
         return search_contents(self.file_lines, "Program Version")
 
     @property
-    def rivers(self) -> dict[str, "River"]:
-        """A dictionary of river_name: River (class) for the rivers contained in the HEC-RAS geometry file."""
-        tmp_rivers = defaultdict(list)
-        for reach in self.reaches.values():  # First, group all reaches into their respective rivers
-            tmp_rivers[reach.river].append(reach.reach)
-        for (
-            river,
-            reaches,
-        ) in tmp_rivers.items():  # Then, create a River object for each river
-            tmp_rivers[river] = River(river, reaches)
-        return tmp_rivers
-
-    @property
-    def reaches(self) -> dict[str, "Reach"]:
-        """A dictionary of the reaches contained in the HEC-RAS geometry file."""
-        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False, require_one=False)
-        return {river_reach: Reach(self.file_lines, river_reach, self.crs) for river_reach in river_reaches}
-
-    @property
-    def junctions(self) -> dict[str, "Junction"]:
-        """A dictionary of the junctions contained in the HEC-RAS geometry file."""
-        juncts = search_contents(self.file_lines, "Junct Name", expect_one=False)
-        return {junction: Junction(self.file_lines, junction, self.crs) for junction in juncts}
-
-    @property
-    def cross_sections(self) -> dict[str, "XS"]:
-        """A dictionary of all the cross sections contained in the HEC-RAS geometry file."""
-        cross_sections = {}
-        for reach in self.reaches.values():
-            cross_sections.update(reach.cross_sections)
-        return cross_sections
-
-    @property
-    def structures(self) -> dict[str, "Structure"]:
-        """A dictionary of the structures contained in the HEC-RAS geometry file."""
-        structures = {}
-        for reach in self.reaches.values():
-            structures.update(reach.structures)
-        return structures
-
-    @property
-    def storage_areas(self) -> dict[str, "StorageArea"]:
-        """A dictionary of the storage areas contained in the HEC-RAS geometry file."""
-        areas = search_contents(self.file_lines, "Storage Area", expect_one=False)
-        return {a: StorageArea(a, self.crs) for a in areas}
-
-    @property
-    def connections(self) -> dict[str, "Connection"]:
-        """A dictionary of the SA/2D connections contained in the HEC-RAS geometry file."""
-        connections = search_contents(self.file_lines, "Connection", expect_one=False)
-        return {c: Connection(c, self.crs) for c in connections}
-
-    @property
-    def datetimes(self) -> list[datetime.datetime]:
+    def geometry_time(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry."""
-        dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False)
+        dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False, require_one=False)
         if len(dts) >= 1:
             try:
                 return [datetime.datetime.strptime(d, "%b/%d/%Y %H:%M:%S") for d in dts]
@@ -890,29 +838,141 @@ class GeometryFile:
         return len(self.cross_sections) > 0
 
     @property
-    def concave_hull(self) -> Polygon:
+    def rivers(self) -> dict[str, River]:
+        """A dictionary of river_name: River (class) for the rivers contained in the HEC-RAS geometry file."""
+        tmp_rivers = defaultdict(list)
+        for reach in self.reaches.values():  # First, group all reaches into their respective rivers
+            tmp_rivers[reach.river].append(reach.reach)
+        for (
+            river,
+            reaches,
+        ) in tmp_rivers.items():  # Then, create a River object for each river
+            tmp_rivers[river] = River(river, reaches)
+        return tmp_rivers
+
+    @property
+    def reaches(self) -> dict[str, Reach]:
+        """A dictionary of the reaches contained in the HEC-RAS geometry file."""
+        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False, require_one=False)
+        return {river_reach: Reach(self.file_lines, river_reach) for river_reach in river_reaches}
+
+    @property
+    def junctions(self) -> dict[str, Junction]:
+        """A dictionary of the junctions contained in the HEC-RAS geometry file."""
+        juncts = search_contents(self.file_lines, "Junct Name", expect_one=False, require_one=False)
+        return {junction: Junction(self.file_lines, junction) for junction in juncts}
+
+    @property
+    def cross_sections(self) -> dict[str, XS]:
+        """A dictionary of all the cross sections contained in the HEC-RAS geometry file."""
+        cross_sections = {}
+        for reach in self.reaches.values():
+            cross_sections.update(reach.cross_sections)
+        return cross_sections
+
+    @property
+    def structures(self) -> dict[str, Structure]:
+        """A dictionary of the structures contained in the HEC-RAS geometry file."""
+        structures = {}
+        for reach in self.reaches.values():
+            structures.update(reach.structures)
+        return structures
+
+    @property
+    def storage_areas(self) -> dict[str, StorageArea]:
+        """A dictionary of the storage areas contained in the HEC-RAS geometry file."""
+        areas = search_contents(self.file_lines, "Storage Area", expect_one=False, require_one=False)
+        return {a: StorageArea(a) for a in areas}
+
+    @property
+    def connections(self) -> dict[str, Connection]:
+        """A dictionary of the SA/2D connections contained in the HEC-RAS geometry file."""
+        connections = search_contents(self.file_lines, "Connection", expect_one=False, require_one=False)
+        return {c: Connection(c) for c in connections}
+
+    @property
+    def reach_gdf(self):
+        """A GeodataFrame of the reaches contained in the HEC-RAS geometry file."""
+        return gpd.GeoDataFrame(pd.concat([reach.gdf for reach in self.reaches.values()], ignore_index=True))
+
+    @property
+    def junction_gdf(self):
+        """A GeodataFrame of the junctions contained in the HEC-RAS geometry file."""
+        if self.junctions:
+            return gpd.GeoDataFrame(
+                pd.concat(
+                    [junction.gdf for junction in self.junctions.values()],
+                    ignore_index=True,
+                )
+            )
+
+    @property
+    def xs_gdf(self) -> gpd.GeoDataFrame:
+        """Geodataframe of all cross sections in the geometry text file."""
+        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+
+        subsets = []
+        for _, reach in self.reach_gdf.iterrows():
+            subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
+            not_reversed_xs = check_xs_direction(subset_xs, reach.geometry)
+            subset_xs["geometry"] = subset_xs.apply(
+                lambda row: (
+                    row.geometry
+                    if row["river_reach_rs"] in list(not_reversed_xs["river_reach_rs"])
+                    else reverse(row.geometry)
+                ),
+                axis=1,
+            )
+            subsets.append(subset_xs)
+        return gpd.GeoDataFrame(pd.concat(subsets))
+
+    @property
+    def structures_gdf(self) -> gpd.GeoDataFrame:
+        """Geodataframe of all structures in the geometry text file."""
+        return gpd.GeoDataFrame(pd.concat([structure.gdf for structure in self.structures.values()], ignore_index=True))
+
+    @property
+    @lru_cache
+    def concave_hull(self):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
-        if self.cross_sections:
-            xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
-            for river_reach in xs_gdf["river_reach"].unique():
-                xs_subset: gpd.GeoSeries = xs_gdf[xs_gdf["river_reach"] == river_reach]
-                points = xs_subset.boundary.explode(index_parts=True).unstack()
-                points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
-                points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
-                polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
-                if isinstance(polygon, MultiPolygon):
-                    polygons += list(polygon.geoms)
-                else:
-                    polygons.append(polygon)
-            if len(self.junctions) > 0:
-                for junction in self.junctions.values():
-                    for _, j in junction.gdf.iterrows():
-                        polygons.append(self.junction_hull(xs_gdf, j))
-            out_hull = union_all([make_valid(p) for p in polygons])
-            return out_hull
-        else:
-            raise ValueError(f"No cross sections found for {self.fpath}. Cannot calculate geometry")
+        xs_df = self.xs_gdf  # shorthand
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
+        assert len(xs_df) > 1, "Only one valid cross-section found."
+        for river_reach in xs_df["river_reach"].unique():
+            xs_subset = xs_df[xs_df["river_reach"] == river_reach]
+            points = xs_subset.boundary.explode(index_parts=True).unstack()
+            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
+            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
+            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
+            if isinstance(polygon, MultiPolygon):
+                polygons += list(polygon.geoms)
+            else:
+                polygons.append(polygon)
+        if self.junction_gdf is not None:
+            for _, j in self.junction_gdf.iterrows():
+                polygons.append(self.junction_hull(j))
+        out_hull = self.clean_polygons(polygons)
+        return out_hull
+
+    def clean_polygons(self, polygons: list) -> list:
+        """Make polygons valid and remove geometry collections."""
+        all_valid = []
+        for p in polygons:
+            valid = make_valid(p)
+            if isinstance(valid, GeometryCollection):
+                polys = []
+                for i in valid.geoms:
+                    if isinstance(i, MultiPolygon):
+                        polys.extend([j for j in i.geoms])
+                    elif isinstance(i, Polygon):
+                        polys.append(i)
+                all_valid.extend(polys)
+            else:
+                all_valid.append(valid)
+        return union_all(all_valid)
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
@@ -1025,7 +1085,7 @@ class UnsteadyFlowFile:
                 flow_area = parts[5].strip()
                 bc_line = parts[7].strip()
                 boundary_dict.append({flow_area: bc_line})
-        logging.debug(f"boundary_dict:{boundary_dict}")
+        logger.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
     @property
@@ -1212,13 +1272,10 @@ class RASHDFFile:
         """
         mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
-            raise ValueError("No mesh areas found.")
+            return Polygon()
 
         if mesh_areas.crs is None and crs is not None:
             mesh_areas = mesh_areas.set_crs(crs)
-
-        elif mesh_areas.crs is None and crs is None:
-            raise CRSError("Mesh areas have no CRS and have none to be set to")
 
         if return_gdf:
             return mesh_areas
@@ -1562,6 +1619,6 @@ class GeometryHDFFile(RASHDFFile):
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            logging.warning("No reference lines found.")
+            logger.warning("No reference lines found.")
         else:
             return ref_lines

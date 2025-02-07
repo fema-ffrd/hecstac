@@ -43,6 +43,8 @@ from hecstac.hms.data_model import (
     Temperature,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class BaseTextFile(ABC):
     def __init__(self, path: str, client=None, bucket=None):
@@ -65,7 +67,7 @@ class BaseTextFile(ABC):
                 response = self.client.get_object(Bucket=self.bucket, Key=self.path)
                 self.content = response["Body"].read().decode()
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
                 raise FileNotFoundError(f"could not find {self.path} locally nor on s3")
 
     def parse_header(self):
@@ -218,7 +220,7 @@ class ProjectFile(BaseTextFile):
     @property
     def files(self):
 
-        # logging.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
+        # logger.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
 
         return (
             [self.path]
@@ -581,7 +583,7 @@ class BasinFile(BaseTextFile):
         for junction in self.junctions:
             us_point = junction.geom
             if "Downstream" not in junction.attrs:
-                logging.warning(f"Warning no downstream element for junction {junction.name}")
+                logger.warning(f"Warning no downstream element for junction {junction.name}")
                 continue
             ds_element = self.elements[junction.attrs["Downstream"]]
             if ds_element in self.reaches:
@@ -800,7 +802,7 @@ class PairedDataFile(BaseTextFile):
                 response = client.get_object(Bucket=bucket, Key=path)
                 self.content = response["Body"].read().decode()
             except Exception as e:
-                logging.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
+                logger.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
                 self.create_pdata(path)
         super().__init__(path, client=client, bucket=bucket)
         self.elements = ElementSet()

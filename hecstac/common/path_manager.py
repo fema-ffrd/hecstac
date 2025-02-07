@@ -26,8 +26,8 @@ class LocalPathManager:
 
     def item_path(self, item_id: str) -> str:
         """Item path."""
-        return f"{self._model_root_dir}/{item_id}.json"
+        return str(Path(self._model_root_dir) / f"{item_id}.json")
 
     def derived_item_asset(self, filename: str) -> str:
         """Derive item asset path."""
-        return f"{self._model_root_dir}/{filename}"
+        return str(Path(self._model_root_dir) / filename)

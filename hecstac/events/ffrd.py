@@ -15,6 +15,8 @@ from hecstac.common.asset_factory import AssetFactory
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.ras.assets import RAS_EXTENSION_MAPPING
 
+logger = logging.getLogger(__name__)
+
 
 class FFRDEventItem(Item):
     FFRD_REALIZATION = "FFRD:realization"
@@ -66,7 +68,7 @@ class FFRDEventItem(Item):
     def _add_model_links(self) -> None:
         """Add links to the model items."""
         for item in self.source_model_items:
-            logging.info(f"Adding link from source model item: {item.id}")
+            logger.info(f"Adding link from source model item: {item.id}")
             link = Link(
                 rel="derived_from",
                 target=item,
@@ -116,7 +118,7 @@ class FFRDEventItem(Item):
     def add_hms_asset(self, fpath: str, item_type: str = "event") -> None:
         """Add an asset to the FFRD Event STAC item."""
         if os.path.exists(fpath):
-            logging.info(f"Adding asset: {fpath}")
+            logger.info(f"Adding asset: {fpath}")
             asset = self.hms_factory.create_hms_asset(fpath, item_type=item_type)
             if asset is not None:
                 self.add_asset(asset.title, asset)
@@ -124,7 +126,7 @@ class FFRDEventItem(Item):
     def add_ras_asset(self, fpath: str) -> None:
         """Add an asset to the FFRD Event STAC item."""
         if os.path.exists(fpath):
-            logging.info(f"Adding asset: {fpath}")
+            logger.info(f"Adding asset: {fpath}")
             asset = self.ras_factory.create_ras_asset(fpath)
             if asset is not None:
                 self.add_asset(asset.title, asset)
