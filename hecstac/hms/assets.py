@@ -1,7 +1,7 @@
 """HEC-HMS Stac Item asset classes."""
 
 from pystac import MediaType
-
+import re
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.hms.parser import (
     BasinFile,
@@ -20,6 +20,7 @@ from hecstac.hms.parser import (
 class GeojsonAsset(GenericAsset):
     """Geojson asset."""
 
+    ext = r".*\.geojson$"
     __roles__ = ["data", MediaType.GEOJSON]
     __description__ = "Geojson file."
 
@@ -27,13 +28,15 @@ class GeojsonAsset(GenericAsset):
 class TiffAsset(GenericAsset):
     """Tiff Asset."""
 
+    ext = r".*\.tiff$"
     __roles__ = ["data", MediaType.GEOTIFF]
     __description__ = "Tiff file."
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):
-    """HEC-HMS Project file asset."""
+    """Project asset."""
 
+    ext = r".*\.hms$"
     __roles__ = ["hms-project", MediaType.TEXT]
     __description__ = "The HEC-HMS project file. Summary provied at the item level"
     __file_class__ = ProjectFile
@@ -42,6 +45,7 @@ class ProjectAsset(GenericAsset[ProjectFile]):
 class ThumbnailAsset(GenericAsset):
     """Thumbnail asset."""
 
+    ext = r".*\.png$"
     __roles__ = ["thumbnail", MediaType.PNG]
     __description__ = "Thumbnail"
 
@@ -49,6 +53,7 @@ class ThumbnailAsset(GenericAsset):
 class ModelBasinAsset(GenericAsset[BasinFile]):
     """HEC-HMS Basin file asset from authoritative model, containing geometry and other detailed data."""
 
+    ext = r".*\.basin$"
     __roles__ = ["hms-basin", MediaType.TEXT]
     __description__ = "Defines the basin geometry and elements for HEC-HMS simulations."
     __file_class__ = BasinFile
@@ -71,6 +76,7 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
 class EventBasinAsset(GenericAsset[BasinFile]):
     """HEC-HMS Basin file asset from event, with limited basin info."""
 
+    ext = r".*\.basin$"
     __roles__ = ["hms-basin", MediaType.TEXT]
     __description__ = "Defines the basin geometry and elements for HEC-HMS simulations."
     __file_class__ = BasinFile
@@ -88,6 +94,7 @@ class EventBasinAsset(GenericAsset[BasinFile]):
 class RunAsset(GenericAsset[RunFile]):
     """Run asset."""
 
+    ext = r".*\.run$"
     __file_class__ = RunFile
     __roles__ = ["hms-run", MediaType.TEXT]
     __description__ = "Contains data for HEC-HMS simulations."
@@ -102,6 +109,7 @@ class RunAsset(GenericAsset[RunFile]):
 class ControlAsset(GenericAsset[ControlFile]):
     """HEC-HMS Control file asset."""
 
+    ext = r".*\.control$"
     __roles__ = ["hms-control", MediaType.TEXT]
     __description__ = "Defines time control information for HEC-HMS simulations."
     __file_class__ = ControlFile
@@ -117,6 +125,7 @@ class ControlAsset(GenericAsset[ControlFile]):
 class MetAsset(GenericAsset[MetFile]):
     """HEC-HMS Meteorological file asset."""
 
+    ext = r".*\.met$"
     __roles__ = ["hms-met", MediaType.TEXT]
     __description__ = "Contains meteorological data such as precipitation and temperature."
     __file_class__ = MetFile
@@ -132,6 +141,7 @@ class MetAsset(GenericAsset[MetFile]):
 class DSSAsset(GenericAsset):
     """DSS asset."""
 
+    ext = r".*\.dss$"
     __roles__ = ["hec-dss", "application/octet-stream"]
     __description__ = "HEC-DSS file."
 
@@ -143,6 +153,7 @@ class DSSAsset(GenericAsset):
 class SqliteAsset(GenericAsset[SqliteDB]):
     """HEC-HMS SQLite database asset."""
 
+    ext = r".*\.sqlite$"
     __roles__ = ["hms-sqlite", "application/x-sqlite3"]
     __description__ = "Stores spatial data for HEC-HMS basin files."
     __file_class__ = SqliteDB
@@ -155,6 +166,7 @@ class SqliteAsset(GenericAsset[SqliteDB]):
 class GageAsset(GenericAsset[GageFile]):
     """Gage asset."""
 
+    ext = r".*\.gage$"
     __roles__ = ["hms-gage", MediaType.TEXT]
     __description__ = "Contains data for HEC-HMS gages."
     __file_class__ = GageFile
@@ -169,6 +181,7 @@ class GageAsset(GenericAsset[GageFile]):
 class GridAsset(GenericAsset[GridFile]):
     """Grid asset."""
 
+    ext = r".*\.grid$"
     __roles__ = ["hms-grid", MediaType.TEXT]
     __description__ = "Contains data for HEC-HMS grid files."
     __file_class__ = GridFile
@@ -185,6 +198,7 @@ class GridAsset(GenericAsset[GridFile]):
 class LogAsset(GenericAsset):
     """Log asset."""
 
+    ext = r".*\.log$"
     __roles__ = ["hms-log", "results", MediaType.TEXT]
     __description__ = "Contains log data for HEC-HMS simulations."
 
@@ -196,6 +210,7 @@ class LogAsset(GenericAsset):
 class OutAsset(GenericAsset):
     """Out asset."""
 
+    ext = r".*\.out$"
     __roles__ = ["hms-out", "results", MediaType.TEXT]
     __description__ = "Contains output data for HEC-HMS simulations."
 
@@ -207,6 +222,7 @@ class OutAsset(GenericAsset):
 class PdataAsset(GenericAsset[PairedDataFile]):
     """Pdata asset."""
 
+    ext = r".*\.pdata$"
     __roles__ = ["hms-pdata", MediaType.TEXT]
     __description__ = "Contains paired data for HEC-HMS simulations."
     __file_class__ = PairedDataFile
@@ -219,6 +235,7 @@ class PdataAsset(GenericAsset[PairedDataFile]):
 class TerrainAsset(GenericAsset[TerrainFile]):
     """Terrain asset."""
 
+    ext = r".*\.terrain$"
     __roles__ = ["hms-terrain", MediaType.GEOTIFF]
     __description__ = "Contains terrain data for HEC-HMS simulations."
     __file_class__ = TerrainFile
@@ -230,22 +247,45 @@ class TerrainAsset(GenericAsset[TerrainFile]):
         }
 
 
-HMS_EXTENSION_MAPPING = {
-    ".hms": ProjectAsset,
-    ".basin": {"event": EventBasinAsset, "model": ModelBasinAsset},
-    ".control": ControlAsset,
-    ".met": MetAsset,
-    ".sqlite": SqliteAsset,
-    ".gage": GageAsset,
-    ".run": RunAsset,
-    ".grid": GridAsset,
-    ".log": LogAsset,
-    ".out": OutAsset,
-    ".pdata": PdataAsset,
-    ".terrain": TerrainAsset,
-    ".dss": DSSAsset,
-    ".geojson": GeojsonAsset,
-    ".tiff": TiffAsset,
-    ".tif": TiffAsset,
-    ".png": ThumbnailAsset,
-}
+# HMS_EXTENSION_MAPPING = {
+#     ".hms": ProjectAsset,
+#     ".basin": {"event": EventBasinAsset, "model": ModelBasinAsset},
+#     ".control": ControlAsset,
+#     ".met": MetAsset,
+#     ".sqlite": SqliteAsset,
+#     ".gage": GageAsset,
+#     ".run": RunAsset,
+#     ".grid": GridAsset,
+#     ".log": LogAsset,
+#     ".out": OutAsset,
+#     ".pdata": PdataAsset,
+#     ".terrain": TerrainAsset,
+#     ".dss": DSSAsset,
+#     ".geojson": GeojsonAsset,
+#     ".tiff": TiffAsset,
+#     ".tif": TiffAsset,
+#     ".png": ThumbnailAsset,
+# }
+
+HMS_ASSET_CLASSES = [
+    ProjectAsset,
+    EventBasinAsset,
+    ModelBasinAsset,
+    ControlAsset,
+    MetAsset,
+    SqliteAsset,
+    GageAsset,
+    RunAsset,
+    GridAsset,
+    LogAsset,
+    OutAsset,
+    PdataAsset,
+    TerrainAsset,
+    DSSAsset,
+    GeojsonAsset,
+    TiffAsset,
+    TiffAsset,
+    ThumbnailAsset,
+]
+
+HMS_EXTENSION_MAPPING = {re.compile(cls.ext, re.IGNORECASE): cls for cls in HMS_ASSET_CLASSES}
