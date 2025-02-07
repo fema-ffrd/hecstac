@@ -28,6 +28,7 @@ class GenericAsset(Asset, Generic[T]):
             self.description = self.__description__
         self._roles = []
         self._extra_fields = {}
+        self.name = Path(self.href).name
 
     @property
     def roles(self) -> list[str]:

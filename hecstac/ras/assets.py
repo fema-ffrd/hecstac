@@ -374,7 +374,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         """Return extra fields with added dynamic keys/values."""
         self._extra_fields[VERSION] = self.file.file_version
         self._extra_fields[UNITS] = self.file.units_system
-        self._extra_fields[REFERENCE_LINES] = self.file.reference_lines
+        self._extra_fields[REFERENCE_LINES] = self.reference_lines
         return self._extra_fields
 
     @property
@@ -526,15 +526,15 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         for layer in layers:
             try:
                 if layer == "mesh_areas":
-                    mesh_areas_data = self.hdf_object.mesh_cells
+                    mesh_areas_data = self.file.mesh_cells
                     mesh_areas_geo = mesh_areas_data.set_crs(self.crs)
                     legend_handles += self._plot_mesh_areas(ax, mesh_areas_geo)
                 elif layer == "breaklines":
-                    breaklines_data = self.hdf_object.breaklines
+                    breaklines_data = self.file.breaklines
                     breaklines_data_geo = breaklines_data.set_crs(self.crs)
                     legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
                 elif layer == "bc_lines":
-                    bc_lines_data = self.hdf_object.bc_lines
+                    bc_lines_data = self.file.bc_lines
                     bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
                     legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
             except Exception as e:

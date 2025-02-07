@@ -151,8 +151,16 @@ class RASModelItem(Item):
         if len(self.geometry_assets) == 0:
             logger.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
+        print(self.geometry_assets)
 
-        geometries = [i.geometry_wgs84 for i in self.geometry_assets]
+        geometries = []
+        for i in self.geometry_assets:
+            try:
+                geometries.append(i.geometry_wgs84)
+            except Exception as e:
+                logger.warning(f"Could not process geometry from {i.href}")
+                continue
+
         unioned_geometry = union_all(geometries)
         if self.simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
@@ -234,10 +242,9 @@ class RASModelItem(Item):
             thumbnail_dest = thumbnail_dir
         else:
             thumbnail_dest = self.self_href
-            thumbnail_dest = self.self_href
 
         for geom in self.geometry_assets:
-            if isinstance(geom, GeometryHdfAsset):
+            if isinstance(geom, GeometryHdfAsset) and geom.has_2d:
                 self.assets[f"{geom.href}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
@@ -249,7 +256,8 @@ class RASModelItem(Item):
         subclass = self.factory.asset_from_dict(asset)
         if subclass is None:
             return
-        if self.crs is None and isinstance(asset, GeometryHdfAsset) and asset.file.projection is not None:
+        if self.crs is None and isinstance(subclass, GeometryHdfAsset) and subclass.file.projection is not None:
+            print("setting crs")
             self.crs = subclass.file.projection
         return super().add_asset(key, subclass)
 
