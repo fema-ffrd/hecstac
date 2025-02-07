@@ -1,3 +1,5 @@
+"""AWS S3 utlity functions."""
+
 import os
 from pathlib import Path
 
@@ -29,6 +31,7 @@ def file_location(file: str | Path) -> str:
 
 
 def list_keys(s3_client, bucket, prefix, suffix=""):
+    """List s3 keys in a given bucket and prefix."""
     keys = []
     kwargs = {"Bucket": bucket, "Prefix": prefix}
     while True:
@@ -61,7 +64,7 @@ def get_metadata(key: str) -> str:
 
 def split_s3_key(s3_path: str) -> tuple[str, str]:
     """
-    This function splits an S3 path into the bucket name and the key.
+    Split an S3 path into the bucket name and the key.
 
     Parameters
     ----------
@@ -87,6 +90,7 @@ def split_s3_key(s3_path: str) -> tuple[str, str]:
 
 
 def init_s3_resources(minio_mode: bool = False):
+    """Initialize s3 resources."""
     if minio_mode:
         session = boto3.Session(
             aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY_ID"),
@@ -112,7 +116,7 @@ def init_s3_resources(minio_mode: bool = False):
 
 def get_basic_object_metadata(obj: ObjectSummary) -> dict:
     """
-    This function retrieves basic metadata of an AWS S3 object.
+    Retrieve basic metadata of an AWS S3 object.
 
     Parameters
     ----------

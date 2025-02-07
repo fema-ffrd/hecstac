@@ -1,1 +1,1 @@
-"""HEC-RAS STAC Item creation module."""
+"""HEC-RAS STAC Item module."""

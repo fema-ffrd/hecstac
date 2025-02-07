@@ -1,4 +1,4 @@
-"""HEC-RAS STAC Item creation class."""
+"""HEC-RAS STAC Item class."""
 
 import datetime
 import json

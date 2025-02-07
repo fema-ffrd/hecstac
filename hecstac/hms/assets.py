@@ -1,3 +1,5 @@
+"""HEC-HMS Stac Item asset classes."""
+
 from pystac import MediaType
 
 from hecstac.common.asset_factory import GenericAsset
@@ -208,7 +210,7 @@ class GageAsset(GenericAsset):
 
 
 class GridAsset(GenericAsset):
-    """Grid asset"""
+    """Grid asset."""
 
     def __init__(self, href: str, *args, **kwargs):
         roles = ["hms-grid"]

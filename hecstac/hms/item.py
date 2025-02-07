@@ -1,3 +1,5 @@
+"""HEC-RAS STAC Item class."""
+
 import json
 import logging
 import os
@@ -88,7 +90,7 @@ class HMSModelItem(Item):
         if self.pf.basins[0].epsg:
             logger.warning("No EPSG code found in basin file.")
         properties["proj:wkt"] = self.pf.basins[0].wkt
-        properties[SUMMARY] = self.pf.file_counts
+        properties[self.SUMMARY] = self.pf.file_counts
         return properties
 
     @property
@@ -169,9 +171,7 @@ class HMSModelItem(Item):
                     self._project = asset
 
     def make_thumbnail(self, gdfs: dict):
-        """Create a png from the geodataframes (values of the dictionary).
-        The dictionary keys are used to label the layers in the legend.
-        """
+        """Create a png from the geodataframes (values of the dictionary). The dictionary keys are used to label the layers in the legend."""
         cdict = {
             "Subbasin": "black",
             "Reach": "blue",

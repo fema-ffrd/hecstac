@@ -1,3 +1,5 @@
+"""Class for event items."""
+
 import json
 import logging
 import os
@@ -19,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class FFRDEventItem(Item):
+    """Class for event items."""
+
     FFRD_REALIZATION = "FFRD:realization"
     FFRD_BLOCK_GROUP = "FFRD:block_group"
     FFRD_EVENT = "FFRD:event"
