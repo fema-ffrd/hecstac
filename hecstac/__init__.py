@@ -5,3 +5,4 @@ This package provides tools and utilities to create items, assets, and metadata 
 """
 
 from hecstac.version import __version__
+from hecstac.ras.item import RASModelItem

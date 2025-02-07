@@ -1,3 +1,5 @@
+"""HEC-HMS STAC Item utlity functions."""
+
 from __future__ import annotations
 
 import re
@@ -24,6 +26,7 @@ def add_no_duplicate(d: dict, key, val):
 
 
 def get_lines_until_end_sentinel(lines: list[str]) -> list[str]:
+    """Retrieve all lines until the End point."""
     lines_found = []
     for line in lines:
         if line in ["End:", "End Computation Point: "]:
@@ -35,6 +38,7 @@ def get_lines_until_end_sentinel(lines: list[str]) -> list[str]:
 
 
 def handle_special_cases(key, val):
+    """Handle special cases."""
     if key == "Groundwater Layer":
         key = key + val
     elif "Groundwater Layer" in key:
@@ -47,7 +51,7 @@ def handle_special_cases(key, val):
 
 
 def parse_attrs(lines: list[str]) -> OrderedDict:
-    """Scan the lines down to the first instance of 'End:' and return dict containing all of the colon-separated keyval pair"""
+    """Scan the lines down to the first instance of 'End:' and return dict containing all of the colon-separated keyval pair."""
     attrs = {}
     for line in lines:
         if line == "End:":
@@ -89,6 +93,7 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
 
 
 def remove_holes(geom):
+    """Remove holes in the geometry."""
     if isinstance(geom, Polygon):
         return Polygon(geom.exterior)
     elif isinstance(geom, MultiPolygon):
@@ -105,6 +110,7 @@ def remove_holes(geom):
 
 
 def attrs2list(attrs: OrderedDict) -> list[str]:
+    """Convert dictionary of attributes to a list."""
     content = []
     for key, val in attrs.items():
         if not isinstance(val, str):
@@ -130,7 +136,7 @@ def attrs2list(attrs: OrderedDict) -> list[str]:
 
 
 def insert_after_key(dic: dict, insert_key: str, new_key: str, new_val: str) -> OrderedDict:
-    # recreate the dictionary to insert key-val after the occurance of the insert_key if key-val doesn't exist yet in the dictionary
+    """Recreate the dictionary to insert key-val after the occurance of the insert_key if key-val doesn't exist yet in the dictionary."""
     new_dic = {}
     for key, val in dic.items():
         if key == new_key:
@@ -159,41 +165,49 @@ def search_contents(lines: list, search_string: str, token: str = "=", expect_on
 
 
 class StacPathManager:
-    """
-    Builds consistent paths for STAC items and collections assuming a top level local catalog
-    """
+    """Build consistent paths for STAC items and collections assuming a top level local catalog."""
 
     def __init__(self, local_catalog_dir: str):
         self._catalog_dir = local_catalog_dir
 
     @property
     def catalog_dir(self):
+        """Return the catalog directory."""
         return self._catalog_dir
 
     @property
     def catalog_file(self):
+        """Return the catalog file path."""
         return f"{self._catalog_dir}/catalog.json"
 
     def catalog_item(self, item_id: str) -> str:
+        """Return the catalog item file path."""
         return f"{self.catalog_dir}/{item_id}/{item_id}.json"
 
     def catalog_asset(self, item_id: str, asset_dir: str = "hydro_domains") -> str:
+        """Return the catalog asset file path."""
         return f"{self.catalog_dir}/{asset_dir}/{item_id}.json"
 
     def collection_file(self, collection_id: str) -> str:
+        """Return the collection file path."""
         return f"{self.catalog_dir}/{collection_id}/collection.json"
 
     def collection_dir(self, collection_id: str) -> str:
+        """Return the collection directory."""
         return f"{self.catalog_dir}/{collection_id}"
 
     def collection_asset(self, collection_id: str, filename: str) -> str:
+        """Return the collection asset filepath."""
         return f"{self.catalog_dir}/{collection_id}/{filename}"
 
     def collection_item_dir(self, collection_id: str, item_id: str) -> str:
+        """Return the collection item directory."""
         return f"{self.catalog_dir}/{collection_id}/{item_id}"
 
     def collection_item(self, collection_id: str, item_id: str) -> str:
+        """Return the collection item filepath."""
         return f"{self.catalog_dir}/{collection_id}/{item_id}/{item_id}.json"
 
     def collection_item_asset(self, collection_id: str, item_id: str, filename: str) -> str:
+        """Return the collection item asset filepath."""
         return f"{self.catalog_dir}/{collection_id}/{item_id}/{filename}"
