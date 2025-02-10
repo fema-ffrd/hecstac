@@ -176,7 +176,7 @@ class HMSModelItem(Item):
         return datetime.combine(date, time)
 
     def _check_files_exists(self, files: list[str]):
-        """Ensure the files exists. If they don't rasie an error."""
+        """Ensure the files exists. If they don't raise an error."""
         from pathlib import Path
 
         for file in files:
