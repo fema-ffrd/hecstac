@@ -18,7 +18,7 @@ from functools import lru_cache
 
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.path_manager import LocalPathManager
-from hecstac.hms.assets import HMS_EXTENSION_MAPPING, ProjectAsset
+from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.hms.parser import BasinFile, ProjectFile
 
 from hecstac.ras.consts import (
@@ -163,7 +163,7 @@ class HMSModelItem(Item):
     def bbox(self) -> list[float]:
         """Bounding box of the HMS model."""
         if not self.geometry_assets:
-            return [0, 0, 0, 0]
+            return NULL_STAC_BBOX
 
         bboxes = np.array([b.bbox(4326) for b in self.geometry_assets])
         return [float(i) for i in [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]]
