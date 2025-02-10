@@ -78,6 +78,7 @@ class RASModelItem(Item):
         pm = LocalPathManager(Path(ras_project_file).parent)
 
         href = pm.item_path(item_id)
+        # TODO: Add option to recursively iterate through all subdirectories in a model folder.
         assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
 
         stac = cls(
@@ -92,6 +93,7 @@ class RASModelItem(Item):
         if crs:
             stac.crs = crs
         stac.simplify_geometry = simplify_geometry
+        stac.pm = pm
 
         return stac
 
@@ -151,7 +153,6 @@ class RASModelItem(Item):
         if len(self.geometry_assets) == 0:
             logger.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
-        print(self.geometry_assets)
 
         geometries = []
         for i in self.geometry_assets:
@@ -245,7 +246,7 @@ class RASModelItem(Item):
 
         for geom in self.geometry_assets:
             if isinstance(geom, GeometryHdfAsset) and geom.has_2d:
-                self.assets[f"{geom.href}_thumbnail"] = geom.thumbnail(
+                self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
 
@@ -257,7 +258,6 @@ class RASModelItem(Item):
         if subclass is None:
             return
         if self.crs is None and isinstance(subclass, GeometryHdfAsset) and subclass.file.projection is not None:
-            print("setting crs")
             self.crs = subclass.file.projection
         return super().add_asset(key, subclass)
 

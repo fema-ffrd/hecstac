@@ -114,34 +114,35 @@ METEOROLOGY_SOURCE = "ras:meteorology_source"
 METEOROLOGY_UNITS = "ras:meteorology_units"
 
 
-class PrjAsset(GenericAsset):
-    """A helper class to delegate .prj files into RAS project or Projection file classes."""
+# class PrjAsset(GenericAsset):
+#     """A helper class to delegate .prj files into RAS project or Projection file classes."""
 
-    regex_parse_str = r".+\.prj$"
+#     regex_parse_str = r".+\.prj$"
 
-    def __new__(cls, *args, **kwargs):
-        """Delegate to Project or Projection asset."""
-        if cls is PrjAsset:  # Ensuring we don't instantiate Parent directly
-            href = kwargs.get("href") or args[0]
-            is_ras = is_ras_prj(href)
-            if is_ras:
-                return ProjectAsset(*args, **kwargs)
-            else:
-                return ProjectionAsset(*args, **kwargs)
-        return super().__new__(cls)
+#     def __new__(cls, *args, **kwargs):
+#         """Delegate to Project or Projection asset."""
+#         if cls is PrjAsset:  # Ensuring we don't instantiate Parent directly
+#             href = kwargs.get("href") or args[0]
+#             is_ras = is_ras_prj(href)
+#             if is_ras:
+#                 return ProjectAsset(*args, **kwargs)
+#             else:
+#                 return ProjectionAsset(*args, **kwargs)
+#         return super().__new__(cls)
 
 
-class ProjectionAsset(GenericAsset):
-    """A geospatial projection file."""
+# class ProjectionAsset(GenericAsset):
+#     """A geospatial projection file."""
 
-    __roles__ = ["projection-file", MediaType.TEXT]
-    __description__ = "A geospatial projection file."
-    __file_class__ = None
+#     __roles__ = ["projection-file", MediaType.TEXT]
+#     __description__ = "A geospatial projection file."
+#     __file_class__ = None
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
+    regex_parse_str = r".+\.prj$"
     __roles__ = ["project-file", "ras-file"]
     __description__ = "The HEC-RAS project file."
     __file_class__ = ProjectFile
@@ -485,21 +486,16 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-        if filepath.startswith("s3://"):
-            media_type = "image/png"
-        else:
-            if not os.path.exists(filepath):
-                raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
-            media_type = "image/png"
+        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+            raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
 
-        return GenericAsset(
+        asset = GenericAsset(
             href=filepath,
             title=filepath.split("/")[-1],
             description="Thumbnail image for the model",
-            media_type=media_type,
-            roles=["thumbnail"],
-            extra_fields=None,
         )
+        asset.roles = ["thumbnail", "image/png"]
+        return asset
 
     def thumbnail(
         self,
@@ -850,7 +846,7 @@ class MiscXMLFileAsset(GenericAsset):
 
 
 RAS_ASSET_CLASSES = [
-    PrjAsset,
+    ProjectAsset,
     PlanAsset,
     GeometryAsset,
     SteadyFlowAsset,
