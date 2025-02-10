@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 def find_model_files(ras_prj: str) -> list[str]:
-    """Find all files with same base name."""
-    ras_prj = Path(ras_prj)
+    """Find all files with the same base name and return absolute paths."""
+    ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
-    stem = Path(ras_prj).name.split(".")[0]
-    return [str(i.as_posix()) for i in parent.glob(f"{stem}*")]
+    stem = ras_prj.stem
+    return [str(i.resolve()) for i in parent.glob(f"{stem}*")]
 
 
 def is_ras_prj(url: str) -> bool:
@@ -212,6 +212,7 @@ class requires_geos:
         self.version = tuple(int(x) for x in version.split("."))
 
     def __call__(self, func):
+        """Call."""
         is_compatible = lib.geos_version >= self.version
         is_doc_build = os.environ.get("SPHINX_DOC_BUILD") == "1"  # set in docs/conf.py
         if is_compatible and not is_doc_build:
@@ -276,7 +277,7 @@ def multithreading_enabled(func):
 @requires_geos("3.7.0")
 @multithreading_enabled
 def reverse(geometry, **kwargs):
-    """Returns a copy of a Geometry with the order of coordinates reversed.
+    """Return a copy of a Geometry with the order of coordinates reversed.
 
     If a Geometry is a polygon with interior rings, the interior rings are also
     reversed.
