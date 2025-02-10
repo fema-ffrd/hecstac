@@ -7,7 +7,6 @@ import math
 import os
 from abc import ABC
 from collections import OrderedDict
-from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,7 +14,6 @@ import fiona
 import geopandas as gpd
 import pandas as pd
 from pyproj import CRS
-from shapely import get_point
 from shapely.geometry import LineString, MultiLineString, Point
 
 import hecstac.hms.utils as utils

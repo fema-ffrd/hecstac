@@ -13,7 +13,7 @@ import requests
 from pystac import Item, Asset
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
-from shapely import to_geojson, union_all, unary_union
+from shapely import to_geojson, unary_union
 from functools import lru_cache
 
 from hecstac.common.asset_factory import AssetFactory
