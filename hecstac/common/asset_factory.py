@@ -57,7 +57,7 @@ class GenericAsset(Asset, Generic[T]):
     @property
     def file(self) -> T:
         """Return class to access asset file contents."""
-        return self.__file_class__(self.href)
+        return self.__file_class__(self.get_absolute_href())
 
     def name_from_suffix(self, suffix: str) -> str:
         """Generate a name by appending a suffix to the file stem."""
@@ -112,6 +112,7 @@ class AssetFactory:
         return check_storage_extension(asset)
 
     def asset_from_dict(self, asset: Asset):
+        """Create HEC asset given a base Asset and a map of file extensions dict."""
         fpath = asset.href
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):

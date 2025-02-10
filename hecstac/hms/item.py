@@ -90,6 +90,7 @@ class HMSModelItem(Item):
         stac.pm = pm
         stac.simplify_geometry = simplify_geometry
 
+        stac._register_extensions()
         return stac
 
     def _register_extensions(self) -> None:
@@ -193,7 +194,7 @@ class HMSModelItem(Item):
                 logger.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
             else:
                 logger.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
-                fig = self.make_thumbnail(gdfs=bf.hms_schematic_2_gdfs)
+                fig = self.make_thumbnail(self, gdfs=bf.hms_schematic_2_gdfs)
                 fig.savefig(thumbnail_path)
                 fig.clf()
             thumbnail_paths.append(thumbnail_path)
