@@ -937,9 +937,9 @@ class GeometryFile:
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all(
-            [i.is_empty for i in xs_df.geometry]
-        ), "No valid cross-sections found.  Possibly non-georeferenced model"
+        assert not all([i.is_empty for i in xs_df.geometry]), (
+            "No valid cross-sections found.  Possibly non-georeferenced model"
+        )
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]

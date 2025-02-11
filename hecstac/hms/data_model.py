@@ -136,9 +136,7 @@ class Reach(Element):
     """Represents a Reach element."""
 
     geom: LineString = None
-    slope: float = (
-        None  # assumed units of the coordinate system is the same as what is used for the project.. need to confirm this assumption
-    )
+    slope: float = None  # assumed units of the coordinate system is the same as what is used for the project.. need to confirm this assumption
 
 
 @dataclass
