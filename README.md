@@ -29,11 +29,6 @@ Install dev dependencies:
 (venv) $ pip install ".[dev]"
 ```
 
-Install git hook scripts (used for automatic liniting/formatting)
-```
-(venv) $ pre-commit install
-```
-
 ***Testing HEC-RAS model item creation***
 
 - Download the HEC-RAS example project data from USACE. The data can be downloaded [here](https://github.com/HydrologicEngineeringCenter/hec-downloads/releases/download/1.0.33/Example_Projects_6_6.zip).
