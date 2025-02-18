@@ -49,6 +49,12 @@ class ThumbnailAsset(GenericAsset):
     __roles__ = ["thumbnail", MediaType.PNG]
     __description__ = "Thumbnail"
 
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        basin_file = self.href.split(".")[0] + ".basin"
+        return {"associated_basin_file": basin_file}
+
 
 class ModelBasinAsset(GenericAsset[BasinFile]):
     """HEC-HMS Basin file asset from authoritative model, containing geometry and other detailed data."""
@@ -61,17 +67,22 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {
-            "hms:title": self.file.name,
-            "hms:version": self.file.header.attrs["Version"],
-            "hms:description": self.file.header.attrs.get("Description"),
-            "hms:unit_system": self.file.header.attrs["Unit System"],
-            "hms:gages": self.file.gages,
-            "hms:drainage_area_miles": self.file.drainage_area,
-            "hms:reach_length_miles": self.file.reach_miles,
-            "proj:wkt": self.file.wkt,
-            "proj:code": self.file.epsg,
-        } | {f"hms_basin:{key}".lower(): val for key, val in self.file.elements.element_counts.items()}
+
+        return (
+            {
+                "hms:title": self.file.name,
+                "hms:version": self.file.header.attrs["Version"],
+                "hms:description": self.file.header.attrs.get("Description"),
+                "hms:unit_system": self.file.header.attrs["Unit System"],
+                "hms:gages": self.file.gages,
+                "hms:drainage_area_miles": self.file.drainage_area,
+                "hms:reach_length_miles": self.file.reach_miles,
+                "proj:wkt": self.file.wkt,
+                "proj:code": self.file.epsg,
+            }
+            | self.file.hms_methods
+            | {f"hms_basin:{key.lower()}": val for key, val in self.file.elements.element_counts.items()}
+        )
 
 
 class EventBasinAsset(GenericAsset[BasinFile]):
