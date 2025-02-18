@@ -69,10 +69,9 @@ class HMSModelItem(Item):
         pm = LocalPathManager(Path(hms_project_file).parent)
         href = pm.item_path(item_id)
         pf = ProjectFile(hms_project_file, assert_uniform_version=False)
-
         # Create GeoJSON and Thumbnails
         cls._check_files_exists(cls, pf.files + pf.rasters)
-        geojson_paths = cls.write_element_geojsons(cls, pf.basins, pm)
+        geojson_paths = cls.write_element_geojsons(cls, pf.basins, pm, pf)
         thumbnail_paths = cls.make_thumbnails(cls, pf.basins, pm)
 
         # Collect all assets
@@ -201,7 +200,7 @@ class HMSModelItem(Item):
 
         return thumbnail_paths
 
-    def write_element_geojsons(self, basins: list[BasinFile], pm: LocalPathManager, overwrite: bool = False):
+    def write_element_geojsons(self, basins: list[BasinFile], pm: LocalPathManager, pf, overwrite: bool = False):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
         geojson_paths = []
         for element_type in basins[0].elements.element_types:
@@ -211,7 +210,7 @@ class HMSModelItem(Item):
                 logger.info(f"Geojson for {element_type} already exists. Skipping creation.")
             else:
                 logger.info(f"Creating geojson for {element_type}")
-                gdf = self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
+                gdf = pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
                 logger.debug(gdf.columns)
                 keep_columns = ["name", "geometry", "Last Modified Date", "Last Modified Time", "Number Subreaches"]
                 gdf = gdf[[col for col in keep_columns if col in gdf.columns]]
