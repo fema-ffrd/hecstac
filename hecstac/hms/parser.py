@@ -250,10 +250,19 @@ class ProjectFile(BaseTextFile):
     @property
     def dss_files(self):
         """Return dss files."""
-        files = set(
-            [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
-            + [pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()]
-        )
+        files = set()
+        if self.gage:
+            files.update(
+                [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
+            )
+        else:
+            logging.warning("No gage file to extract gages from.")
+
+        if self.pdata:
+            files.update([pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()])
+        else:
+            logging.warning("No pdata files found.")
+
         if self.grid:
             files.update(
                 [
@@ -715,6 +724,31 @@ class BasinFile(BaseTextFile):
         df = pd.concat(df_list)
         gdf = gpd.GeoDataFrame(df, geometry="geometry", crs=self.crs)
         return gdf
+
+    @property
+    @lru_cache
+    def hms_methods(self):
+        """Extract unique HMS methods from Subbasins and Reaches."""
+
+        methods = {
+            "Canopy": set(),
+            "Discretization": set(),
+            "Begin Snow": set(),
+            "Surface": set(),
+            "LossRate": set(),
+            "Transform": set(),
+            "Baseflow": set(),
+            "Route": set(),
+        }
+
+        for subbasin in self.subbasins:
+            for key in methods.keys():
+                if key in subbasin.attrs:
+                    methods[key].add(subbasin.attrs[key])
+        for reach in self.reaches:
+            if "Route" in reach.attrs:
+                methods["Route"].add(reach.attrs["Route"])
+        return {f"hms_methods:{key.replace(' ', '_')}": list(values) for key, values in methods.items()}
 
 
 class MetFile(BaseTextFile):
