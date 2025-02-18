@@ -67,7 +67,6 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-
         return (
             {
                 "hms:title": self.file.name,

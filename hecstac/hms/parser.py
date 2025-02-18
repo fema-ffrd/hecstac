@@ -729,7 +729,6 @@ class BasinFile(BaseTextFile):
     @lru_cache
     def hms_methods(self):
         """Extract unique HMS methods from Subbasins and Reaches."""
-
         methods = {
             "Canopy": set(),
             "Discretization": set(),
