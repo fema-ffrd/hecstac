@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import re
 from collections import OrderedDict
-
+import logging
 from shapely import MultiPolygon, Polygon
 
 from hecstac.hms.consts import ATTR_KEYVAL_GROUPER, ATTR_NESTED_KEYVAL_GROUPER, NL_KEYS
 
+logger = logging.getLogger(__name__)
 # def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
 #     pyproj_crs = CRS.from_user_input(self.crs)
 #     wgs_crs = CRS.from_authority("EPSG", "4326")
@@ -19,9 +20,10 @@ from hecstac.hms.consts import ATTR_KEYVAL_GROUPER, ATTR_NESTED_KEYVAL_GROUPER, 
 
 
 def add_no_duplicate(d: dict, key, val):
-    """Insert a key into a dictionary after asserting that the key does not already exist."""
+    """Insert a key into a dictionary, logging a warning if the key already exists."""
     if key in d:
-        raise ValueError(f"duplicate key: {key}")
+        logger.warning(f"Duplicate key detected: {key}. Skipping duplicate entry.")
+        return
     d[key] = val
 
 

@@ -280,14 +280,17 @@ class ProjectFile(BaseTextFile):
     @property
     def result_files(self):
         """Return result files."""
-        files = set(
-            [i[1].attrs["Log File"] for i in self.run.elements]
-            + [i[1].attrs["DSS File"] for i in self.run.elements]
-            + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
-        )
+        if self.run:
+            files = set(
+                [i[1].attrs["Log File"] for i in self.run.elements]
+                + [i[1].attrs["DSS File"] for i in self.run.elements]
+                + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
+            )
 
-        files = [str(Path(f.replace("\\", "/"))) for f in files]
-        return self.absolute_paths(set(files))
+            files = [str(Path(f.replace("\\", "/"))) for f in files]
+            return self.absolute_paths(set(files))
+        else:
+            return []
 
     def absolute_paths(self, paths):
         """Return absolute path."""
@@ -439,11 +442,20 @@ class BasinFile(BaseTextFile):
                 name = line[len("Reach: ") :]
                 attrs = utils.parse_attrs(lines[i + 1 :])
                 if self.read_geom:
-                    geom = sqlite.reach_feats[sqlite.reach_feats["name"] == name].geometry.values[0]
-                    if "slope" in sqlite.reach_feats.columns:
-                        slope = sqlite.reach_feats[sqlite.reach_feats["name"] == name]["slope"].values[0]
-                    else:
+                    try:
+                        geom = sqlite.reach_feats[sqlite.reach_feats["name"] == name].geometry.values[0]
+                        if "slope" in sqlite.reach_feats.columns:
+                            slope = sqlite.reach_feats[sqlite.reach_feats["name"] == name]["slope"].values[0]
+                        else:
+                            slope = 0
+                    except IndexError:
+                        x1 = utils.search_contents(lines[i + 1 :], "Canvas X", ":", False)[0]
+                        y1 = utils.search_contents(lines[i + 1 :], "Canvas Y", ":", False)[0]
+                        x2 = utils.search_contents(lines[i + 1 :], "From Canvas X", ":", False)[0]
+                        y2 = utils.search_contents(lines[i + 1 :], "From Canvas Y", ":", False)[0]
+                        geom = LineString([[float(x1), float(y1)], [float(x2), float(y2)]])
                         slope = 0
+
                 elements[name] = Reach(name, attrs, geom, slope)
 
             if line.startswith("Junction: "):
