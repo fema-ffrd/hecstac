@@ -20,6 +20,7 @@ class GenericAsset(Asset, Generic[T]):
     regex_parse_str: str = r""
     __roles__: list[str] = []
     __description__: str = ""
+    __media_type__: str = None
     __file_class__: T
 
     def __init__(self, *args, **kwargs):
@@ -29,6 +30,7 @@ class GenericAsset(Asset, Generic[T]):
         self._roles = []
         self._extra_fields = {}
         self.name = Path(self.href).name
+        self.media_type = self.__media_type__
 
     @property
     def roles(self) -> list[str]:

@@ -21,8 +21,9 @@ class GeojsonAsset(GenericAsset):
     """Geojson asset."""
 
     regex_parse_str = r".*\.geojson$"
-    __roles__ = ["data", MediaType.GEOJSON]
+    __roles__ = ["data"]
     __description__ = "Geojson file."
+    __media_type__ = MediaType.GEOJSON
 
 
 class TiffAsset(GenericAsset):
