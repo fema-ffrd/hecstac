@@ -176,7 +176,6 @@ class HMSModelItem(Item):
 
     def _check_files_exists(self, files: list[str]):
         """Ensure the files exists. If they don't raise an error."""
-        from pathlib import Path
 
         for file in files:
             if not os.path.exists(file):
