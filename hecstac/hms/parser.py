@@ -256,12 +256,12 @@ class ProjectFile(BaseTextFile):
                 [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
             )
         else:
-            logging.warning("No gage file to extract gages from.")
+            logger.warning("No gage file to extract gages from.")
 
         if self.pdata:
             files.update([pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()])
         else:
-            logging.warning("No pdata files found.")
+            logger.warning("No pdata files found.")
 
         if self.grid:
             files.update(
@@ -272,7 +272,7 @@ class ProjectFile(BaseTextFile):
                 ]
             )
         else:
-            logging.warning("No grid file to extract dss files from.")
+            logger.warning("No grid file to extract dss files from.")
 
         files = [str(Path(f.replace("\\", "/"))) for f in files]
         return self.absolute_paths(files)
@@ -307,10 +307,10 @@ class ProjectFile(BaseTextFile):
                 if raster_dir and os.path.exists(raster_dir):
                     files += [os.path.join(raster_dir, f) for f in os.listdir(raster_dir)]
                 else:
-                    logging.warning(f"Skipping missing raster directory: {raster_dir}")
+                    logger.warning(f"Skipping missing raster directory: {raster_dir}")
 
         if self.grid is None:
-            logging.warning("No grid file, skipping grid rasters.")
+            logger.warning("No grid file, skipping grid rasters.")
         else:
             files += [
                 grid.attrs["Filename"] for grid in self.grid.elements.elements.values() if "Filename" in grid.attrs
