@@ -243,7 +243,7 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     """HEC-RAS Steady Flow file asset."""
 
     regex_parse_str = r".+\.f\d{2}$"
-    __roles__ = ["ras-steady-flow"]
+    __roles__ = ["ras-steady", MediaType.TEXT]
     __description__ = "Steady Flow file which contains profile information, flow data, and boundary conditions."
     __file_class__ = SteadyFlowFile
 
@@ -261,7 +261,7 @@ class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     # TODO: implement this class
 
     regex_parse_str = r".+\.q\d{2}$"
-    __roles__ = ["ras-quasi-unsteady-flow", MediaType.TEXT]
+    __roles__ = ["ras-quasi-unsteady", MediaType.TEXT]
     __description__ = "Quasi-Unsteady Flow file."
     __file_class__ = QuasiUnsteadyFlowFile
 
@@ -276,7 +276,7 @@ class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     """HEC-RAS Unsteady Flow file asset."""
 
     regex_parse_str = r".+\.u\d{2}$"
-    __roles__ = ["ras-unsteady-flow", MediaType.TEXT]
+    __roles__ = ["ras-unsteady", MediaType.TEXT]
     __description__ = "The unsteady file contains hydrographs, initial conditions, and any flow options."
     __file_class__ = UnsteadyFlowFile
 
@@ -307,7 +307,7 @@ class PlanHdfAsset(GenericAsset[PlanHDFFile]):
     """HEC-RAS Plan HDF file asset."""
 
     regex_parse_str = r".+\.p\d{2}\.hdf$"
-    __roles__ = ["ras-plan-hdf", MediaType.HDF]
+    __roles__ = ["ras-plan", MediaType.HDF]
     __description__ = "The HEC-RAS plan HDF file."
     __file_class__ = PlanHDFFile
 
@@ -625,7 +625,7 @@ class UnsteadyFlowLogAsset(GenericAsset):
     """Unsteady Flow Log asset."""
 
     regex_parse_str = r".+\.bco\d{2}$"
-    __roles__ = ["ras-unsteady-flow-log", MediaType.TEXT]
+    __roles__ = ["ras-unsteady-log", MediaType.TEXT]
     __description__ = "Unsteady Flow Log output file."
     __file_class__ = None
 
@@ -715,7 +715,7 @@ class DSSAsset(GenericAsset):
     """DSS asset."""
 
     regex_parse_str = r".+\.dss$"
-    __roles__ = ["ras-dss", MediaType.TEXT]
+    __roles__ = ["HEC-DSS", "application/octet-stream"]
     __description__ = "The DSS file contains results and other simulation information."
     __file_class__ = None
 
@@ -869,8 +869,9 @@ RAS_ASSET_CLASSES = [
     PlanAsset,
     GeometryAsset,
     SteadyFlowAsset,
-    # QuasiUnsteadyFlowAsset,
+    QuasiUnsteadyFlowAsset,
     UnsteadyFlowAsset,
+    UnsteadyFlowHdfAsset,
     PlanHdfAsset,
     GeometryHdfAsset,
     RunFileAsset,

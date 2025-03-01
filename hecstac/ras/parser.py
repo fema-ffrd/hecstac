@@ -1327,7 +1327,6 @@ class UnsteadyHDFFile(RASHDFFile):
 
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RASHDFFile, **kwargs)
-
         self.hdf_object = RASHDFFile(fpath)
 
 
