@@ -17,37 +17,29 @@ from shapely.geometry import shape
 
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.path_manager import LocalPathManager
-from hecstac.ras.assets import (
-    RAS_EXTENSION_MAPPING,
-    GeometryAsset,
-    GeometryHdfAsset,
-)
-from hecstac.ras.consts import (
-    NULL_DATETIME,
-    NULL_STAC_BBOX,
-    NULL_STAC_GEOMETRY,
-)
+from hecstac.ras.assets import RAS_EXTENSION_MAPPING, GeometryAsset, GeometryHdfAsset
+from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 
 class RASModelItem(Item):
     """An object representation of a HEC-RAS model."""
 
-    PROJECT = "ras:project"
-    PROJECT_TITLE = "ras:project_title"
-    MODEL_UNITS = "ras:unit system"
-    MODEL_GAGES = "ras:gages"
-    PROJECT_VERSION = "ras:version"
-    PROJECT_DESCRIPTION = "ras:description"
-    PROJECT_STATUS = "ras:status"
-    PROJECT_UNITS = "ras:unit_system"
+    PROJECT = "HEC-RAS:project"
+    PROJECT_TITLE = "HEC-RAS:project_title"
+    MODEL_UNITS = "HEC-RAS:unit system"
+    MODEL_GAGES = "HEC-RAS:gages"
+    PROJECT_VERSION = "HEC-RAS:version"
+    PROJECT_DESCRIPTION = "HEC-RAS:description"
+    PROJECT_STATUS = "HEC-RAS:status"
+    PROJECT_UNITS = "HEC-RAS:unit_system"
 
-    RAS_HAS_1D = "ras:has_1d"
-    RAS_HAS_2D = "ras:has_2d"
-    RAS_DATETIME_SOURCE = "ras:datetime_source"
+    RAS_HAS_1D = "HEC-RAS:has_1d"
+    RAS_HAS_2D = "HEC-RAS:has_2d"
+    RAS_DATETIME_SOURCE = "HEC-RAS:datetime_source"
 
     def __init__(self, *args, **kwargs):
         """Add a few default properties to the base class."""
@@ -148,18 +140,20 @@ class RASModelItem(Item):
     def geometry(self) -> dict:
         """Return footprint of model as a geojson."""
         if self.crs is None:
-            logger.warning("Geometry requested for model with no spatial reference.")
+            logging.warning("Geometry requested for model with no spatial reference.")
             return NULL_STAC_GEOMETRY
         if len(self.geometry_assets) == 0:
-            logger.error("No geometry found for RAS item.")
+            logging.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
 
         geometries = []
         for i in self.geometry_assets:
+            logging.debug(f"Processing geometry from {i.href}")
             try:
                 geometries.append(i.geometry_wgs84)
             except Exception as e:
-                logger.warning(f"Could not process geometry from {i.href}")
+                logging.error(e)
+                # logger.warning(f"Could not process geometry from {i.href}")
                 continue
 
         unioned_geometry = union_all(geometries)
@@ -222,7 +216,7 @@ class RASModelItem(Item):
             item_time = datetimes[0]
             self._properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
         else:
-            logger.warning("Could not extract item datetime from geometry, using item processing time.")
+            logging.warning("Could not extract item datetime from geometry, using item processing time.")
             item_time = datetime.datetime.now()
             self._properties[self.RAS_DATETIME_SOURCE] = "processing_time"
         return item_time

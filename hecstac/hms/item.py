@@ -4,28 +4,23 @@ import json
 import logging
 import os
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import contextily as ctx
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
-from pystac import Item, Asset
+from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, unary_union
-from functools import lru_cache
 
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.hms.parser import BasinFile, ProjectFile
-
-from hecstac.ras.consts import (
-    NULL_DATETIME,
-    NULL_STAC_BBOX,
-    NULL_STAC_GEOMETRY,
-)
+from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 
 logger = logging.getLogger(__name__)
 
@@ -202,14 +197,14 @@ class HMSModelItem(Item):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
         geojson_paths = []
         for element_type in basins[0].elements.element_types:
-            logger.debug(f"Checking if geojson for {element_type} exists")
+            # logger.debug(f"Checking if geojson for {element_type} exists")
             path = pm.derived_item_asset(f"{element_type}.geojson")
             if not overwrite and os.path.exists(path):
                 logger.info(f"Geojson for {element_type} already exists. Skipping creation.")
             else:
                 logger.info(f"Creating geojson for {element_type}")
                 gdf = pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
-                logger.debug(gdf.columns)
+                # logger.debug(gdf.columns)
                 keep_columns = ["name", "geometry", "Last Modified Date", "Last Modified Time", "Number Subreaches"]
                 gdf = gdf[[col for col in keep_columns if col in gdf.columns]]
                 gdf.to_file(path)

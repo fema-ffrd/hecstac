@@ -13,7 +13,15 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from rashdf import RasGeomHdf, RasPlanHdf
-from shapely import GeometryCollection, LineString, MultiPolygon, Point, Polygon, make_valid, union_all
+from shapely import (
+    GeometryCollection,
+    LineString,
+    MultiPolygon,
+    Point,
+    Polygon,
+    make_valid,
+    union_all,
+)
 from shapely.ops import unary_union
 
 from hecstac.ras.utils import (
@@ -937,9 +945,9 @@ class GeometryFile:
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]
@@ -1085,7 +1093,7 @@ class UnsteadyFlowFile:
                 flow_area = parts[5].strip()
                 bc_line = parts[7].strip()
                 boundary_dict.append({flow_area: bc_line})
-        logger.debug(f"boundary_dict:{boundary_dict}")
+        # logger.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
     @property
@@ -1312,6 +1320,15 @@ class RASHDFFile:
             raise ValueError("No boundary condition lines found.")
 
         return bc_lines
+
+
+class UnsteadyHDFFile(RASHDFFile):
+    """Class to parse data from Plan HDF files."""
+
+    def __init__(self, fpath: str, **kwargs):
+        super().__init__(fpath, RASHDFFile, **kwargs)
+
+        self.hdf_object = RASHDFFile(fpath)
 
 
 class PlanHDFFile(RASHDFFile):

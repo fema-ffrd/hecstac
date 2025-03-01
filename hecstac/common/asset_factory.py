@@ -118,6 +118,6 @@ class AssetFactory:
         fpath = asset.href
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
-                logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
+                # logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 return asset_class.from_dict(asset.to_dict())
         return asset

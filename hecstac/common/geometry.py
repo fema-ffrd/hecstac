@@ -13,3 +13,10 @@ def reproject_to_wgs84(geom: Geometry, crs: str) -> Geometry:
         transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
         return transform(transformer.transform, geom)
     return geom
+
+
+def read_crs_from_prj(prj_file: str) -> CRS:
+    """Read CRS from a .prj file."""
+    with open(prj_file, "r") as file:
+        wkt = file.read()
+    return CRS.from_wkt(wkt)
