@@ -4,9 +4,12 @@ import logging
 from pathlib import Path
 
 from hecstac import RASModelItem
+from hecstac.common.geometry import read_crs_from_prj
 from hecstac.common.logger import initialize_logger
+from hecstac.common.proposed_features import calibration_plots, reorder_stac_assets
+from hecstac.ras.proposed_features import add_plan_info
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 
 
 def sanitize_catalog_assets(item: RASModelItem) -> RASModelItem:
@@ -29,14 +32,24 @@ def sanitize_catalog_assets(item: RASModelItem) -> RASModelItem:
 
 
 if __name__ == "__main__":
-    initialize_logger()
-    ras_project_file = "Muncie/Muncie.prj"
+    initialize_logger(level=logging.INFO)
+
+    ras_project_file = "data/rr/Model/Trinity_1203_EFT_RayRoberts.prj"
+    # ras_project_file = "data/cc/HECRAS/Cedar_1203_CedarCrk.prj"
+    # ras_project_file = "data/cc/Post-Investigations/CedarCreek/Cedar_1203_CedarCrk.prj"
+    projection_file = "data/rr/Model/Projection.prj"
+    crs = read_crs_from_prj(projection_file)
+    # crs = None
+
     item_id = Path(ras_project_file).stem
-    crs = None
 
     ras_item = RASModelItem.from_prj(ras_project_file, item_id, crs=crs)
-    # ras_item.add_model_thumbnails(["mesh_areas", "breaklines", "bc_lines"])
+    ras_item.add_model_thumbnails(["mesh_areas", "breaklines", "bc_lines"])
+    ras_item = reorder_stac_assets(ras_item)
+    # ras_item = calibration_plots(ras_item, "data/cc/Post-Investigations/CedarCreek")
+    ras_item = calibration_plots(ras_item, "data/rr/Model/post-investigations/Supporting Documents/Calibration")
+    ras_item = add_plan_info(ras_item)
     ras_item = sanitize_catalog_assets(ras_item)
 
     ras_item.save_object(ras_project_file)
-    logger.info(f"Saved {ras_project_file}")
+    logging.info(f"Saved {ras_project_file}")
