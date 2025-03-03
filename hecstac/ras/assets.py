@@ -300,6 +300,7 @@ class UnsteadyFlowHdfAsset(GenericAsset[UnsteadyHDFFile]):
 
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
+        """Return extra fields when complete."""
         pass
 
 

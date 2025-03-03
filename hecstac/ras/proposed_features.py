@@ -1,9 +1,12 @@
+"""Features developed duirng R&D for consideration in the hecstac package."""
+
 import logging
 
 from pystac import Item
 
 
 def add_plan_info(item: Item):
+    """Extract plan information from the item assets and add it to the item properties."""
     plans = {}
     for asset_name, asset in item.assets.items():
         if asset.roles:
