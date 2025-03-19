@@ -1,3 +1,5 @@
+"""HEC-HMS file parsing classes."""
+
 from __future__ import annotations
 
 import logging
@@ -5,7 +7,6 @@ import math
 import os
 from abc import ABC
 from collections import OrderedDict
-from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,7 +14,6 @@ import fiona
 import geopandas as gpd
 import pandas as pd
 from pyproj import CRS
-from shapely import get_point
 from shapely.geometry import LineString, MultiLineString, Point
 
 import hecstac.hms.utils as utils
@@ -43,8 +43,12 @@ from hecstac.hms.data_model import (
     Temperature,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class BaseTextFile(ABC):
+    """Base class for text files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         self.path: str = path
         self.directory: str = os.path.dirname(self.path)
@@ -57,19 +61,24 @@ class BaseTextFile(ABC):
         self.parse_header()
 
     def read_content(self):
+        """Read contents of text file."""
         if os.path.exists(self.path):
-            with open(self.path) as f:
-                self.content = f.read()
+            try:
+                with open(self.path, encoding="utf-8") as f:
+                    self.content = f.read()
+            except UnicodeDecodeError:
+                with open(self.path, encoding="cp1252") as f:
+                    self.content = f.read()
         else:
             try:
                 response = self.client.get_object(Bucket=self.bucket, Key=self.path)
                 self.content = response["Body"].read().decode()
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
                 raise FileNotFoundError(f"could not find {self.path} locally nor on s3")
 
     def parse_header(self):
-        """Scan the file down to the first instance of 'End:' and save each colon-separated keyval pair as attrs dict"""
+        """Scan the file down to the first instance of 'End:' and save each colon-separated keyval pair as attrs dict."""
         lines = self.content.splitlines()
         if not lines[0].startswith(
             (
@@ -89,6 +98,8 @@ class BaseTextFile(ABC):
 
 
 class ProjectFile(BaseTextFile):
+    """Class for parsing HEC-HMS project files."""
+
     def __init__(
         self,
         path: str,
@@ -123,15 +134,18 @@ class ProjectFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Extract name from project file."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Project: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
         return lines[0][len("Project: ") :]
 
     def combine_stem_ext(self, ext: str) -> str:
+        """Combine stem and extension."""
         return f"{self.stem}.{ext}"
 
     def scan_for_terrain_run_grid_gage_pdata(self):
+        """Scan for terrain, run, grid, gage, and pdata files."""
         for ext in ["terrain", "run", "grid", "gage", "pdata"]:
             path = self.combine_stem_ext(ext)
             if os.path.exists(path):
@@ -147,6 +161,7 @@ class ProjectFile(BaseTextFile):
                     self.pdata = PairedDataFile(path)
 
     def scan_for_basins_mets_controls(self):
+        """Scan for basin, meteorology, and control files."""
         lines = self.content.splitlines()
         i = -1
         while True:
@@ -181,6 +196,7 @@ class ProjectFile(BaseTextFile):
 
     @property
     def file_counts(self):
+        """Return file counts."""
         return {
             "Basins": len(self.basins),
             "Controls": len(self.controls),
@@ -194,6 +210,7 @@ class ProjectFile(BaseTextFile):
         }
 
     def assert_uniform_version(self):
+        """Assert uniform version."""
         errors = []
         version = self.attrs["Version"]
         for basin in self.basins:
@@ -217,9 +234,8 @@ class ProjectFile(BaseTextFile):
 
     @property
     def files(self):
-
+        """Return associated files."""
         # logging.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
-
         return (
             [self.path]
             + [basin.path for basin in self.basins]
@@ -233,50 +249,85 @@ class ProjectFile(BaseTextFile):
 
     @property
     def dss_files(self):
-        files = set(
-            [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
-            + [
-                grid.attrs["Variant"]["Variant-1"]["DSS File Name"]
-                for grid in self.grid.elements.elements.values()
-                if "Variant" in grid.attrs
-            ]
-            + [pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()]
-        )
+        """Return dss files."""
+        files = set()
+        if self.gage:
+            files.update(
+                [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
+            )
+        else:
+            logger.warning("No gage file to extract gages from.")
+
+        if self.pdata:
+            files.update([pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()])
+        else:
+            logger.warning("No pdata files found.")
+
+        if self.grid:
+            files.update(
+                [
+                    grid.attrs["Variant"]["Variant-1"]["DSS File Name"]
+                    for grid in self.grid.elements.elements.values()
+                    if "Variant" in grid.attrs
+                ]
+            )
+        else:
+            logger.warning("No grid file to extract dss files from.")
 
         files = [str(Path(f.replace("\\", "/"))) for f in files]
         return self.absolute_paths(files)
 
     @property
     def result_files(self):
-        files = set(
-            [i[1].attrs["Log File"] for i in self.run.elements]
-            + [i[1].attrs["DSS File"] for i in self.run.elements]
-            + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
-        )
+        """Return result files."""
+        if self.run:
+            files = set(
+                [i[1].attrs["Log File"] for i in self.run.elements]
+                + [i[1].attrs["DSS File"] for i in self.run.elements]
+                + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
+            )
 
-        files = [str(Path(f.replace("\\", "/"))) for f in files]
-        return self.absolute_paths(set(files))
+            files = [str(Path(f.replace("\\", "/"))) for f in files]
+            return self.absolute_paths(set(files))
+        else:
+            return []
 
     def absolute_paths(self, paths):
+        """Return absolute path."""
         return [os.path.join(self.directory, path) for path in paths]
 
     @property
     def rasters(self):
+        """Return raster files."""
         files = []
+
         if self.terrain:
             for terrain in self.terrain.layers:
-                files += [os.path.join(terrain["raster_dir"], f) for f in os.listdir(terrain["raster_dir"])]
-        files += [grid.attrs["Filename"] for grid in self.grid.elements.elements.values() if "Filename" in grid.attrs]
+                raster_dir = terrain.get("raster_dir", "").strip()
+                if raster_dir and os.path.exists(raster_dir):
+                    files += [os.path.join(raster_dir, f) for f in os.listdir(raster_dir)]
+                else:
+                    logger.warning(f"Skipping missing raster directory: {raster_dir}")
+
+        if self.grid is None:
+            logger.warning("No grid file, skipping grid rasters.")
+        else:
+            files += [
+                grid.attrs["Filename"] for grid in self.grid.elements.elements.values() if "Filename" in grid.attrs
+            ]
         files = [str(Path(f.replace("\\", "/"))) for f in files]
         return self.absolute_paths(set(files))
 
     @property
     @lru_cache
     def sqlitedbs(self):
+        """Return SQLite database."""
         return [SqliteDB(basin.sqlite_path) for basin in self.basins]
 
 
 class BasinFile(BaseTextFile):
+    """Class for parsing HEC-HMS basin files."""
+
     def __init__(
         self,
         path: str,
@@ -313,25 +364,30 @@ class BasinFile(BaseTextFile):
 
     @property
     def wkt(self):
+        """Return wkt representation of the CRS."""
         for line in self.spatial_properties.content.splitlines():
             if "Coordinate System: " in line:
                 return line.split(": ")[1]
 
     @property
     def crs(self):
+        """Return the CRS."""
         return CRS(self.wkt)
 
     @property
     def epsg(self):
+        """Return the EPSG code."""
         return self.crs.to_epsg()
 
     def parse_name(self):
+        """Parse basin name."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Basin: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
         self.name = lines[0][len("Basin: ") :]
 
     def scan_for_headers_and_footers(self):
+        """Scan for basin headers and footers."""
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("Basin: "):
@@ -351,6 +407,7 @@ class BasinFile(BaseTextFile):
                 self.computation_points = ComputationPoints(content)
 
     def identify_sqlite(self):
+        """Identify SQLite."""
         for line in self.content.splitlines():
             if ".sqlite" in line:
                 return line.split("File: ")[1]
@@ -358,6 +415,7 @@ class BasinFile(BaseTextFile):
     @property
     @lru_cache
     def elements(self):
+        """Return basin elements."""
         elements = ElementSet()
         if self.read_geom:
             sqlite = SqliteDB(
@@ -384,11 +442,20 @@ class BasinFile(BaseTextFile):
                 name = line[len("Reach: ") :]
                 attrs = utils.parse_attrs(lines[i + 1 :])
                 if self.read_geom:
-                    geom = sqlite.reach_feats[sqlite.reach_feats["name"] == name].geometry.values[0]
-                    if "slope" in sqlite.reach_feats.columns:
-                        slope = sqlite.reach_feats[sqlite.reach_feats["name"] == name]["slope"].values[0]
-                    else:
+                    try:
+                        geom = sqlite.reach_feats[sqlite.reach_feats["name"] == name].geometry.values[0]
+                        if "slope" in sqlite.reach_feats.columns:
+                            slope = sqlite.reach_feats[sqlite.reach_feats["name"] == name]["slope"].values[0]
+                        else:
+                            slope = 0
+                    except IndexError:
+                        x1 = utils.search_contents(lines[i + 1 :], "Canvas X", ":", False)[0]
+                        y1 = utils.search_contents(lines[i + 1 :], "Canvas Y", ":", False)[0]
+                        x2 = utils.search_contents(lines[i + 1 :], "From Canvas X", ":", False)[0]
+                        y2 = utils.search_contents(lines[i + 1 :], "From Canvas Y", ":", False)[0]
+                        geom = LineString([[float(x1), float(y1)], [float(x2), float(y2)]])
                         slope = 0
+
                 elements[name] = Reach(name, attrs, geom, slope)
 
             if line.startswith("Junction: "):
@@ -433,62 +500,75 @@ class BasinFile(BaseTextFile):
     @property
     @lru_cache
     def subbasins(self):
+        """Return subbasin elements."""
         return self.elements.get_element_type("Subbasin")
 
     @property
     @lru_cache
     def reaches(self):
+        """Return reach elements."""
         return self.elements.get_element_type("Reach")
 
     @property
     @lru_cache
     def junctions(self):
+        """Return junction elements."""
         return self.elements.get_element_type("Junction")
 
     @property
     @lru_cache
     def reservoirs(self):
+        """Return reservoir elements."""
         return self.elements.get_element_type("Reservoir")
 
     @property
     @lru_cache
     def diversions(self):
+        """Return diversion elements."""
         return self.elements.get_element_type("Diversion")
 
     @property
     @lru_cache
     def sinks(self):
+        """Return sink elements."""
         return self.elements.get_element_type("Sink")
 
     @property
     @lru_cache
     def sources(self):
+        """Return source elements."""
         return self.elements.get_element_type("Source")
 
     @property
     @lru_cache
     def gages(self):
+        """Return gages."""
         return self.elements.gages
 
     @property
     @lru_cache
     def drainage_area(self):
+        """Return drainage areas.."""
         return sum([subbasin.geom.area for subbasin in self.subbasins])
 
     @property
     @lru_cache
     def reach_miles(self):
+        """Return reach lengths in miles.."""
         return sum([reach.geom.length for reach in self.reaches])
 
     @property
     @lru_cache
     def basin_geom(self):
+        """Return basin geometry."""
         return utils.remove_holes(self.feature_2_gdf("Subbasin").make_valid().to_crs(4326).union_all())
 
     def bbox(self, crs):
+        """Return basin bounding box."""
         return self.feature_2_gdf("Subbasin").to_crs(crs).total_bounds
 
     def feature_2_gdf(self, element_type: str) -> gpd.GeoDataFrame:
+        """Convert feature to GeoDataFrame."""
         gdf_list = []
         for e in self.elements.get_element_type(element_type):
             gdf_list.append(
@@ -504,6 +584,7 @@ class BasinFile(BaseTextFile):
     @property
     @lru_cache
     def observation_points_gdf(self):
+        """Return GeoDataFrame of observation points."""
         gdf_list = []
         for name, element in self.elements:
             if "Observed Hydrograph Gage" in element.attrs.keys():
@@ -556,6 +637,7 @@ class BasinFile(BaseTextFile):
             return gdf
 
     def subbasin_connection_lines(self) -> gpd.GeoDataFrame:
+        """Return GeoDataframe of subbasin connection lines."""
         df_list = []
         for subbasin in self.subbasins:
             us_point = subbasin.geom.centroid
@@ -577,11 +659,12 @@ class BasinFile(BaseTextFile):
         return gdf
 
     def junction_connection_lines(self) -> gpd.GeoDataFrame:
+        """Return GeoDataframe of junction connection lines."""
         df_list = []
         for junction in self.junctions:
             us_point = junction.geom
             if "Downstream" not in junction.attrs:
-                logging.warning(f"Warning no downstream element for junction {junction.name}")
+                logger.warning(f"Warning no downstream element for junction {junction.name}")
                 continue
             ds_element = self.elements[junction.attrs["Downstream"]]
             if ds_element in self.reaches:
@@ -615,6 +698,7 @@ class BasinFile(BaseTextFile):
     @property
     @lru_cache
     def hms_schematic_2_gdfs(self) -> dict[gpd.GeoDataFrame]:
+        """Convert HMS schematics to GeoDataframe."""
         element_gdfs = {}
         for element_type in [
             "Reach",
@@ -633,6 +717,7 @@ class BasinFile(BaseTextFile):
         return element_gdfs
 
     def subbasin_bc_lines(self):
+        """Return subbasin boundary condition lines."""
         df_list = []
         for _, row in self.subbasin_connection_lines().iterrows():
             geom = row.geometry
@@ -652,8 +737,34 @@ class BasinFile(BaseTextFile):
         gdf = gpd.GeoDataFrame(df, geometry="geometry", crs=self.crs)
         return gdf
 
+    @property
+    @lru_cache
+    def hms_methods(self):
+        """Extract unique HMS methods from Subbasins and Reaches."""
+        methods = {
+            "Canopy": set(),
+            "Discretization": set(),
+            "Begin Snow": set(),
+            "Surface": set(),
+            "LossRate": set(),
+            "Transform": set(),
+            "Baseflow": set(),
+            "Route": set(),
+        }
+
+        for subbasin in self.subbasins:
+            for key in methods.keys():
+                if key in subbasin.attrs:
+                    methods[key].add(subbasin.attrs[key])
+        for reach in self.reaches:
+            if "Route" in reach.attrs:
+                methods["Route"].add(reach.attrs["Route"])
+        return {f"hms_methods:{key.replace(' ', '_')}": list(values) for key, values in methods.items()}
+
 
 class MetFile(BaseTextFile):
+    """Class for parsing HEC-HMS meteorology files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".met"):
             raise ValueError(f"invalid extension for Meteorology file: {path}")
@@ -668,12 +779,14 @@ class MetFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Return meteorology name."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Meteorology: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
         return lines[0][len("Meteorology: ") :]
 
     def scan_for_elements(self):
+        """Scan for meteorology elements."""
         elements = ElementSet()
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
@@ -700,6 +813,8 @@ class MetFile(BaseTextFile):
 
 
 class ControlFile(BaseTextFile):
+    """Class for parsing HEC-HMS control files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".control"):
             raise ValueError(f"invalid extension for Control file: {path}")
@@ -712,6 +827,7 @@ class ControlFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Return control name."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Control: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
@@ -719,36 +835,43 @@ class ControlFile(BaseTextFile):
 
 
 class TerrainFile(BaseTextFile):
+    """Class for parsing HEC-HMS terrain files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".terrain"):
-            raise ValueError(f"invalid extension for Terrain file: {path}")
+            raise ValueError(f"Invalid extension for Terrain file: {path}")
         super().__init__(path, client=client, bucket=bucket)
         self.layers = []
 
         found_first = False
-        name, raster_path, vert_units = "", "", ""
+        name, raster_path, raster_dir, vert_units = "", "", "", ""
+
         for line in self.content.splitlines():
             if not found_first:
                 if line.startswith("Terrain Data: "):
                     found_first = True
                 else:
                     continue
+
             if line == "End:":
                 self.layers.append(
                     {
                         "name": name,
                         "raster_path": raster_path,
-                        "raster_dir": os.path.dirname(raster_path),
+                        "raster_dir": raster_dir,
                         "vert_units": vert_units,
                     }
                 )
-                name, raster_path, vert_units = "", "", ""
+                name, raster_path, raster_dir, vert_units = "", "", "", ""
 
             elif line.startswith("Terrain Data: "):
                 name = line[len("Terrain Data: ") :]
             elif line.startswith("     Elevation File Name: "):
                 raster_path_raw = line[len("     Elevation File Name: ") :]
                 raster_path = os.path.join(os.path.dirname(self.path), raster_path_raw.replace("\\", os.sep))
+            elif line.startswith("     Terrain Directory: "):
+                raster_dir_raw = line[len("     Terrain Directory: ") :]
+                raster_dir = os.path.join(os.path.dirname(self.path), raster_dir_raw.replace("\\", os.sep))
             elif line.startswith("     Vertical Units: "):
                 vert_units = line[len("     Vertical Units: ") :]
 
@@ -759,10 +882,13 @@ class TerrainFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Return name."""
         return None
 
 
 class RunFile(BaseTextFile):
+    """Class for parsing HEC-HMS run files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".run"):
             raise ValueError(f"invalid extension for Run file: {path}")
@@ -773,6 +899,7 @@ class RunFile(BaseTextFile):
         return f"HMSRunFile({self.path})"
 
     def runs(self):
+        """Retrieve all runs."""
         runs = ElementSet()
         lines = self.content.splitlines()
         i = -1
@@ -788,10 +915,13 @@ class RunFile(BaseTextFile):
 
     @property
     def elements(self):
+        """Return run elements."""
         return self.runs()
 
 
 class PairedDataFile(BaseTextFile):
+    """Class for parsing HEC-HMS paired data files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".pdata"):
             raise ValueError(f"invalid extension for Paired Data file: {path}")
@@ -800,7 +930,7 @@ class PairedDataFile(BaseTextFile):
                 response = client.get_object(Bucket=bucket, Key=path)
                 self.content = response["Body"].read().decode()
             except Exception as e:
-                logging.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
+                logger.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
                 self.create_pdata(path)
         super().__init__(path, client=client, bucket=bucket)
         self.elements = ElementSet()
@@ -813,12 +943,14 @@ class PairedDataFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Return paired data manager."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Paired Data Manager: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
         return lines[0][len("Paired Data Manager: ") :]
 
     def scan_for_tables(self):
+        """Scan for tables."""
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("Table: "):
@@ -828,6 +960,7 @@ class PairedDataFile(BaseTextFile):
                 self.elements[f"{name}+{table_type}"] = Table(name, attrs)
 
     def scan_for_patterns(self):
+        """Scan for patterns."""
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("Pattern: "):
@@ -838,6 +971,8 @@ class PairedDataFile(BaseTextFile):
 
 
 class SqliteDB:
+    """SQLite database class."""
+
     def __init__(self, path: str, client=None, bucket=None, fiona_aws_session=None):
         sqlite_file, _ = os.path.splitext(path)
         path = f"{sqlite_file}.sqlite"
@@ -869,6 +1004,8 @@ class SqliteDB:
 
 
 class GridFile(BaseTextFile):
+    """Class for parsing HEC-HMS grid files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".grid"):
             raise ValueError(f"invalid extension for Grid file: {path}")
@@ -883,12 +1020,14 @@ class GridFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Return grid manager name."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Grid Manager: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
         return lines[0][len("Grid Manager: ") :]
 
     def scan_for_grids(self):
+        """Scan for all grids."""
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("Grid: "):
@@ -898,6 +1037,7 @@ class GridFile(BaseTextFile):
                 self.elements[f"{name}+{grid_type}"] = Grid(f"{name}+{grid_type}", attrs)
 
     def remove_grid_type(self, grid_types: list[str]):
+        """Remove given grid types."""
         new_elements = ElementSet()
         for name, g in self.elements.elements.items():
             if g.attrs["Grid Type"] not in grid_types:
@@ -907,10 +1047,13 @@ class GridFile(BaseTextFile):
     @property
     @lru_cache
     def grids(self):
+        """Return grid elements."""
         return self.elements.get_element_type("Grid")
 
 
 class GageFile(BaseTextFile):
+    """Class for parsing HEC-HMS gage files."""
+
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".gage"):
             raise ValueError(f"invalid extension for Gage file: {path}")
@@ -925,12 +1068,14 @@ class GageFile(BaseTextFile):
     @property
     @lru_cache
     def name(self):
+        """Return gage manager name."""
         lines = self.content.splitlines()
         if not lines[0].startswith("Gage Manager: "):
             raise ValueError(f"unexpected first line: {lines[0]}")
         return lines[0][len("Gage Manager: ") :]
 
     def scan_for_gages(self):
+        """Search for all gages."""
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             if line.startswith("Gage: "):
@@ -941,4 +1086,5 @@ class GageFile(BaseTextFile):
     @property
     @lru_cache
     def gages(self):
+        """Return gage elements."""
         return self.elements.get_element_type("Gage")

@@ -1,3 +1,5 @@
+"""HEC-HMS STAC Item constants."""
+
 GPD_WRITE_ENGINE = "fiona"  # Latest default as of 2024-11-11 seems to be "pyogrio" which is causing issues.
 # 5 spaces, (key), colon, (val), ignoring whitespace before and after key and val, e.g. "     Version: 4.10"
 ATTR_KEYVAL_GROUPER = r"^     (\S.*?)\s*:\s*(.*?)\s*$"

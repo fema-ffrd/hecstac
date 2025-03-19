@@ -1,5 +1,7 @@
-from pystac import MediaType
+"""HEC-HMS Stac Item asset classes."""
 
+from pystac import MediaType
+import re
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.hms.parser import (
     BasinFile,
@@ -18,275 +20,276 @@ from hecstac.hms.parser import (
 class GeojsonAsset(GenericAsset):
     """Geojson asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["data"]
-        media_type = MediaType.GEOJSON
-        description = "Geojson file."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
+    regex_parse_str = r".*\.geojson$"
+    __roles__ = ["data"]
+    __description__ = "Geojson file."
+    __media_type__ = MediaType.GEOJSON
 
 
 class TiffAsset(GenericAsset):
     """Tiff Asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["data"]
-        media_type = MediaType.GEOTIFF
-        description = "Tiff file."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
+    regex_parse_str = r".*\.tiff$"
+    __roles__ = ["data", MediaType.GEOTIFF]
+    __description__ = "Tiff file."
 
 
-class ProjectAsset(GenericAsset):
-    """HEC-HMS Project file asset."""
+class ProjectAsset(GenericAsset[ProjectFile]):
+    """Project asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-
-        roles = ["hms-project"]
-        media_type = MediaType.TEXT
-        description = "The HEC-HMS project file. Summary provied at the item level"
-
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.pf = ProjectFile(href, assert_uniform_version=False)
+    regex_parse_str = r".*\.hms$"
+    __roles__ = ["hms-project", MediaType.TEXT]
+    __description__ = "The HEC-HMS project file. Summary provied at the item level"
+    __file_class__ = ProjectFile
 
 
 class ThumbnailAsset(GenericAsset):
     """Thumbnail asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["thumbnail"]
-        media_type = MediaType.PNG
-        description = "Thumbnail"
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
+    regex_parse_str = r".*\.png$"
+    __roles__ = ["thumbnail", MediaType.PNG]
+    __description__ = "Thumbnail"
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        basin_file = self.href.split(".")[0] + ".basin"
+        return {"associated_basin_file": basin_file}
 
 
-class ModelBasinAsset(GenericAsset):
+class ModelBasinAsset(GenericAsset[BasinFile]):
     """HEC-HMS Basin file asset from authoritative model, containing geometry and other detailed data."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-basin"]
-        media_type = MediaType.TEXT
-        description = "Defines the basin geometry and elements for HEC-HMS simulations."
-        super().__init__(
-            href,
-            roles=roles,
-            description=description,
-            media_type=media_type,
-            *args,
-            **kwargs,
+    regex_parse_str = r".*\.basin$"
+    __roles__ = ["hms-basin", MediaType.TEXT]
+    __description__ = "Defines the basin geometry and elements for HEC-HMS simulations."
+    __file_class__ = BasinFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return (
+            {
+                "hms:title": self.file.name,
+                "hms:version": self.file.header.attrs["Version"],
+                "hms:description": self.file.header.attrs.get("Description"),
+                "hms:unit_system": self.file.header.attrs["Unit System"],
+                "hms:gages": self.file.gages,
+                "hms:drainage_area_miles": self.file.drainage_area,
+                "hms:reach_length_miles": self.file.reach_miles,
+                "proj:wkt": self.file.wkt,
+                "proj:code": self.file.epsg,
+            }
+            | self.file.hms_methods
+            | {f"hms_basin:{key.lower()}": val for key, val in self.file.elements.element_counts.items()}
         )
-        self.bf = BasinFile(href, read_geom=True)
-        self.extra_fields = {
-            "hms:title": self.bf.name,
-            "hms:version": self.bf.header.attrs["Version"],
-            "hms:description": self.bf.header.attrs.get("Description"),
-            "hms:unit_system": self.bf.header.attrs["Unit System"],
-            "hms:gages": self.bf.gages,
-            "hms:drainage_area_miles": self.bf.drainage_area,
-            "hms:reach_length_miles": self.bf.reach_miles,
-            "proj:wkt": self.bf.wkt,
-            "proj:code": self.bf.epsg,
-        } | {f"hms_basin:{key}".lower(): val for key, val in self.bf.elements.element_counts.items()}
 
 
-class EventBasinAsset(GenericAsset):
+class EventBasinAsset(GenericAsset[BasinFile]):
     """HEC-HMS Basin file asset from event, with limited basin info."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-basin"]
-        media_type = MediaType.TEXT
-        description = "Defines the basin geometry and elements for HEC-HMS simulations."
-        super().__init__(
-            href,
-            roles=roles,
-            description=description,
-            media_type=media_type,
-            *args,
-            **kwargs,
-        )
-        self.bf = BasinFile(href)
-        self.extra_fields = {
-            "hms:title": self.bf.name,
-            "hms:version": self.bf.header.attrs["Version"],
-            "hms:description": self.bf.header.attrs.get("Description"),
-            "hms:unit_system": self.bf.header.attrs["Unit System"],
+    regex_parse_str = r".*\.basin$"
+    __roles__ = ["hms-basin", MediaType.TEXT]
+    __description__ = "Defines the basin geometry and elements for HEC-HMS simulations."
+    __file_class__ = BasinFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {
+            "hms:title": self.file.name,
+            "hms:version": self.file.header.attrs["Version"],
+            "hms:description": self.file.header.attrs.get("Description"),
+            "hms:unit_system": self.file.header.attrs["Unit System"],
         }
 
 
-class RunAsset(GenericAsset):
+class RunAsset(GenericAsset[RunFile]):
     """Run asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        self.rf = RunFile(href)
-        roles = ["hms-run"]
-        media_type = MediaType.TEXT
-        description = "Contains data for HEC-HMS simulations."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.extra_fields = {"hms:title": self.name} | {
-            run.name: {f"hms:{key}".lower(): val for key, val in run.attrs.items()} for _, run in self.rf.elements
+    regex_parse_str = r".*\.run$"
+    __file_class__ = RunFile
+    __roles__ = ["hms-run", MediaType.TEXT]
+    __description__ = "Contains data for HEC-HMS simulations."
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.name} | {
+            run.name: {f"hms:{key}".lower(): val for key, val in run.attrs.items()} for _, run in self.file.elements
         }
 
 
-class ControlAsset(GenericAsset):
+class ControlAsset(GenericAsset[ControlFile]):
     """HEC-HMS Control file asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-control"]
-        media_type = MediaType.TEXT
-        description = "Defines time control information for HEC-HMS simulations."
-        super().__init__(
-            href,
-            roles=roles,
-            description=description,
-            media_type=media_type,
-            *args,
-            **kwargs,
-        )
-        self.cf = ControlFile(href)
-        self.extra_fields = {
-            "hms:title": self.cf.name,
-            **{f"hms:{key}".lower(): val for key, val in self.cf.attrs.items()},
+    regex_parse_str = r".*\.control$"
+    __roles__ = ["hms-control", MediaType.TEXT]
+    __description__ = "Defines time control information for HEC-HMS simulations."
+    __file_class__ = ControlFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {
+            "hms:title": self.file.name,
+            **{f"hms:{key}".lower(): val for key, val in self.file.attrs.items()},
         }
 
 
-class MetAsset(GenericAsset):
+class MetAsset(GenericAsset[MetFile]):
     """HEC-HMS Meteorological file asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-met"]
-        media_type = MediaType.TEXT
-        description = "Contains meteorological data such as precipitation and temperature."
-        super().__init__(
-            href,
-            roles=roles,
-            description=description,
-            media_type=media_type,
-            *args,
-            **kwargs,
-        )
-        self.mf = MetFile(href)
-        self.extra_fields = {
-            "hms:title": self.mf.name,
-            **{f"hms:{key}".lower(): val for key, val in self.mf.attrs.items()},
+    regex_parse_str = r".*\.met$"
+    __roles__ = ["hms-met", MediaType.TEXT]
+    __description__ = "Contains meteorological data such as precipitation and temperature."
+    __file_class__ = MetFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {
+            "hms:title": self.file.name,
+            **{f"hms:{key}".lower(): val for key, val in self.file.attrs.items()},
         }
 
 
 class DSSAsset(GenericAsset):
     """DSS asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hec-dss"]
-        media_type = "application/octet-stream"
-        description = "HEC-DSS file."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
+    regex_parse_str = r".*\.dss$"
+    __roles__ = ["hec-dss", "application/octet-stream"]
+    __description__ = "HEC-DSS file."
 
-        self.extra_fields["hms:title"] = self.name
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.name}
 
 
-class SqliteAsset(GenericAsset):
+class SqliteAsset(GenericAsset[SqliteDB]):
     """HEC-HMS SQLite database asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-sqlite"]
-        media_type = "application/x-sqlite3"
-        description = "Stores spatial data for HEC-HMS basin files."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.sqdb = SqliteDB(href)
-        self.extra_fields = {"hms:title": self.name, "hms:layers": self.sqdb.layers}
+    regex_parse_str = r".*\.sqlite$"
+    __roles__ = ["hms-sqlite", "application/x-sqlite3"]
+    __description__ = "Stores spatial data for HEC-HMS basin files."
+    __file_class__ = SqliteDB
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.name, "hms:layers": self.file.layers}
 
 
-class GageAsset(GenericAsset):
+class GageAsset(GenericAsset[GageFile]):
     """Gage asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-gage"]
-        media_type = MediaType.TEXT
-        description = "Contains data for HEC-HMS gages."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.gf = GageFile(href)
-        self.extra_fields = {"hms:title": self.gf.name, "hms:version": self.gf.attrs["Version"]} | {
-            f"hms:{gage.name}".lower(): {key: val for key, val in gage.attrs.items()} for gage in self.gf.gages
+    regex_parse_str = r".*\.gage$"
+    __roles__ = ["hms-gage", MediaType.TEXT]
+    __description__ = "Contains data for HEC-HMS gages."
+    __file_class__ = GageFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.file.name, "hms:version": self.file.attrs["Version"]} | {
+            f"hms:{gage.name}".lower(): {key: val for key, val in gage.attrs.items()} for gage in self.file.gages
         }
 
 
-class GridAsset(GenericAsset):
-    """Grid asset"""
+class GridAsset(GenericAsset[GridFile]):
+    """Grid asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-grid"]
-        media_type = MediaType.TEXT
-        description = "Contains data for HEC-HMS grid files."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.gf = GridFile(href)
-        self.extra_fields = (
-            {"hms:title": self.gf.name}
-            | {f"hms:{key}".lower(): val for key, val in self.gf.attrs.items()}
-            | {f"hms:{grid.name}".lower(): {key: val for key, val in grid.attrs.items()} for grid in self.gf.grids}
+    regex_parse_str = r".*\.grid$"
+    __roles__ = ["hms-grid", MediaType.TEXT]
+    __description__ = "Contains data for HEC-HMS grid files."
+    __file_class__ = GridFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return (
+            {"hms:title": self.file.name}
+            | {f"hms:{key}".lower(): val for key, val in self.file.attrs.items()}
+            | {f"hms:{grid.name}".lower(): {key: val for key, val in grid.attrs.items()} for grid in self.file.grids}
         )
 
 
 class LogAsset(GenericAsset):
     """Log asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-log", "results"]
-        media_type = MediaType.TEXT
-        description = "Contains log data for HEC-HMS simulations."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.extra_fields["hms:title"] = self.name
+    regex_parse_str = r".*\.log$"
+    __roles__ = ["hms-log", "results", MediaType.TEXT]
+    __description__ = "Contains log data for HEC-HMS simulations."
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.name}
 
 
 class OutAsset(GenericAsset):
     """Out asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-out", "results"]
-        media_type = MediaType.TEXT
-        description = "Contains output data for HEC-HMS simulations."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.extra_fields["hms:title"] = self.name
+    regex_parse_str = r".*\.out$"
+    __roles__ = ["hms-out", "results", MediaType.TEXT]
+    __description__ = "Contains output data for HEC-HMS simulations."
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.name}
 
 
-class PdataAsset(GenericAsset):
+class PdataAsset(GenericAsset[PairedDataFile]):
     """Pdata asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-pdata"]
-        media_type = MediaType.TEXT
-        description = "Contains paired data for HEC-HMS simulations."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.pd = PairedDataFile(href)
-        self.extra_fields = {"hms:title": self.pd.name, "hms:version": self.pd.attrs["Version"]}
+    regex_parse_str = r".*\.pdata$"
+    __roles__ = ["hms-pdata", MediaType.TEXT]
+    __description__ = "Contains paired data for HEC-HMS simulations."
+    __file_class__ = PairedDataFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.file.name, "hms:version": self.file.attrs["Version"]}
 
 
-class TerrainAsset(GenericAsset):
+class TerrainAsset(GenericAsset[TerrainFile]):
     """Terrain asset."""
 
-    def __init__(self, href: str, *args, **kwargs):
-        roles = ["hms-terrain"]
-        media_type = MediaType.GEOTIFF
-        description = "Contains terrain data for HEC-HMS simulations."
-        super().__init__(href, roles=roles, description=description, media_type=media_type, *args, **kwargs)
-        self.tf = TerrainFile(href)
-        self.extra_fields = {"hms:title": self.tf.name, "hms:version": self.tf.attrs["Version"]} | {
-            f"hms:{layer['name']}".lower(): {key: val for key, val in layer.items()} for layer in self.tf.layers
+    regex_parse_str = r".*\.terrain$"
+    __roles__ = ["hms-terrain", MediaType.GEOTIFF]
+    __description__ = "Contains terrain data for HEC-HMS simulations."
+    __file_class__ = TerrainFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self):
+        """Return extra fields with added dynamic keys/values."""
+        return {"hms:title": self.file.name, "hms:version": self.file.attrs["Version"]} | {
+            f"hms:{layer['name']}".lower(): {key: val for key, val in layer.items()} for layer in self.file.layers
         }
 
 
-HMS_EXTENSION_MAPPING = {
-    ".hms": ProjectAsset,
-    ".basin": {"event": EventBasinAsset, "model": ModelBasinAsset},
-    ".control": ControlAsset,
-    ".met": MetAsset,
-    ".sqlite": SqliteAsset,
-    ".gage": GageAsset,
-    ".run": RunAsset,
-    ".grid": GridAsset,
-    ".log": LogAsset,
-    ".out": OutAsset,
-    ".pdata": PdataAsset,
-    ".terrain": TerrainAsset,
-    ".dss": DSSAsset,
-    ".geojson": GeojsonAsset,
-    ".tiff": TiffAsset,
-    ".tif": TiffAsset,
-    ".png": ThumbnailAsset,
-}
+HMS_ASSET_CLASSES = [
+    ProjectAsset,
+    EventBasinAsset,
+    ModelBasinAsset,
+    ControlAsset,
+    MetAsset,
+    SqliteAsset,
+    GageAsset,
+    RunAsset,
+    GridAsset,
+    LogAsset,
+    OutAsset,
+    PdataAsset,
+    TerrainAsset,
+    DSSAsset,
+    GeojsonAsset,
+    TiffAsset,
+    TiffAsset,
+    ThumbnailAsset,
+]
+
+HMS_EXTENSION_MAPPING = {re.compile(cls.regex_parse_str, re.IGNORECASE): cls for cls in HMS_ASSET_CLASSES}

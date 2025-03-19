@@ -1,22 +1,28 @@
+"""HEC-RAS STAC Item class."""
+
 import json
 import logging
 import os
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 
 import contextily as ctx
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
-from pystac import Item
+from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
-from shapely import to_geojson, union_all
+from shapely import to_geojson, unary_union
 
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.path_manager import LocalPathManager
-from hecstac.hms.assets import HMS_EXTENSION_MAPPING, ProjectAsset
+from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.hms.parser import BasinFile, ProjectFile
+from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
+
+logger = logging.getLogger(__name__)
 
 
 class HMSModelItem(Item):
@@ -29,145 +35,192 @@ class HMSModelItem(Item):
     PROJECT_VERSION = "hms:version"
     PROJECT_DESCRIPTION = "hms:description"
     PROJECT_UNITS = "hms:unit_system"
+    SUMMARY = "hms:summary"
 
-    def __init__(self, hms_project_file, item_id: str, simplify_geometry: bool = True):
+    def __init__(self, *args, **kwargs):
+        """Add a few default properties to the base class."""
+        super().__init__(*args, **kwargs)
+        self.simplify_geometry = True
 
-        self._project = None
-        self.assets = {}
-        self.links = []
-        self.thumbnail_paths = []
-        self.geojson_paths = []
-        self.extra_fields = {}
-        self.stac_extensions = None
-        self.pm = LocalPathManager(Path(hms_project_file).parent)
-        self._href = self.pm.item_path(item_id)
-        self.hms_project_file = hms_project_file
-        self._simplify_geometry = simplify_geometry
+    @classmethod
+    def from_prj(cls, hms_project_file, item_id: str, simplify_geometry: bool = True):
+        """
+        Create an `HMSModelItem` from a HEC-HMS project file.
 
-        self.pf = ProjectFile(self.hms_project_file, assert_uniform_version=False)
-        self.factory = AssetFactory(HMS_EXTENSION_MAPPING)
+        Parameters
+        ----------
+        hms_project_file : str
+            Path to the HEC-HMS project file (.hms).
+        item_id : str
+            Unique item ID for the STAC item.
+        simplify_geometry : bool, optional
+            Whether to simplify geometry. Defaults to True.
 
-        super().__init__(
-            Path(self.hms_project_file).stem,
-            self._geometry,
-            self._bbox,
-            self._datetime,
-            self._properties,
-            href=self._href,
+        Returns
+        -------
+        stac : HMSModelItem
+            An instance of the class representing the STAC item.
+        """
+        pm = LocalPathManager(Path(hms_project_file).parent)
+        href = pm.item_path(item_id)
+        pf = ProjectFile(hms_project_file, assert_uniform_version=False)
+        # Create GeoJSON and Thumbnails
+        cls._check_files_exists(cls, pf.files + pf.rasters)
+        geojson_paths = cls.write_element_geojsons(cls, pf.basins, pm, pf)
+        thumbnail_paths = cls.make_thumbnails(cls, pf.basins, pm)
+
+        # Collect all assets
+        assets = {Path(i).name: Asset(i) for i in pf.files + pf.rasters + geojson_paths + thumbnail_paths}
+        # Create the STAC Item
+        stac = cls(
+            Path(hms_project_file).stem,
+            NULL_STAC_GEOMETRY,
+            NULL_STAC_BBOX,
+            NULL_DATETIME,
+            {"hms_project_file": hms_project_file},
+            href=href,
+            assets=assets,
         )
+        stac.pm = pm
+        stac.simplify_geometry = simplify_geometry
 
-        self._check_files_exists(self.pf.files + self.pf.rasters)
-        self.make_thumbnails(self.pf.basins)
-        self.write_element_geojsons(self.pf.basins[0])
-        for fpath in self.thumbnail_paths + self.geojson_paths + self.pf.files + self.pf.rasters:
-            self.add_hms_asset(fpath)
-
-        self._register_extensions()
+        stac._register_extensions()
+        return stac
 
     def _register_extensions(self) -> None:
         ProjectionExtension.add_to(self)
         StorageExtension.add_to(self)
 
     @property
-    def _properties(self):
+    def hms_project_file(self) -> str:
+        """Get the path to the HEC-HMS .hms file."""
+        return self._properties.get("hms_project_file")
+
+    @property
+    @lru_cache
+    def factory(self) -> AssetFactory:
+        """Return AssetFactory for this item."""
+        return AssetFactory(HMS_EXTENSION_MAPPING)
+
+    @property
+    @lru_cache
+    def pf(self) -> ProjectFile:
+        """Get a ProjectFile instance for the HMS Model .hms file."""
+        return ProjectFile(self.hms_project_file)
+
+    @property
+    def properties(self) -> dict:
         """Properties for the HMS STAC item."""
-        properties = {}
+        properties = self._properties
         properties[self.PROJECT] = f"{self.pf.name}.hms"
         properties[self.PROJECT_TITLE] = self.pf.name
-        properties[self.PROJECT_VERSION] = (self.pf.attrs["Version"],)
-        properties[self.PROJECT_DESCRIPTION] = (self.pf.attrs.get("Description"),)
+        properties[self.PROJECT_VERSION] = self.pf.attrs["Version"]
+        properties[self.PROJECT_DESCRIPTION] = self.pf.attrs.get("Description")
 
-        # TODO probably fine 99% of the time but we grab this info from the first basin file only
+        # Get data from the first basin
         properties[self.MODEL_UNITS] = self.pf.basins[0].attrs["Unit System"]
         properties[self.MODEL_GAGES] = self.pf.basins[0].gages
-
         properties["proj:code"] = self.pf.basins[0].epsg
-        if self.pf.basins[0].epsg:
-            logging.warning("No EPSG code found in basin file.")
+
+        if self.pf.basins[0].epsg is None:
+            logger.warning("No EPSG code found in basin file.")
+
         properties["proj:wkt"] = self.pf.basins[0].wkt
-        properties["hms:summary"] = self.pf.file_counts
+        properties[self.SUMMARY] = self.pf.file_counts
+
         return properties
 
-    @property
-    def _bbox(self) -> tuple[float, float, float, float]:
-        """Bounding box of the HMS STAC item."""
-        if len(self.pf.basins) == 0:
-            return [0, 0, 0, 0]
-        else:
-            bboxes = np.array([i.bbox(4326) for i in self.pf.basins])
-            bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
-            return [float(i) for i in bboxes]
+    @properties.setter
+    def properties(self, properties: dict):
+        """Set properties."""
+        self._properties = properties
 
     @property
-    def _geometry(self) -> dict | None:
-        """Geometry of the HMS STAC item. Union of all basins in the HMS model."""
-        if self._simplify_geometry:
-            geometries = [b.basin_geom.simplify(0.001) for b in self.pf.basins]
-        else:
-            geometries = [b.basin_geom for b in self.pf.basins]
-        return json.loads(to_geojson(union_all(geometries)))
+    def geometry_assets(self) -> list[BasinFile]:
+        """Return list of basin geometry assets."""
+        return self.pf.basins
 
     @property
-    def _datetime(self) -> datetime:
+    def geometry(self) -> dict:
+        """Return footprint of the model as a GeoJSON."""
+        if not self.geometry_assets:
+            return NULL_STAC_GEOMETRY
+
+        geometries = [
+            b.basin_geom.simplify(0.001) if self.simplify_geometry else b.basin_geom for b in self.geometry_assets
+        ]
+        unioned_geometry = unary_union(geometries)
+
+        return json.loads(to_geojson(unioned_geometry))
+
+    @property
+    def bbox(self) -> list[float]:
+        """Bounding box of the HMS model."""
+        if not self.geometry_assets:
+            return NULL_STAC_BBOX
+
+        bboxes = np.array([b.bbox(4326) for b in self.geometry_assets])
+        return [float(i) for i in [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]]
+
+    @property
+    def datetime(self) -> datetime:
         """The datetime for the HMS STAC item."""
         date = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Date"], "%d %B %Y")
         time = datetime.strptime(self.pf.basins[0].header.attrs["Last Modified Time"], "%H:%M:%S").time()
         return datetime.combine(date, time)
 
     def _check_files_exists(self, files: list[str]):
-        """Ensure the files exists. If they don't rasie an error."""
-        from pathlib import Path
-
+        """Ensure the files exists. If they don't raise an error."""
         for file in files:
             if not os.path.exists(file):
-                logging.warning(f"File not found {file}")
+                logger.warning(f"File not found {file}")
 
-    def make_thumbnails(self, basins: list[BasinFile], overwrite: bool = False):
-        """Create a png for each basin. Optionally overwrite existing files."""
+    def make_thumbnails(self, basins: list[BasinFile], pm: LocalPathManager, overwrite: bool = False) -> list[str]:
+        """Create a PNG thumbnail for each basin."""
+        thumbnail_paths = []
+
         for bf in basins:
-            thumbnail_path = self.pm.derived_item_asset(f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
+            thumbnail_path = pm.derived_item_asset(f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
 
             if not overwrite and os.path.exists(thumbnail_path):
-                logging.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
+                logger.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
             else:
-                logging.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
-                fig = self.make_thumbnail(bf.hms_schematic_2_gdfs)
+                logger.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
+                fig = self.make_thumbnail(self, gdfs=bf.hms_schematic_2_gdfs)
                 fig.savefig(thumbnail_path)
                 fig.clf()
-            self.thumbnail_paths.append(thumbnail_path)
+            thumbnail_paths.append(thumbnail_path)
 
-    def write_element_geojsons(self, basins: list[BasinFile], overwrite: bool = False):
+        return thumbnail_paths
+
+    def write_element_geojsons(self, basins: list[BasinFile], pm: LocalPathManager, pf, overwrite: bool = False):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
-        for element_type in basins.elements.element_types:
-            logging.debug(f"Checking if geojson for {element_type} exists")
-            path = self.pm.derived_item_asset(f"{element_type}.geojson")
+        geojson_paths = []
+        for element_type in basins[0].elements.element_types:
+            # logger.debug(f"Checking if geojson for {element_type} exists")
+            path = pm.derived_item_asset(f"{element_type}.geojson")
             if not overwrite and os.path.exists(path):
-                logging.info(f"Geojson for {element_type} already exists. Skipping creation.")
+                logger.info(f"Geojson for {element_type} already exists. Skipping creation.")
             else:
-                logging.info(f"Creating geojson for {element_type}")
-                gdf = self.pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
-                logging.debug(gdf.columns)
+                logger.info(f"Creating geojson for {element_type}")
+                gdf = pf.basins[0].feature_2_gdf(element_type).to_crs(4326)
+                # logger.debug(gdf.columns)
                 keep_columns = ["name", "geometry", "Last Modified Date", "Last Modified Time", "Number Subreaches"]
                 gdf = gdf[[col for col in keep_columns if col in gdf.columns]]
                 gdf.to_file(path)
-            self.geojson_paths.append(path)
+            geojson_paths.append(path)
 
-    def add_hms_asset(self, fpath: str) -> None:
-        """Add an asset to the HMS STAC item."""
-        if os.path.exists(fpath):
-            asset = self.factory.create_hms_asset(fpath)
-            if asset is not None:
-                self.add_asset(asset.title, asset)
-                if isinstance(asset, ProjectAsset):
-                    if self._project is not None:
-                        logging.error(
-                            f"Only one project asset is allowed. Found {str(asset)} when {str(self._project)} was already set."
-                        )
-                    self._project = asset
+        return geojson_paths
+
+    def add_asset(self, key, asset):
+        """Subclass asset then add."""
+        subclass = self.factory.asset_from_dict(asset)
+        if subclass is None:
+            return
+        return super().add_asset(key, subclass)
 
     def make_thumbnail(self, gdfs: dict):
-        """Create a png from the geodataframes (values of the dictionary).
-        The dictionary keys are used to label the layers in the legend."""
+        """Create a png from the geodataframes (values of the dictionary). The dictionary keys are used to label the layers in the legend."""
         cdict = {
             "Subbasin": "black",
             "Reach": "blue",
@@ -202,3 +255,16 @@ class HMSModelItem(Item):
         ax.set_yticks([])
         fig.tight_layout()
         return fig
+
+    ### Prevent external modification of dynamically generated properties ###
+    @geometry.setter
+    def geometry(self, *args, **kwargs):
+        pass
+
+    @bbox.setter
+    def bbox(self, *args, **kwargs):
+        pass
+
+    @datetime.setter
+    def datetime(self, *args, **kwargs):
+        pass

@@ -1,12 +1,25 @@
+"""Utility functions for the hecstac ras module."""
+
 import logging
 import os
 from functools import wraps
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
 from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
+
+logger = logging.getLogger(__name__)
+
+
+def find_model_files(ras_prj: str) -> list[str]:
+    """Find all files with the same base name and return absolute paths."""
+    ras_prj = Path(ras_prj).resolve()
+    parent = ras_prj.parent
+    stem = ras_prj.stem
+    return [str(i.resolve()) for i in parent.glob(f"{stem}*")]
 
 
 def is_ras_prj(url: str) -> bool:
@@ -19,7 +32,9 @@ def is_ras_prj(url: str) -> bool:
         return False
 
 
-def search_contents(lines: list[str], search_string: str, token: str = "=", expect_one: bool = True) -> list[str] | str:
+def search_contents(
+    lines: list[str], search_string: str, token: str = "=", expect_one: bool = True, require_one: bool = True
+) -> list[str] | str:
     """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
     results = []
     for line in lines:
@@ -27,9 +42,9 @@ def search_contents(lines: list[str], search_string: str, token: str = "=", expe
             results.append(line.split(token)[1])
 
     if expect_one and len(results) > 1:
-        raise ValueError(f"expected 1 result, got {len(results)}")
-    elif expect_one and len(results) == 0:
-        raise ValueError("expected 1 result, no results found")
+        raise ValueError(f"expected 1 result for {search_string}, got {len(results)} results")
+    elif require_one and len(results) == 0:
+        raise ValueError(f"1 result for {search_string} is required, no results found")
     elif expect_one and len(results) == 1:
         return results[0]
     else:
@@ -167,7 +182,7 @@ def check_xs_direction(cross_sections: gpd.GeoDataFrame, reach: LineString):
                     river_reach_rs.append(xs["river_reach_rs"])
 
         except IndexError as e:
-            logging.debug(
+            logger.debug(
                 f"cross section does not intersect river-reach: {xs['river']} {xs['reach']} {xs['river_station']}: error: {e}"
             )
             continue
@@ -189,12 +204,15 @@ def validate_point(geom):
 
 
 class requires_geos:
+    """Unsure."""
+
     def __init__(self, version):
         if version.count(".") != 2:
             raise ValueError("Version must be <major>.<minor>.<patch> format")
         self.version = tuple(int(x) for x in version.split("."))
 
     def __call__(self, func):
+        """Call."""
         is_compatible = lib.geos_version >= self.version
         is_doc_build = os.environ.get("SPHINX_DOC_BUILD") == "1"  # set in docs/conf.py
         if is_compatible and not is_doc_build:
@@ -230,11 +248,12 @@ class requires_geos:
 
 
 def multithreading_enabled(func):
-    """Prepare multithreading by setting the writable flags of object type
-    ndarrays to False.
+    """
+    Prepare multithreading by setting the writable flags of object type ndarrays to False.
 
     NB: multithreading also requires the GIL to be released, which is done in
-    the C extension (ufuncs.c)."""
+    the C extension (ufuncs.c).
+    """
 
     @wraps(func)
     def wrapped(*args, **kwargs):
@@ -258,7 +277,7 @@ def multithreading_enabled(func):
 @requires_geos("3.7.0")
 @multithreading_enabled
 def reverse(geometry, **kwargs):
-    """Returns a copy of a Geometry with the order of coordinates reversed.
+    """Return a copy of a Geometry with the order of coordinates reversed.
 
     If a Geometry is a polygon with interior rings, the interior rings are also
     reversed.
@@ -271,7 +290,7 @@ def reverse(geometry, **kwargs):
     **kwargs
         See :ref:`NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
 
-    See also
+    See Also
     --------
     is_ccw : Checks if a Geometry is clockwise.
 
@@ -285,5 +304,4 @@ def reverse(geometry, **kwargs):
     >>> reverse(None) is None
     True
     """
-
     return lib.reverse(geometry, **kwargs)
