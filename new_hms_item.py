@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from hecstac.common.logger import initialize_logger
-from hecstac import HMSModelItem
+from hecstac.hms.item import HMSModelItem
 
 
 def sanitize_catalog_assets(item: HMSModelItem) -> HMSModelItem:
