@@ -2,7 +2,7 @@
 
 from pystac import Item
 
-from hecstac.events.logger import initialize_logger
+from hecstac.common.logger import initialize_logger
 from hecstac.events.ffrd import EventItem
 
 if __name__ == "__main__":

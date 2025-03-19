@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hecstac"
-version = "0.1.0rc1"
+dynamic = ["version"]
 description = "Create stac objects and metadata from HEC modeling software."
 readme = "README.md"
 maintainers = [

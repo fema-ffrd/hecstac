@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-from hecstac import RASModelItem
+from hecstac.ras.item import RASModelItem
 from hecstac.common.geometry import read_crs_from_prj
 from hecstac.common.logger import initialize_logger
 from hecstac.common.proposed_features import calibration_plots, reorder_stac_assets
