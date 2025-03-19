@@ -66,6 +66,9 @@ line-length = 120
 where = ["."]
 include = ["hecstac*"]
 
+[tool.setuptools.dynamic]
+version = {attr = "hecstac.__version__"}
+
 [tool.sphinx]
 project = "hecstac"
 author = "Seth Lawler"
