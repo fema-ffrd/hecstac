@@ -779,7 +779,7 @@ class PlanFile:
     @property
     def short_identifier(self) -> str:
         """Return short identifier."""
-        return search_contents(self.file_lines, "Short Identifier", expect_one=True)
+        return search_contents(self.file_lines, "Short Identifier", expect_one=True).strip()
 
     @property
     def breach_locations(self) -> dict:
@@ -889,13 +889,45 @@ class GeometryFile:
     @property
     def storage_areas(self) -> dict[str, StorageArea]:
         """A dictionary of the storage areas contained in the HEC-RAS geometry file."""
-        areas = search_contents(self.file_lines, "Storage Area", expect_one=False, require_one=False)
+        matches = search_contents(self.file_lines, "Storage Area", expect_one=False, require_one=False)
+        areas = []
+        for line in matches:
+            if "," in line:
+                parts = line.split(",")
+                areas.append(parts[0].strip())
+            else:
+                areas.append(line.strip())
         return {a: StorageArea(a) for a in areas}
+
+    @property
+    def ic_point_names(self) -> list[str]:
+        """A list of the initial condition point names contained in the HEC-RAS geometry file."""
+        ic_points = search_contents(self.file_lines, "IC Point Name", expect_one=False, require_one=False)
+        return [ic_point.strip() for ic_point in ic_points]
+
+    @property
+    def ref_line_names(self) -> list[str]:
+        """A list of reference line names contained in the HEC-RAS geometry file."""
+        ref_lines = search_contents(self.file_lines, "Reference Line Name", expect_one=False, require_one=False)
+        return [ref_line.strip() for ref_line in ref_lines]
+
+    @property
+    def ref_point_names(self) -> list[str]:
+        """A list of reference point names contained in the HEC-RAS geometry file."""
+        ref_points = search_contents(self.file_lines, "Reference Point Name", expect_one=False, require_one=False)
+        return [ref_point.strip() for ref_point in ref_points]
 
     @property
     def connections(self) -> dict[str, Connection]:
         """A dictionary of the SA/2D connections contained in the HEC-RAS geometry file."""
-        connections = search_contents(self.file_lines, "Connection", expect_one=False, require_one=False)
+        matches = search_contents(self.file_lines, "Connection", expect_one=False, require_one=False)
+        connections = []
+        for line in matches:
+            if "," in line:
+                parts = line.split(",")
+                connections.append(parts[0].strip())
+            else:
+                connections.append(line)
         return {c: Connection(c) for c in connections}
 
     @property
@@ -1092,7 +1124,8 @@ class UnsteadyFlowFile:
             if len(parts) >= 7:
                 flow_area = parts[5].strip()
                 bc_line = parts[7].strip()
-                boundary_dict.append({flow_area: bc_line})
+                if bc_line:
+                    boundary_dict.append({flow_area: bc_line})
         # logger.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
@@ -1101,6 +1134,17 @@ class UnsteadyFlowFile:
         """Return reference lines."""
         return search_contents(
             self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False, require_one=False
+        )
+
+    @property
+    def precip_bc(self):
+        """Return precipitation boundary condition."""
+        return search_contents(
+            self.file_lines,
+            "Met BC=Precipitation|",
+            token="Gridded DSS Pathname=",
+            expect_one=False,
+            require_one=False,
         )
 
 

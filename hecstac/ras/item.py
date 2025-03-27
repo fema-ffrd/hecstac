@@ -78,7 +78,7 @@ class RASModelItem(Item):
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
-            {"ras_project_file": ras_project_file},
+            {"project_file_name": Path(ras_project_file).name},
             href=href,
             assets=assets,
         )
@@ -142,12 +142,14 @@ class RASModelItem(Item):
         if self.crs is None:
             logging.warning("Geometry requested for model with no spatial reference.")
             return NULL_STAC_GEOMETRY
-        if len(self.geometry_assets) == 0:
+
+        hdf_geom_assets = [asset for asset in self.geometry_assets if isinstance(asset, GeometryHdfAsset)]
+        if len(hdf_geom_assets) == 0:
             logging.error("No geometry found for RAS item.")
             return NULL_STAC_GEOMETRY
 
         geometries = []
-        for i in self.geometry_assets:
+        for i in hdf_geom_assets:
             logging.debug(f"Processing geometry from {i.href}")
             try:
                 geometries.append(i.geometry_wgs84)
