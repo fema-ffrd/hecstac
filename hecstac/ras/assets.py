@@ -67,8 +67,8 @@ HAS_1D = "HEC-RAS:has_1D_elements"
 N_PROFILES = "HEC-RAS:n_profiles"
 
 BOUNDARY_LOCATIONS = "HEC-RAS:boundary_locations"
-REFERENCE_LINES = "HEC-RAS:reference_lines"
-REFERENCE_POINTS = "HEC-RAS:reference_points"
+REFERENCE_LINES = "HEC-RAS:ref_lines"
+REFERENCE_POINTS = "HEC-RAS:ref_points"
 PRECIP_BC = "HEC-RAS:precip_bc"
 IC_POINTS = "HEC-RAS:initial_condition_point_name"
 
