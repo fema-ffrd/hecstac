@@ -5,9 +5,10 @@ import logging
 import os
 from datetime import datetime
 from typing import List
+from pathlib import Path
 
 import numpy as np
-from pystac import Item, Link
+from pystac import Item, Link, Asset
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
@@ -115,9 +116,12 @@ class FFRDEventItem(Item):
     @property
     def _bbox(self) -> list[float]:
         """Bounding box of the FFRD Event STAC item."""
-        bboxes = np.array([item.bbox for item in self.source_model_items])
-        bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
-        return [float(i) for i in bboxes]
+        if len(self.source_model_items) > 1:
+            bboxes = np.array([item.bbox for item in self.source_model_items])
+            bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
+            return [float(i) for i in bboxes]
+        else:
+            return self.source_model_items[0].bbox
 
     def add_hms_asset(self, fpath: str, item_type: str = "event") -> None:
         """Add an asset to the FFRD Event STAC item."""
@@ -131,6 +135,7 @@ class FFRDEventItem(Item):
         """Add an asset to the FFRD Event STAC item."""
         if os.path.exists(fpath):
             logger.info(f"Adding asset: {fpath}")
-            asset = self.ras_factory.create_ras_asset(fpath)
+            asset = Asset(href=fpath, title=Path(fpath).name)
+            asset = self.ras_factory.asset_from_dict(asset)
             if asset is not None:
                 self.add_asset(asset.title, asset)
