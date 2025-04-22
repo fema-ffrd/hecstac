@@ -252,9 +252,15 @@ class ProjectFile(BaseTextFile):
         """Return dss files."""
         files = set()
         if self.gage:
-            files.update(
-                [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
-            )
+            try:
+                files.update(
+                    [
+                        gage.attrs["Variant"]["Variant-1"]["DSS File Name"]
+                        for gage in self.gage.elements.elements.values()
+                    ]
+                )
+            except KeyError:
+                files.update([gage.attrs["Filename"] for gage in self.gage.elements.elements.values()])
         else:
             logger.warning("No gage file to extract gages from.")
 
@@ -853,7 +859,7 @@ class TerrainFile(BaseTextFile):
                 else:
                     continue
 
-            if line == "End:":
+            if line.strip() == "End:":
                 self.layers.append(
                     {
                         "name": name,
