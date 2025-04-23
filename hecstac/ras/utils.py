@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def find_model_files(ras_prj: str) -> list[str]:
+    # TODO: Add option to recursively iterate through all subdirectories in a model folder.
     """Find all files with the same base name and return absolute paths."""
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent

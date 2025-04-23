@@ -35,6 +35,8 @@ from hecstac.ras.utils import (
     text_block_from_start_str_to_empty_line,
 )
 
+from hecstac.utils.reader import ModelFileReader
+
 logger = logging.getLogger(__name__)
 
 
@@ -654,8 +656,8 @@ class ProjectFile:
     def __init__(self, fpath):
         # TODO: Compare with HMS implementation
         self.fpath = fpath
-        with open(fpath, "r") as f:
-            self.file_lines = f.readlines()
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.contents().splitlines()
 
     @property
     @lru_cache
@@ -751,8 +753,8 @@ class PlanFile:
     def __init__(self, fpath):
         # TODO: Compare with HMS implementation
         self.fpath = fpath
-        with open(fpath, "r") as f:
-            self.file_lines = f.readlines()
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.contents().splitlines()
 
     @property
     def plan_title(self) -> str:
@@ -806,8 +808,8 @@ class GeometryFile:
     def __init__(self, fpath):
         # TODO: Compare with HMS implementation
         self.fpath = fpath
-        with open(fpath, "r") as f:
-            self.file_lines = f.read().splitlines()
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.contents().splitlines()
 
     @property
     def geom_title(self) -> str:
@@ -977,9 +979,9 @@ class GeometryFile:
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]
@@ -1082,8 +1084,8 @@ class SteadyFlowFile:
 
     def __init__(self, fpath):
         self.fpath = fpath
-        with open(fpath, "r") as f:
-            self.file_lines = f.readlines()
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.contents().splitlines()
 
     @property
     def flow_title(self) -> str:
@@ -1101,8 +1103,8 @@ class UnsteadyFlowFile:
 
     def __init__(self, fpath):
         self.fpath = fpath
-        with open(fpath, "r") as f:
-            self.file_lines = f.readlines()
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.contents().splitlines()
 
     @property
     def flow_title(self) -> str:
@@ -1166,7 +1168,7 @@ class RASHDFFile:
     def __init__(self, fpath, hdf_constructor):
         self.fpath = fpath
 
-        self.hdf_object = hdf_constructor(fpath)
+        self.hdf_object = hdf_constructor.open_uri(fpath)
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
@@ -1380,7 +1382,7 @@ class PlanHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasPlanHdf, **kwargs)
 
-        self.hdf_object = RasPlanHdf(fpath)
+        self.hdf_object = RasPlanHdf.open_uri(fpath)
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
@@ -1658,7 +1660,7 @@ class GeometryHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
-        self.hdf_object = RasGeomHdf(fpath)
+        self.hdf_object = RasGeomHdf.open_uri(fpath)
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None

@@ -47,7 +47,9 @@ class RASModelItem(Item):
         self.simplify_geometry = True
 
     @classmethod
-    def from_prj(cls, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True):
+    def from_prj(
+        cls, ras_project_file, item_id: str, crs: str = None, simplify_geometry: bool = True, assets: list = None
+    ):
         """
         Create a STAC item from a HEC-RAS .prj file.
 
@@ -69,10 +71,13 @@ class RASModelItem(Item):
         """
         pm = LocalPathManager(Path(ras_project_file).parent)
 
-        href = pm.item_path(item_id)
-        # TODO: Add option to recursively iterate through all subdirectories in a model folder.
-        assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
-
+        # href = pm.item_path(item_id)
+        if not assets:
+            href = pm.item_path(item_id)
+            assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
+        else:
+            href = ras_project_file
+            assets = {Path(i).name: Asset(i, Path(i).name) for i in assets}
         stac = cls(
             Path(ras_project_file).stem,
             NULL_STAC_GEOMETRY,

@@ -12,15 +12,26 @@ from hecstac.common.utils import sanitize_catalog_assets
 if __name__ == "__main__":
     initialize_logger(level=logging.INFO)
 
-    ras_project_file = "C:\\Users\\sjanke\\Code\\hecstac\\ray-roberts\\ray-roberts.prj"
-    # projection_file = "C:\\Users\\sjanke\\Code\\hecstac\\Trinity_1203_EFT_RayRoberts\\Projection.prj"
+    ras_project_file = "s3://trinity-pilot/calibration/hydraulics/clear-fork/clear-fork.prj"
+    projection_file = "data/rr/Model/Projection.prj"
+    # crs = read_crs_from_prj(projection_file)
+    crs = None
 
-    crs = None  # = read_crs_from_prj(projection_file)
     item_id = Path(ras_project_file).stem
 
-    ras_item = RASModelItem.from_prj(ras_project_file, item_id, crs=crs)
+    ras_item = RASModelItem.from_prj(
+        ras_project_file,
+        item_id,
+        crs=crs,
+        assets=[
+            "s3://trinity-pilot/calibration/hydraulics/clear-fork/clear-fork.p01",
+            # "s3://trinity-pilot/calibration/hydraulics/clear-fork/clear-fork.g04",
+            "s3://trinity-pilot/calibration/hydraulics/clear-fork/clear-fork.g04.hdf",
+        ],
+    )
+
     # ras_item.add_model_thumbnails(["mesh_areas", "breaklines", "bc_lines"])
     ras_item = sanitize_catalog_assets(ras_item)
 
-    ras_item.save_object(ras_project_file)
+    ras_item.save_object(dest_href="C:\\Users\\sjanke\\Code\\hecstac\\clear-fork.json")
     logging.info(f"Saved {ras_project_file}")
