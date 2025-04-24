@@ -30,11 +30,11 @@ dependencies = [
     "shapely==2.0.7",
     "xarray==2024.11.0",
     "rioxarray==0.18.1",
-    "mypy-boto3-s3==1.35.93",
+    "mypy-boto3-s3",
     "contextily==1.6.2",
     "rashdf==0.7.1",
-    "boto3==1.35.98",
-    "s3fs==2025.3.2",
+    "boto3",
+    "s3fs",
     "dotenv==0.9.9"
 ]
 
