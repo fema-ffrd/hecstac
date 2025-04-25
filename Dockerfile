@@ -27,7 +27,7 @@ RUN cd /app/rasqc/ && \
 COPY . /app/hecstac/
 RUN cd /app/hecstac/ && \
     python -m build && \
-    pip install --no-cache-dir dist/hecstac-0.1.0rc3-py3-none-any.whl
+    pip install --no-cache-dir dist/hecstac-*-py3-none-any.whl
 
 # Default command (todo: change to entrypoint script)
 CMD ["python"]
