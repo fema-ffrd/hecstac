@@ -39,4 +39,4 @@ jobs:
       push_to_registry: true
       version: ${{ needs.get-version.outputs.version }}
       branch: 'dev'
-      platforms: 'linux/amd64,linux/arm64'
+      platforms: 'linux/amd64'
