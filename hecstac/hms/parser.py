@@ -73,7 +73,7 @@ class BaseTextFile(ABC):
         else:
             try:
                 self.model_file = ModelFileReader(self.path)
-                self.content = self.model_file.contents()
+                self.content = self.model_file.content
             except Exception as e:
                 logger.error(e)
                 raise FileNotFoundError(f"could not find {self.path} locally nor on s3")
@@ -435,7 +435,6 @@ class BasinFile(BaseTextFile):
         """Return basin elements."""
         elements = ElementSet()
         if self.read_geom:
-            print(f"basin sqlite path: {self.sqlite_path}")
             sqlite = SqliteDB(
                 self.sqlite_path,
                 fiona_aws_session=self.fiona_aws_session,

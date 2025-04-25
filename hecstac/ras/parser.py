@@ -657,7 +657,7 @@ class ProjectFile:
         # TODO: Compare with HMS implementation
         self.fpath = fpath
         self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.contents().splitlines()
+        self.file_lines = self.model_file.content.splitlines()
 
     @property
     @lru_cache
@@ -754,7 +754,7 @@ class PlanFile:
         # TODO: Compare with HMS implementation
         self.fpath = fpath
         self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.contents().splitlines()
+        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def plan_title(self) -> str:
@@ -809,7 +809,7 @@ class GeometryFile:
         # TODO: Compare with HMS implementation
         self.fpath = fpath
         self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.contents().splitlines()
+        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def geom_title(self) -> str:
@@ -1085,7 +1085,7 @@ class SteadyFlowFile:
     def __init__(self, fpath):
         self.fpath = fpath
         self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.contents().splitlines()
+        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def flow_title(self) -> str:
@@ -1104,7 +1104,7 @@ class UnsteadyFlowFile:
     def __init__(self, fpath):
         self.fpath = fpath
         self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.contents().splitlines()
+        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def flow_title(self) -> str:
