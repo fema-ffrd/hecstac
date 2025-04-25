@@ -34,7 +34,7 @@ jobs:
 
   docker-build-test:
     needs: get-version
-    uses: ./.github/workflows/docker-build.yml
+    uses: ./.github/workflows/docker-build.yaml
     with:
       push_to_registry: false
       version: ${{ needs.get-version.outputs.version }}
