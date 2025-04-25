@@ -1168,7 +1168,9 @@ class RASHDFFile:
     def __init__(self, fpath, hdf_constructor):
         self.fpath = fpath
 
-        self.hdf_object = hdf_constructor.open_uri(fpath)
+        self.hdf_object = hdf_constructor.open_uri(
+            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
+        )
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
@@ -1382,7 +1384,9 @@ class PlanHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasPlanHdf, **kwargs)
 
-        self.hdf_object = RasPlanHdf.open_uri(fpath)
+        self.hdf_object = RasPlanHdf.open_uri(
+            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
+        )
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
@@ -1660,7 +1664,9 @@ class GeometryHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
-        self.hdf_object = RasGeomHdf.open_uri(fpath)
+        self.hdf_object = RasGeomHdf.open_uri(
+            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
+        )
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None

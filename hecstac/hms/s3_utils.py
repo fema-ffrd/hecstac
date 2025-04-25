@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+import fiona
 
 import boto3
 import botocore
@@ -139,3 +140,9 @@ def get_basic_object_metadata(obj: ObjectSummary) -> dict:
         }
     except botocore.exceptions.ClientError:
         raise KeyError(f"Unable to access {obj.key} check that key exists and you have access")
+
+
+def create_fiona_aws_session():
+    """Create fiona s3 session."""
+    session = boto3.Session()
+    return fiona.session.AWSSession(session)

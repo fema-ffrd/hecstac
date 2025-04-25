@@ -2,8 +2,9 @@ import logging
 import os
 from pathlib import Path
 from typing import Optional
-
+import obstore
 import fsspec
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -51,3 +52,42 @@ class ModelFileReader:
         """."""
         with self.fs.open(self.fsspec_path, "r") as f:
             return f.read()
+
+
+# class ModelFileReader:
+#     ...
+
+#     def __init__(self, path: str | os.PathLike, store: Optional[obstore.store.ObjectStore] = None):
+#         if os.path.exists(path):
+#             self.local = True
+#             self.store = None
+#             self.path = Path(path)
+#             self.filename = self.path.name
+#             self.content = open(self.path, "r").read()
+
+#         else:
+#             self.local = False
+#             parsed = urlparse(str(path))
+#             if parsed.scheme != "s3":
+#                 raise ValueError(f"Expected S3 path, got: {path}")
+#             bucket = parsed.netloc
+#             self.store = store or obstore.store.S3Store(bucket=bucket)
+#             self.content = (
+#                 obstore.open_reader(self.store, self.path).readall().to_bytes().decode("utf-8").replace("\r\n", "\n"))
+
+# def contents(self):
+#     """Read file contents"""
+#     print(f"reading {self.path}")
+#     if self.local == True:
+#         return open(self.path, "r").read()
+#     else:
+#         try:
+#             return (
+#                 obstore.open_reader(self.store, self.path)
+#                 .readall()
+#                 .to_bytes()
+#                 .decode("utf-8")
+#                 .replace("\r\n", "\n")
+#             )
+#         except:
+#             print("couldnt load file")

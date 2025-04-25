@@ -35,7 +35,8 @@ dependencies = [
     "rashdf==0.7.1",
     "boto3",
     "s3fs",
-    "dotenv==0.9.9"
+    "dotenv==0.9.9",
+    "obstore==0.6.0"
 ]
 
 [project.optional-dependencies]
