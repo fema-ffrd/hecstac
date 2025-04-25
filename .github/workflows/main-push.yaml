@@ -1,0 +1,42 @@
+name: Main Branch
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'hecstac/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Extract version from hecstac
+        id: get_version
+        shell: pwsh
+        run: |
+          $version = python -c "import hecstac; print(hecstac.__version__);"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+  docker-build-push:
+    needs: get-version
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      push_to_registry: true
+      version: ${{ needs.get-version.outputs.version }}
+      branch: 'main'
+      platforms: 'linux/amd64,linux/arm64'
