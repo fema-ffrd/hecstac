@@ -34,7 +34,6 @@ from hecstac.ras.utils import (
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
-
 from hecstac.utils.reader import ModelFileReader
 
 logger = logging.getLogger(__name__)
@@ -43,6 +42,31 @@ logger = logging.getLogger(__name__)
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
     return f"{Path(fpath).stem}.{suffix}"
+
+
+class CachedFile:
+    """Base class for caching and initialization of file-based assets."""
+
+    _cache = {}  # Class-level cache for instances
+
+    def __new__(cls, fpath):
+        """Override __new__ to implement caching."""
+        if fpath in cls._cache:
+            return cls._cache[fpath]
+        instance = super().__new__(cls)
+        cls._cache[fpath] = instance
+        return instance
+
+    def __init__(self, fpath):
+        """Prevent reinitialization if the instance is already cached."""
+        if hasattr(self, "_initialized") and self._initialized:
+            return
+        self._initialized = True
+
+        self.fpath = fpath
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.content.splitlines()
+        print(f"Reading file from: {self.fpath}")
 
 
 class River:
@@ -650,14 +674,8 @@ class Connection:
         # TODO: Implement this
 
 
-class ProjectFile:
+class ProjectFile(CachedFile):
     """HEC-RAS Project file."""
-
-    def __init__(self, fpath):
-        # TODO: Compare with HMS implementation
-        self.fpath = fpath
-        self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.content.splitlines()
 
     @property
     @lru_cache
@@ -747,14 +765,8 @@ class ProjectFile:
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
 
-class PlanFile:
+class PlanFile(CachedFile):
     """HEC-RAS Plan file asset."""
-
-    def __init__(self, fpath):
-        # TODO: Compare with HMS implementation
-        self.fpath = fpath
-        self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def plan_title(self) -> str:
@@ -802,14 +814,8 @@ class PlanFile:
         return breach_dict
 
 
-class GeometryFile:
+class GeometryFile(CachedFile):
     """HEC-RAS Geometry file asset."""
-
-    def __init__(self, fpath):
-        # TODO: Compare with HMS implementation
-        self.fpath = fpath
-        self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def geom_title(self) -> str:
@@ -1079,13 +1085,8 @@ class GeometryFile:
             gdf.to_file(gpkg_path, driver="GPKG", layer=subtype, ignore_index=True)
 
 
-class SteadyFlowFile:
+class SteadyFlowFile(CachedFile):
     """HEC-RAS Steady Flow file data."""
-
-    def __init__(self, fpath):
-        self.fpath = fpath
-        self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def flow_title(self) -> str:
@@ -1098,13 +1099,8 @@ class SteadyFlowFile:
         return int(search_contents(self.file_lines, "Number of Profiles"))
 
 
-class UnsteadyFlowFile:
+class UnsteadyFlowFile(CachedFile):
     """HEC-RAS Unsteady Flow file data."""
-
-    def __init__(self, fpath):
-        self.fpath = fpath
-        self.model_file = ModelFileReader(self.fpath)
-        self.file_lines = self.model_file.content.splitlines()
 
     @property
     def flow_title(self) -> str:
@@ -1150,7 +1146,7 @@ class UnsteadyFlowFile:
         )
 
 
-class QuasiUnsteadyFlowFile:
+class QuasiUnsteadyFlowFile(CachedFile):
     """HEC-RAS Quasi-Unsteady Flow file data."""
 
     # TODO: implement this class
@@ -1162,11 +1158,17 @@ class QuasiUnsteadyFlowFile:
     #     return file_info.attrib.get("Title")
 
 
-class RASHDFFile:
+class RASHDFFile(CachedFile):
     """Base class for parsing HDF assets (Plan and Geometry HDF files)."""
 
     def __init__(self, fpath, hdf_constructor):
+        # Prevent reinitialization if the instance is already cached
+        if hasattr(self, "_initialized") and self._initialized:
+            return
+        self._initialized = True
+
         self.fpath = fpath
+        print(f"Reading HDF file from: {self.fpath}")
 
         self.hdf_object = hdf_constructor.open_uri(
             fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
@@ -1175,6 +1177,11 @@ class RASHDFFile:
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
         self._2d_flow_attrs: dict | None = None
+
+    # def close(self):
+    #     """Close the HDF object if needed."""
+    #     if hasattr(self, "hdf_object") and self.hdf_object is not None:
+    #         self.hdf_object.close()
 
     @property
     def file_version(self) -> str | None:
