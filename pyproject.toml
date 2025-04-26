@@ -33,8 +33,9 @@ dependencies = [
     "mypy-boto3-s3",
     "contextily==1.6.2",
     "rashdf==0.7.1",
+    "s3fs==2025.3.1",
+    "fsspec==2025.3.1",
     "boto3",
-    "s3fs",
     "dotenv==0.9.9",
     "obstore==0.6.0"
 ]
