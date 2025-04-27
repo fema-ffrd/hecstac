@@ -4,21 +4,22 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List
 from pathlib import Path
+from typing import List
 
 import numpy as np
-from pystac import Item, Link, Asset
+from pystac import Asset, Item, Link
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
 from shapely.geometry import shape
 
 from hecstac.common.asset_factory import AssetFactory
+from hecstac.common.logger import get_logger
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.ras.assets import RAS_EXTENSION_MAPPING
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FFRDEventItem(Item):
