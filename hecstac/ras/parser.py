@@ -24,6 +24,8 @@ from shapely import (
 )
 from shapely.ops import unary_union
 
+from hecstac.common.base_io import ModelFileReader
+from hecstac.common.logger import get_logger
 from hecstac.ras.utils import (
     check_xs_direction,
     data_pairs_from_text_block,
@@ -34,9 +36,6 @@ from hecstac.ras.utils import (
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
 )
-from hecstac.utils.reader import ModelFileReader
-
-logger = logging.getLogger(__name__)
 
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
@@ -66,7 +65,8 @@ class CachedFile:
         self.fpath = fpath
         self.model_file = ModelFileReader(self.fpath)
         self.file_lines = self.model_file.content.splitlines()
-        print(f"Reading file from: {self.fpath}")
+        self.logger = get_logger(__name__)
+        self.logger.info(f"Reading: {self.fpath}")
 
 
 class River:
@@ -711,7 +711,7 @@ class ProjectFile(CachedFile):
             suffix = search_contents(self.file_lines, "Current Plan", expect_one=True, require_one=False).strip()
             return name_from_suffix(self.fpath, suffix)
         except Exception:
-            logger.warning("Ras model has no current plan")
+            self.logger.warning("Ras model has no current plan")
             return None
 
     @property
@@ -724,7 +724,7 @@ class ProjectFile(CachedFile):
                 self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
             )
         if version == []:
-            logger.warning("Unable to parse project version")
+            self.logger.warning("Unable to parse project version")
             return "N/A"
         else:
             return version[0]
@@ -810,7 +810,7 @@ class PlanFile(CachedFile):
             if len(parts) >= 4:
                 key = parts[4].strip()
                 breach_dict[key] = eval(parts[3].strip())
-        logger.debug(f"breach_dict {breach_dict}")
+        self.logger.debug(f"breach_dict {breach_dict}")
         return breach_dict
 
 
@@ -1124,7 +1124,7 @@ class UnsteadyFlowFile(CachedFile):
                 bc_line = parts[7].strip()
                 if bc_line:
                     boundary_dict.append({flow_area: bc_line})
-        # logger.debug(f"boundary_dict:{boundary_dict}")
+        # self.logger.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
     @property
@@ -1166,9 +1166,9 @@ class RASHDFFile(CachedFile):
         if hasattr(self, "_initialized") and self._initialized:
             return
         self._initialized = True
-
+        self.logger = get_logger(__name__)
         self.fpath = fpath
-        print(f"Reading HDF file from: {self.fpath}")
+        self.logger.info(f"Reading: {self.fpath}")
 
         self.hdf_object = hdf_constructor.open_uri(
             fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
@@ -1694,6 +1694,6 @@ class GeometryHDFFile(RASHDFFile):
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            logger.warning("No reference lines found.")
+            self.logger.warning("No reference lines found.")
         else:
             return ref_lines
