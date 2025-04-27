@@ -1,15 +1,13 @@
 """Create instances of assets."""
 
-import logging
 from pathlib import Path
 from typing import Dict, Generic, Type, TypeVar
 
 from pyproj import CRS
 from pystac import Asset
 
+from hecstac.common.logger import get_logger
 from hecstac.hms.s3_utils import check_storage_extension
-
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T")  # Generic for asset file accessor classes
 
@@ -31,6 +29,7 @@ class GenericAsset(Asset, Generic[T]):
         self._extra_fields = {}
         self.name = Path(self.href).name
         self.media_type = self.__media_type__
+        self.logger = get_logger(__file__)
 
     @property
     def roles(self) -> list[str]:
@@ -57,9 +56,13 @@ class GenericAsset(Asset, Generic[T]):
         self._extra_fields = extra_fields
 
     @property
-    def file(self) -> T:
-        """Return class to access asset file contents."""
-        return self.__file_class__(self.get_absolute_href())
+    def file(self):
+        if not hasattr(self, "_file_obj"):
+            if self.__file_class__:
+                self._file_obj = self.__file_class__(self.href)
+            else:
+                raise AttributeError(f"No file class defined for {self.__class__.__name__}")
+        return self._file_obj
 
     def name_from_suffix(self, suffix: str) -> str:
         """Generate a name by appending a suffix to the file stem."""
