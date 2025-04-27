@@ -5,7 +5,19 @@ import logging
 import sys
 from re import L
 
-SUPPRESS_LOGS = ["boto3", "botocore", "geopandas", "fiona", "rasterio", "pyogrio", "xarray", "shapely", "matplotlib"]
+SUPPRESS_LOGS = [
+    "boto3",
+    "botocore",
+    "geopandas",
+    "fiona",
+    "rasterio",
+    "pyogrio",
+    "xarray",
+    "shapely",
+    "matplotlib",
+    "aiobotocore",
+    "fsspec",
+]
 
 
 class JsonFormatter(logging.Formatter):
