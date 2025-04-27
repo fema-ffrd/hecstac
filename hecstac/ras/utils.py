@@ -11,7 +11,9 @@ from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
 
-logger = logging.getLogger(__name__)
+from hecstac.common.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def find_model_files(ras_prj: str) -> list[str]:
