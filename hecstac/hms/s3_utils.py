@@ -2,10 +2,10 @@
 
 import os
 from pathlib import Path
-import fiona
 
 import boto3
 import botocore
+import fiona
 from mypy_boto3_s3.service_resource import ObjectSummary
 from pystac import Asset
 from pystac.extensions.storage import StorageExtension
@@ -88,31 +88,6 @@ def split_s3_key(s3_path: str) -> tuple[str, str]:
     if not key:
         raise ValueError(f"s3_path contains bucket only, no key: {s3_path}")
     return bucket, key
-
-
-def init_s3_resources(minio_mode: bool = False):
-    """Initialize s3 resources."""
-    if minio_mode:
-        session = boto3.Session(
-            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.environ.get("MINIO_SECRET_ACCESS_KEY"),
-        )
-
-        s3_client = session.client("s3", endpoint_url=os.environ.get("MINIO_S3_ENDPOINT"))
-
-        s3_resource = session.resource("s3", endpoint_url=os.environ.get("MINIO_S3_ENDPOINT"))
-
-        return session, s3_client, s3_resource
-    else:
-        # Instantitate S3 resources
-        session = boto3.Session(
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-        )
-
-        s3_client = session.client("s3")
-        s3_resource = session.resource("s3")
-        return session, s3_client, s3_resource
 
 
 def get_basic_object_metadata(obj: ObjectSummary) -> dict:
