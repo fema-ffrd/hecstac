@@ -17,12 +17,13 @@ from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, unary_union
 
 from hecstac.common.asset_factory import AssetFactory
+from hecstac.common.logger import get_logger
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.hms.parser import BasinFile, ProjectFile
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HMSModelItem(Item):

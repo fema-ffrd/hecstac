@@ -17,8 +17,9 @@ from pyproj import CRS
 from shapely.geometry import LineString, MultiLineString, Point
 
 import hecstac.hms.utils as utils
+from hecstac.common.base_io import ModelFileReader
+from hecstac.common.logger import get_logger
 from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER, GPD_WRITE_ENGINE
-from hecstac.hms.s3_utils import create_fiona_aws_session
 from hecstac.hms.data_model import (
     ET,
     BasinHeader,
@@ -43,10 +44,9 @@ from hecstac.hms.data_model import (
     Table,
     Temperature,
 )
+from hecstac.hms.s3_utils import create_fiona_aws_session
 
-from hecstac.utils.reader import ModelFileReader
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseTextFile(ABC):
@@ -119,6 +119,7 @@ class ProjectFile(BaseTextFile):
         self.gage = None
         self.grid = None
         self.pdata = None
+        self.logger = get_logger(__name__)
 
         if recurse:
             self.scan_for_basins_mets_controls()
@@ -243,7 +244,7 @@ class ProjectFile(BaseTextFile):
     @property
     def files(self):
         """Return associated files."""
-        # logging.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
+        # self.logger.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
         return (
             [self.path]
             + [basin.path for basin in self.basins]
@@ -989,7 +990,8 @@ class SqliteDB:
     """SQLite database class."""
 
     def __init__(self, path: str, fiona_aws_session=None):
-        logging.info(path)
+        self.logger = get_logger(__name__)
+        self.logger.debug(path)
         if not path.endswith(".sqlite"):
             raise ValueError(f"invalid extension for sqlite database: {path}")
         self.path = path

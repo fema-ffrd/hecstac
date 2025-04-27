@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import OrderedDict
-import logging
+
 from shapely import MultiPolygon, Polygon
 
+from hecstac.common.logger import get_logger
 from hecstac.hms.consts import ATTR_KEYVAL_GROUPER, ATTR_NESTED_KEYVAL_GROUPER, NL_KEYS
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 # def _geometry_to_wgs84(self, geom: Geometry) -> Geometry:
 #     pyproj_crs = CRS.from_user_input(self.crs)
 #     wgs_crs = CRS.from_authority("EPSG", "4326")
