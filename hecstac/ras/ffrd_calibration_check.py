@@ -27,7 +27,7 @@ def build_s3_path(
 ) -> str:
     path = f"s3://{bucket}/{prefix}/{metadata_part}/{model_name}"
     if suffix:
-        path += f"-{suffix}"
+        path += f"_{suffix}"
     if extension:
         path += f".{extension.lstrip('.')}"
     return path
@@ -136,7 +136,7 @@ class RASModelCalibrationChecker:
             self.bucket,
             self.prefix,
             self.ras_model_name,
-            suffix="qc_results",
+            suffix="qc-results",
             extension="xlsx",
         )
         qc_results_to_excel_s3(qc_results, qc_results_path)
