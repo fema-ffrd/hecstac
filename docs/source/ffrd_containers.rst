@@ -1,6 +1,10 @@
-============================
-Ras Calibration Check Script
-============================
+===============================
+Ras Calibration Check Container
+===============================
+
+.. code-block:: bash
+    # Pull Container from GH Repository
+    docker pull ghcr.io/fema-ffrd/hecstac:0.1.0rc4-dev
 
 Overview
 ========
@@ -28,7 +32,7 @@ To use this container, ensure you have Docker installed and run the following co
 
 .. code-block:: bash
 
-    docker build -t ras-calibration-check .
+    docker build -t hecstac .
 
 Usage
 =====
@@ -38,7 +42,7 @@ The main script requires environment variables for AWS credentials and a configu
 .. code-block:: bash
 
     docker run --rm -e AWS_ACCESS_KEY_ID=<your-access-key> -e AWS_SECRET_ACCESS_KEY=<your-secret-key> \
-        ras-calibration-check --config '<your-config-json>'
+        hecstac --config '<your-config-json>'
 
 Configuration
 =============
