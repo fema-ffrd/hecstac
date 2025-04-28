@@ -35,3 +35,8 @@ Install dev dependencies:
 - In 'new_ras_item.py', set the ras_project_file to the path of the 2D Muncie project file (ex. ras_project_file = "Example_Projects_6_6/2D Unsteady Flow Hydraulics/Muncie/Muncie.prj").
 - For projects that have projection information within the geometry .hdf files, the CRS info can automatically be detected. The Muncie data lacks that projection info so it must be set by extracting the WKT projection string and setting the CRS in 'new_ras_item.py' to the projection string. The projection can be found in the Muncie/GIS_Data folder in Muncie_IA_Clip.prj.
 - Once the CRS and project file location have been set, a new item can be created with 'python -m new_ras_item' in the command line. The new item will be added inside the model directory at the same level as the project file.
+
+## FFRD
+While `hecstac` was created principally in support of FFRD pilot projects, the ability to create STAC based metadata items for HEC models (RAS and HMS in particular) has guided some design and implementation decisions that make it flexible enough to support more generalized use cases.
+
+There will be modules and workflows that are very specifically designed for FFRD, and those will be generally distinguishable via *ffrd* in the name of the file / class function / etc. The Dockerfiles that are included in the repo are designed specifically in support of these pilots, and as such are not meant for general “out-of-the-box” use cases. For specifics on FFRD use cases please see the documentation.

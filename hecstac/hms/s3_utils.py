@@ -9,7 +9,8 @@ import fiona
 from mypy_boto3_s3.service_resource import ObjectSummary
 from pystac import Asset
 from pystac.extensions.storage import StorageExtension
-from hecstac.common.s3_utils import init_s3_resources
+
+# from hecstac.common.s3_utils import init_s3_resources
 
 
 def ls(directory: str | Path) -> list[Path]:
@@ -46,22 +47,22 @@ def list_keys(s3_client, bucket, prefix, suffix=""):
     return keys
 
 
-def check_storage_extension(asset: Asset) -> Asset:
-    """If the file is hosted on S3, add the storage extension."""
-    if file_location(asset.href) == "s3":
-        stor_ext = StorageExtension.ext(asset)
-        meta = get_metadata(asset.href)
-        stor_ext.apply(platform="AWS", region=meta["storage:region"], tier=meta["storage:tier"])
-    return asset
+# def check_storage_extension(asset: Asset) -> Asset:
+#     """If the file is hosted on S3, add the storage extension."""
+#     if file_location(asset.href) == "s3":
+#         stor_ext = StorageExtension.ext(asset)
+#         meta = get_metadata(asset.href)
+#         stor_ext.apply(platform="AWS", region=meta["storage:region"], tier=meta["storage:tier"])
+#     return asset
 
 
-def get_metadata(key: str) -> str:
-    """Read the head object and return metadata."""
-    _, _, s3_resource = init_s3_resources()
-    bucket, key = split_s3_key(key)
-    bucket = s3_resource.Bucket(bucket)
-    key_obj = bucket.Object(key)
-    return get_basic_object_metadata(key_obj)
+# def get_metadata(key: str) -> str:
+#     """Read the head object and return metadata."""
+#     _, _, s3_resource = init_s3_resources()
+#     bucket, key = split_s3_key(key)
+#     bucket = s3_resource.Bucket(bucket)
+#     key_obj = bucket.Object(key)
+#     return get_basic_object_metadata(key_obj)
 
 
 def split_s3_key(s3_path: str) -> tuple[str, str]:
