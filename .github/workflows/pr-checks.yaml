@@ -1,0 +1,42 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - 'hecstac/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Extract version from hecstac
+        id: get_version
+        shell: pwsh
+        run: |
+          $version = python -c "import hecstac; print(hecstac.__version__);"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+  docker-build-test:
+    needs: get-version
+    uses: ./.github/workflows/docker-build.yaml
+    with:
+      push_to_registry: false
+      version: ${{ needs.get-version.outputs.version }}
+      branch: ${{ github.base_ref }}
+      platforms: 'linux/amd64'

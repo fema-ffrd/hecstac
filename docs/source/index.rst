@@ -5,14 +5,15 @@ hecstac
    :hidden:
 
    User Guide <user_guide.rst>
+   FFRD Containers <ffrd_containers.rst>
    API Reference <modules.rst>
 
 
 .. note::
    This version is tagged as **testing**. Features and APIs are unstable and subject to change.
 
-:code:`hecstac` is an open-source Python library designed to access and process `HEC <https://www.hec.usace.army.mil/software/>`_ model data to create catalogs, metadata, 
-and data products for use in managing simulations performed probabilistic modeling campaigns in the cloud. This project automates the generation of STAC items from `HEC-HMS <https://www.hec.usace.army.mil/software/hec-hms/>`_  and 
+:code:`hecstac` is an open-source Python library designed to access and process `HEC <https://www.hec.usace.army.mil/software/>`_ model data to create catalogs, metadata,
+and data products for use in managing simulations performed probabilistic modeling campaigns in the cloud. This project automates the generation of STAC items from `HEC-HMS <https://www.hec.usace.army.mil/software/hec-hms/>`_  and
 `HEC-RAS <https://www.hec.usace.army.mil/software/hec-ras/>`_  models providing a consistent and interoperable data format for sharing and publishing results.
 
 

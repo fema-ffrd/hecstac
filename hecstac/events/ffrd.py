@@ -4,20 +4,22 @@ import json
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import List
 
 import numpy as np
-from pystac import Item, Link
+from pystac import Asset, Item, Link
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, union_all
 from shapely.geometry import shape
 
 from hecstac.common.asset_factory import AssetFactory
+from hecstac.common.logger import get_logger
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.ras.assets import RAS_EXTENSION_MAPPING
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class FFRDEventItem(Item):
@@ -115,9 +117,12 @@ class FFRDEventItem(Item):
     @property
     def _bbox(self) -> list[float]:
         """Bounding box of the FFRD Event STAC item."""
-        bboxes = np.array([item.bbox for item in self.source_model_items])
-        bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
-        return [float(i) for i in bboxes]
+        if len(self.source_model_items) > 1:
+            bboxes = np.array([item.bbox for item in self.source_model_items])
+            bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
+            return [float(i) for i in bboxes]
+        else:
+            return self.source_model_items[0].bbox
 
     def add_hms_asset(self, fpath: str, item_type: str = "event") -> None:
         """Add an asset to the FFRD Event STAC item."""
@@ -131,6 +136,7 @@ class FFRDEventItem(Item):
         """Add an asset to the FFRD Event STAC item."""
         if os.path.exists(fpath):
             logger.info(f"Adding asset: {fpath}")
-            asset = self.ras_factory.create_ras_asset(fpath)
+            asset = Asset(href=fpath, title=Path(fpath).name)
+            asset = self.ras_factory.asset_from_dict(asset)
             if asset is not None:
                 self.add_asset(asset.title, asset)

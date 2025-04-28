@@ -1,10 +1,13 @@
 """Asset instances of HEC-RAS model files."""
 
+import io
 import logging
 import os
 import re
 from functools import lru_cache
+from urllib.parse import urlparse
 
+import boto3
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -14,6 +17,7 @@ from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
+from hecstac.common.logger import get_logger
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.parser import (
     GeometryFile,
@@ -28,10 +32,10 @@ from hecstac.ras.parser import (
 )
 from hecstac.ras.utils import is_ras_prj
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 CURRENT_PLAN = "HEC-RAS:current_plan"
-PLAN_SHORT_ID = "HEC-RAS:short_plan_id"
+PLAN_SHORT_ID = "HEC-RAS:plan_short_id"
 TITLE = "HEC-RAS:title"
 UNITS = "HEC-RAS:units"
 VERSION = "HEC-RAS:version"
@@ -58,7 +62,7 @@ REACHES = "HEC-RAS:reaches"
 JUNCTIONS = "HEC-RAS:junctions"
 CROSS_SECTIONS = "HEC-RAS:cross_sections"
 STRUCTURES = "HEC-RAS:structures"
-STORAGE_AREAS = "HEC-RAS:storage_areas"
+FLOW_ELEMENT_2D = "HEC-RAS:2d_flow_element"
 CONNECTIONS = "HEC-RAS:connections"
 
 HAS_2D = "HEC-RAS:has_2D_elements"
@@ -67,7 +71,10 @@ HAS_1D = "HEC-RAS:has_1D_elements"
 N_PROFILES = "HEC-RAS:n_profiles"
 
 BOUNDARY_LOCATIONS = "HEC-RAS:boundary_locations"
-REFERENCE_LINES = "HEC-RAS:reference_lines"
+REFERENCE_LINES = "HEC-RAS:ref_lines"
+REFERENCE_POINTS = "HEC-RAS:ref_points"
+PRECIP_BC = "HEC-RAS:precip_bc"
+IC_POINTS = "HEC-RAS:initial_condition_point_name"
 
 PLAN_INFORMATION_BASE_OUTPUT_INTERVAL = "HEC-RAS:plan_information_base_output_interval"
 PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE = "HEC-RAS:plan_information_computation_time_step_base"
@@ -117,6 +124,29 @@ METEOROLOGY_MODE = "HEC-RAS:meteorology_mode"
 METEOROLOGY_RASTER_CELLSIZE = "HEC-RAS:meteorology_raster_cellsize"
 METEOROLOGY_SOURCE = "HEC-RAS:meteorology_source"
 METEOROLOGY_UNITS = "HEC-RAS:meteorology_units"
+
+PROJECT_FILE_NAME = "HEC-RAS:project_file_name"
+GEOMETRY_TITLE = "HEC-RAS:geometry_title"
+UNSTEADY_FLOW_TITLE = "HEC-RAS:unsteady_flow_title"
+PLAN_TITLE = "HEC-RAS:plan_title"
+
+
+def save_bytes_s3(data: io.BytesIO, s3_path: str):
+    """
+    Upload a BytesIO stream to the specified S3 path.
+
+    Args:
+        data: BytesIO object containing the data to upload.
+        s3_path: S3 URI, e.g., 's3://my-bucket/path/to/file.png'
+    """
+    # Parse S3 path
+    parsed = urlparse(s3_path)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+
+    # Upload using boto3
+    s3 = boto3.client("s3")
+    s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType="image/png")
 
 
 # class PrjAsset(GenericAsset):
@@ -175,11 +205,13 @@ class PlanAsset(GenericAsset[PlanFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[TITLE] = self.file.plan_title
+        self._extra_fields[PLAN_TITLE] = self.file.plan_title
         self._extra_fields[VERSION] = self.file.plan_version
         self._extra_fields[GEOMETRY_FILE] = self.file.geometry_file
         self._extra_fields[FLOW_FILE] = self.file.flow_file
         self._extra_fields[BREACH_LOCATIONS] = self.file.breach_locations
+        self._extra_fields[PLAN_SHORT_ID] = self.file.short_identifier
+
         return self._extra_fields
 
 
@@ -197,7 +229,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[TITLE] = self.file.geom_title
+        self._extra_fields[GEOMETRY_TITLE] = self.file.geom_title
         self._extra_fields[VERSION] = self.file.geom_version
         self._extra_fields[HAS_1D] = self.file.has_1d
         self._extra_fields[HAS_2D] = self.file.has_2d
@@ -206,8 +238,12 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         self._extra_fields[JUNCTIONS] = list(self.file.junctions.keys())
         self._extra_fields[CROSS_SECTIONS] = list(self.file.cross_sections.keys())
         self._extra_fields[STRUCTURES] = list(self.file.structures.keys())
-        self._extra_fields[STORAGE_AREAS] = list(self.file.storage_areas.keys())
+        self._extra_fields[FLOW_ELEMENT_2D] = list(self.file.storage_areas.keys())
         self._extra_fields[CONNECTIONS] = list(self.file.connections.keys())
+        self._extra_fields[IC_POINTS] = self.file.ic_point_names
+        self._extra_fields[REFERENCE_LINES] = self.file.ref_line_names
+        self._extra_fields[REFERENCE_POINTS] = self.file.ref_point_names
+
         return self._extra_fields
 
     @property
@@ -283,9 +319,10 @@ class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[TITLE] = self.file.flow_title
+        self._extra_fields[UNSTEADY_FLOW_TITLE] = self.file.flow_title
         self._extra_fields[BOUNDARY_LOCATIONS] = self.file.boundary_locations
         self._extra_fields[REFERENCE_LINES] = self.file.reference_lines
+        self._extra_fields[PRECIP_BC] = self.file.precip_bc
         return self._extra_fields
 
 
@@ -557,12 +594,15 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
                 logger.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
 
         # Add OpenStreetMap basemap
-        ctx.add_basemap(
-            ax,
-            crs=self.crs,
-            source=ctx.providers.OpenStreetMap.Mapnik,
-            alpha=0.4,
-        )
+        try:
+            ctx.add_basemap(
+                ax,
+                crs=self.crs,
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                alpha=0.4,
+            )
+        except Exception as e:
+            logger.warning(f"Warning: Failed to add basemap for {self.href}: {e}")
         ax.set_title(f"{title} - {os.path.basename(self.href)}", fontsize=15)
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
@@ -574,12 +614,11 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         filepath = os.path.join(base_dir, filename)
 
         if filepath.startswith("s3://"):
-            pass
-            # TODO add thumbnail s3 functionality
-            # img_data = io.BytesIO()
-            # fig.savefig(img_data, format="png", bbox_inches="tight")
-            # img_data.seek(0)
-            # save_bytes_s3(img_data, filepath)
+            # pass
+            img_data = io.BytesIO()
+            fig.savefig(img_data, format="png", bbox_inches="tight")
+            img_data.seek(0)
+            save_bytes_s3(img_data, filepath)
         else:
             os.makedirs(base_dir, exist_ok=True)
             fig.savefig(filepath, dpi=80, bbox_inches="tight")

@@ -11,10 +11,13 @@ from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
 
-logger = logging.getLogger(__name__)
+from hecstac.common.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def find_model_files(ras_prj: str) -> list[str]:
+    # TODO: Add option to recursively iterate through all subdirectories in a model folder.
     """Find all files with the same base name and return absolute paths."""
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
@@ -203,7 +206,7 @@ def validate_point(geom):
         raise TypeError(f"expected point at xs-river intersection got: {type(geom)} | {geom}")
 
 
-class requires_geos:
+class RequireGeos:
     """Unsure."""
 
     def __init__(self, version):
@@ -274,7 +277,7 @@ def multithreading_enabled(func):
     return wrapped
 
 
-@requires_geos("3.7.0")
+@RequireGeos("3.7.0")
 @multithreading_enabled
 def reverse(geometry, **kwargs):
     """Return a copy of a Geometry with the order of coordinates reversed.
