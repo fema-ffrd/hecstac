@@ -9,6 +9,7 @@ import fiona
 from mypy_boto3_s3.service_resource import ObjectSummary
 from pystac import Asset
 from pystac.extensions.storage import StorageExtension
+from hecstac.common.s3_utils import init_s3_resources
 
 
 def ls(directory: str | Path) -> list[Path]:

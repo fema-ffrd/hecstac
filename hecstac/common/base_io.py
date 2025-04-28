@@ -1,3 +1,5 @@
+"""IO module to simplify s3 and local file handling."""
+
 import os
 from pathlib import Path
 from typing import Optional
@@ -5,16 +7,13 @@ from urllib.parse import urlparse
 
 import obstore
 
-# from hecstac.common.logger import get_logger
-
 
 class ModelFileReader:
-    ...
     """A class to read model files from either the local file system or an S3 bucket."""
 
     def __init__(self, path: str | os.PathLike, store: Optional[obstore.store.ObjectStore] = None):
         """
-        Initializes the ModelFileReader.
+        Initialize the ModelFileReader.
 
         Args:
             path : str | os.Pathlike

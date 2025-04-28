@@ -1,4 +1,5 @@
-import cProfile
+"""Utilities for S3."""
+
 import io
 import json
 import os
@@ -15,7 +16,6 @@ from hecstac.ras.item import RASModelItem
 
 def init_s3_resources() -> tuple:
     """Establish a boto3 session and return the session, S3 client, and S3 resource handles with optimized config."""
-
     boto_config = Config(
         retries={"max_attempts": 3, "mode": "standard"},  # Default is 10
         connect_timeout=3,  # Seconds to wait to establish connection
@@ -56,7 +56,7 @@ def save_bytes_s3(
     s3_path: str,
     content_type: str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ):
-    """Helper to upload BytesIO to S3."""
+    """Upload BytesIO to S3."""
     parsed = urlparse(s3_path)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
@@ -66,7 +66,6 @@ def save_bytes_s3(
 
 def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
     """Check if a file exists in S3."""
-
     try:
         s3_client.head_object(Bucket=bucket, Key=key)
     except Exception as e:
@@ -113,7 +112,7 @@ def metadata_to_s3(
 
 
 def qc_results_to_excel_s3(results: dict, s3_key: str) -> None:
-    """Creates an Excel file from RasqcResults JSON. Creates 2 sheets: passed and failed."""
+    """Create an Excel file from RasqcResults JSON. with 2 sheets: passed and failed."""
 
     def flatten(group_name):
         rows = []

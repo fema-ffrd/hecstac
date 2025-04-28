@@ -57,6 +57,7 @@ class GenericAsset(Asset, Generic[T]):
 
     @property
     def file(self):
+        """Return cached file or instantiate new."""
         if not hasattr(self, "_file_obj"):
             if self.__file_class__:
                 self._file_obj = self.__file_class__(self.href)

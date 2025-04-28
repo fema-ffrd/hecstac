@@ -1,6 +1,7 @@
-"""Common utility functions"""
+"""Common utility functions."""
 
 from pathlib import Path
+
 from pystac import Item
 
 

@@ -133,7 +133,7 @@ PLAN_TITLE = "HEC-RAS:plan_title"
 
 def save_bytes_s3(data: io.BytesIO, s3_path: str):
     """
-    Uploads a BytesIO stream to the specified S3 path.
+    Upload a BytesIO stream to the specified S3 path.
 
     Args:
         data: BytesIO object containing the data to upload.

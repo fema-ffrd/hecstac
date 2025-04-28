@@ -68,7 +68,7 @@ class ET(Element):
 
 
 @dataclass
-class Subbasin_ET(Element):
+class SubbasinET(Element):
     """Represents a Subbasin_ET element."""
 
     pass
@@ -136,7 +136,9 @@ class Reach(Element):
     """Represents a Reach element."""
 
     geom: LineString = None
-    slope: float = None  # assumed units of the coordinate system is the same as what is used for the project.. need to confirm this assumption
+    slope: float = (
+        None  # assumed units of the coordinate system is the same as what is used for the project.. need to confirm this assumption
+    )
 
 
 @dataclass

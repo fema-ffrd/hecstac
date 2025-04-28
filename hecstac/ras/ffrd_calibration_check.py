@@ -25,6 +25,7 @@ def build_s3_path(
     suffix: str = "",
     extension: str = "",
 ) -> str:
+    """Make consistent s3 paths for metadata."""
     path = f"s3://{bucket}/{prefix}/{metadata_part}/{model_name}"
     if suffix:
         path += f"_{suffix}"
@@ -40,6 +41,8 @@ class RASModelCalibrationError(Exception):
 
 
 class RASModelCalibrationChecker:
+    """Utility for streamlining QC checks for FFRD."""
+
     def __init__(
         self,
         s3_client: boto3.Session.client,
@@ -62,7 +65,7 @@ class RASModelCalibrationChecker:
         self.logger = get_logger(__name__)
 
     def parse_files(self):
-
+        """Parse s3 keys to identify RAS files."""
         verify_file_exists(bucket=self.bucket, key=self.ras_project_key, s3_client=self.s3_client)
 
         ras_prefix = f"{self.prefix}/{self.ras_model_name}"
@@ -75,6 +78,7 @@ class RASModelCalibrationChecker:
         return ras_files
 
     def create_item(self, ras_files):
+        """Create a STAC Item from a RAS model."""
         ras_item = RASModelItem.from_prj(
             build_s3_path(self.bucket, self.prefix, self.ras_model_name),
             self.item_id,
@@ -119,6 +123,7 @@ class RASModelCalibrationChecker:
         return ras_item
 
     def upload_metadata(self, ras_item):
+        """Upload metadata output."""
         self.logger.debug("upload_metadata starting")
         metadata_to_s3(
             bucket=self.bucket,
@@ -130,6 +135,7 @@ class RASModelCalibrationChecker:
         self.logger.info("upload_metadata complete")
 
     def run_qc(self, ras_item):
+        """Perform QC check and upload to s3."""
         qc_results = summarize_results(check(ras_item, check_suite="ras_stac_ffrd"))
         self.logger.debug("run_qc results computed")
         qc_results_path = build_s3_path(

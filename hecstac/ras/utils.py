@@ -206,7 +206,7 @@ def validate_point(geom):
         raise TypeError(f"expected point at xs-river intersection got: {type(geom)} | {geom}")
 
 
-class requires_geos:
+class RequireGeos:
     """Unsure."""
 
     def __init__(self, version):
@@ -277,7 +277,7 @@ def multithreading_enabled(func):
     return wrapped
 
 
-@requires_geos("3.7.0")
+@RequireGeos("3.7.0")
 @multithreading_enabled
 def reverse(geometry, **kwargs):
     """Return a copy of a Geometry with the order of coordinates reversed.

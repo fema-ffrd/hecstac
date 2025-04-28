@@ -24,6 +24,7 @@ class JsonFormatter(logging.Formatter):
     """Custom JSON formatter."""
 
     def format(self, record):
+        """Add name and format structure."""
         logger_name = record.name
         if logger_name == "root":
             logger_name = "hecstac"

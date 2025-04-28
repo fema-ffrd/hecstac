@@ -48,10 +48,10 @@ def load_config(config_input: str):
     Args:
         config_input (str): JSON string or path to JSON file.
 
-    Returns:
+    Returns
+    -------
         List[dict]: List of config dictionaries.
     """
-
     # add option for reading local file
     if os.path.isfile(config_input):
         with open(config_input, "r") as f:
@@ -70,7 +70,7 @@ def load_config(config_input: str):
 
 def main(config: dict):
     """
-    Main processing logic to create STAC Items and run QC.
+    Create STAC Items and run QC.
 
     Args:
         config (dict): Configuration dictionary loaded from a JSON string.

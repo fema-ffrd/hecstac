@@ -1,19 +1,21 @@
 """Creates a STAC Item from an event."""
 
-from pystac import Item
+import os
+from pathlib import Path
+
+import s3fs
 from dotenv import load_dotenv
+from pystac import Item
 
 from hecstac.common.logger import initialize_logger
 from hecstac.events.ffrd import FFRDEventItem
-
-import s3fs
-from pathlib import Path
 
 load_dotenv()
 fs = s3fs.S3FileSystem(key=os.getenv("AWS_ACCESS_KEY_ID"), secret=os.getenv("AWS_SECRET_ACCESS_KEY"))
 
 
 def download_if_s3(fpath: str, dest_dir: str = "tmp_downloads") -> str:
+    """."""
     if fpath.startswith("s3://"):
         local_dir = Path(dest_dir)
         local_dir.mkdir(parents=True, exist_ok=True)

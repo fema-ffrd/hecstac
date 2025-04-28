@@ -40,7 +40,7 @@ from hecstac.hms.data_model import (
     Sink,
     Source,
     Subbasin,
-    Subbasin_ET,
+    SubbasinET,
     Table,
     Temperature,
 )
@@ -824,7 +824,7 @@ class MetFile(BaseTextFile):
             elif line.startswith("Subbasin: "):
                 name = line[len("Subbasin: ") :]
                 attrs = utils.parse_attrs(lines[i + 1 :])
-                elements[name] = Subbasin_ET(name=name, attrs=attrs)
+                elements[name] = SubbasinET(name=name, attrs=attrs)
         self.elements = elements
 
 
