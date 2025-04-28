@@ -213,7 +213,6 @@ class HMSModelItem(Item):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
         geojson_paths = []
         for element_type in basins[0].elements.element_types:
-
             if asset_dir:
                 os.makedirs(asset_dir, exist_ok=True)
                 path = os.path.join(asset_dir, f"{element_type}.geojson")

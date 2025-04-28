@@ -286,7 +286,7 @@ class RASModelItem(Item):
             thumbnail_dest = s3_thumbnail_dst
 
         else:
-            self.logger.warning(f"No thumbnail directory provided.  Using item directory { self.self_href}")
+            self.logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
             thumbnail_dest = self.self_href
 
         for geom in self.geometry_assets:
