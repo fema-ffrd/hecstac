@@ -10,8 +10,6 @@ from mypy_boto3_s3.service_resource import ObjectSummary
 from pystac import Asset
 from pystac.extensions.storage import StorageExtension
 
-# from hecstac.common.s3_utils import init_s3_resources
-
 
 def ls(directory: str | Path) -> list[Path]:
     """List files in a directory."""
@@ -47,22 +45,22 @@ def list_keys(s3_client, bucket, prefix, suffix=""):
     return keys
 
 
-# def check_storage_extension(asset: Asset) -> Asset:
-#     """If the file is hosted on S3, add the storage extension."""
-#     if file_location(asset.href) == "s3":
-#         stor_ext = StorageExtension.ext(asset)
-#         meta = get_metadata(asset.href)
-#         stor_ext.apply(platform="AWS", region=meta["storage:region"], tier=meta["storage:tier"])
-#     return asset
+def check_storage_extension(asset: Asset) -> Asset:
+    """If the file is hosted on S3, add the storage extension."""
+    if file_location(asset.href) == "s3":
+        stor_ext = StorageExtension.ext(asset)
+        meta = get_metadata(asset.href)
+        stor_ext.apply(platform="AWS", region=meta["storage:region"], tier=meta["storage:tier"])
+    return asset
 
 
-# def get_metadata(key: str) -> str:
-#     """Read the head object and return metadata."""
-#     _, _, s3_resource = init_s3_resources()
-#     bucket, key = split_s3_key(key)
-#     bucket = s3_resource.Bucket(bucket)
-#     key_obj = bucket.Object(key)
-#     return get_basic_object_metadata(key_obj)
+def get_metadata(key: str) -> str:
+    """Read the head object and return metadata."""
+    _, _, s3_resource = init_s3_resources2()
+    bucket, key = split_s3_key(key)
+    bucket = s3_resource.Bucket(bucket)
+    key_obj = bucket.Object(key)
+    return get_basic_object_metadata(key_obj)
 
 
 def split_s3_key(s3_path: str) -> tuple[str, str]:
@@ -123,3 +121,28 @@ def create_fiona_aws_session():
     """Create fiona s3 session."""
     session = boto3.Session()
     return fiona.session.AWSSession(session)
+
+
+def init_s3_resources2(minio_mode: bool = False):
+    """Initialize s3 resources."""
+    if minio_mode:
+        session = boto3.Session(
+            aws_access_key_id=os.environ.get("MINIO_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("MINIO_SECRET_ACCESS_KEY"),
+        )
+
+        s3_client = session.client("s3", endpoint_url=os.environ.get("MINIO_S3_ENDPOINT"))
+
+        s3_resource = session.resource("s3", endpoint_url=os.environ.get("MINIO_S3_ENDPOINT"))
+
+        return session, s3_client, s3_resource
+    else:
+        # Instantitate S3 resources
+        session = boto3.Session(
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
+        )
+
+        s3_client = session.client("s3")
+        s3_resource = session.resource("s3")
+        return session, s3_client, s3_resource
