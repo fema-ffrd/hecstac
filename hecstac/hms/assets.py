@@ -39,7 +39,7 @@ class ProjectAsset(GenericAsset[ProjectFile]):
 
     regex_parse_str = r".*\.hms$"
     __roles__ = ["hms-project", MediaType.TEXT]
-    __description__ = "The HEC-HMS project file. Summary provied at the item level"
+    __description__ = "The HEC-HMS project file. Summary provided at the item level"
     __file_class__ = ProjectFile
 
 
@@ -70,7 +70,7 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
         """Return extra fields with added dynamic keys/values."""
         return (
             {
-                "hms:title": self.file.name,
+                "hms:basin_title": self.file.name,
                 "hms:version": self.file.header.attrs["Version"],
                 "hms:description": self.file.header.attrs.get("Description"),
                 "hms:unit_system": self.file.header.attrs["Unit System"],
@@ -97,7 +97,7 @@ class EventBasinAsset(GenericAsset[BasinFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
-            "hms:title": self.file.name,
+            "hms:basin_title": self.file.name,
             "hms:version": self.file.header.attrs["Version"],
             "hms:description": self.file.header.attrs.get("Description"),
             "hms:unit_system": self.file.header.attrs["Unit System"],
@@ -115,7 +115,7 @@ class RunAsset(GenericAsset[RunFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.name} | {
+        return {"hms:run_title": self.name.removesuffix(".run")} | {
             run.name: {f"hms:{key}".lower(): val for key, val in run.attrs.items()} for _, run in self.file.elements
         }
 
@@ -132,7 +132,7 @@ class ControlAsset(GenericAsset[ControlFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
-            "hms:title": self.file.name,
+            "hms:control_title": self.file.name,
             **{f"hms:{key}".lower(): val for key, val in self.file.attrs.items()},
         }
 
@@ -149,7 +149,7 @@ class MetAsset(GenericAsset[MetFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
-            "hms:title": self.file.name,
+            "hms:met_title": self.file.name,
             **{f"hms:{key}".lower(): val for key, val in self.file.attrs.items()},
         }
 

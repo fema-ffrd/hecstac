@@ -1,15 +1,13 @@
 """Create instances of assets."""
 
-import logging
 from pathlib import Path
 from typing import Dict, Generic, Type, TypeVar
 
 from pyproj import CRS
 from pystac import Asset
 
+from hecstac.common.logger import get_logger
 from hecstac.hms.s3_utils import check_storage_extension
-
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T")  # Generic for asset file accessor classes
 
@@ -31,6 +29,7 @@ class GenericAsset(Asset, Generic[T]):
         self._extra_fields = {}
         self.name = Path(self.href).name
         self.media_type = self.__media_type__
+        self.logger = get_logger(__file__)
 
     @property
     def roles(self) -> list[str]:
@@ -57,9 +56,14 @@ class GenericAsset(Asset, Generic[T]):
         self._extra_fields = extra_fields
 
     @property
-    def file(self) -> T:
-        """Return class to access asset file contents."""
-        return self.__file_class__(self.get_absolute_href())
+    def file(self):
+        """Return cached file or instantiate new."""
+        if not hasattr(self, "_file_obj"):
+            if self.__file_class__:
+                self._file_obj = self.__file_class__(self.href)
+            else:
+                raise AttributeError(f"No file class defined for {self.__class__.__name__}")
+        return self._file_obj
 
     def name_from_suffix(self, suffix: str) -> str:
         """Generate a name by appending a suffix to the file stem."""
@@ -90,6 +94,7 @@ class AssetFactory:
     def __init__(self, extension_to_asset: Dict[str, Type[GenericAsset]]):
         """Initialize the AssetFactory with a mapping of file extensions to asset types and metadata."""
         self.extension_to_asset = extension_to_asset
+        self._cache = {}  # Cache to store created assets
 
     def create_hms_asset(self, fpath: str, item_type: str = "model") -> Asset:
         """
@@ -103,6 +108,11 @@ class AssetFactory:
         if item_type not in ["event", "model"]:
             raise ValueError(f"Invalid item type: {item_type}, valid options are 'event' or 'model'.")
 
+        # Check cache first
+        cache_key = (fpath, item_type)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         file_extension = Path(fpath).suffix.lower()
         if file_extension == ".basin":
             asset_class = self.extension_to_asset.get(".basin").get(item_type)
@@ -111,13 +121,30 @@ class AssetFactory:
 
         asset = asset_class(href=fpath)
         asset.title = Path(fpath).name
+
+        # Cache the created asset
+        self._cache[cache_key] = asset
+
         return check_storage_extension(asset)
 
     def asset_from_dict(self, asset: Asset):
         """Create HEC asset given a base Asset and a map of file extensions dict."""
         fpath = asset.href
+
+        # Check cache first
+        if fpath in self._cache:
+            return self._cache[fpath]
+
         for pattern, asset_class in self.extension_to_asset.items():
             if pattern.match(fpath):
                 # logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
-                return asset_class.from_dict(asset.to_dict())
+                created_asset = asset_class.from_dict(asset.to_dict())
+
+                # Cache the created asset
+                self._cache[fpath] = created_asset
+
+                return created_asset
+
+        # Cache the generic asset if no match is found
+        self._cache[fpath] = asset
         return asset

@@ -17,6 +17,8 @@ from pyproj import CRS
 from shapely.geometry import LineString, MultiLineString, Point
 
 import hecstac.hms.utils as utils
+from hecstac.common.base_io import ModelFileReader
+from hecstac.common.logger import get_logger
 from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER, GPD_WRITE_ENGINE
 from hecstac.hms.data_model import (
     ET,
@@ -38,25 +40,24 @@ from hecstac.hms.data_model import (
     Sink,
     Source,
     Subbasin,
-    Subbasin_ET,
+    SubbasinET,
     Table,
     Temperature,
 )
+from hecstac.hms.s3_utils import create_fiona_aws_session
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class BaseTextFile(ABC):
     """Base class for text files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         self.path: str = path
         self.directory: str = os.path.dirname(self.path)
         self.stem: str = os.path.splitext(self.path)[0]
         self.content: str = None
         self.attrs: dict = {}
-        self.client = client
-        self.bucket = bucket
         self.read_content()
         self.parse_header()
 
@@ -71,8 +72,8 @@ class BaseTextFile(ABC):
                     self.content = f.read()
         else:
             try:
-                response = self.client.get_object(Bucket=self.bucket, Key=self.path)
-                self.content = response["Body"].read().decode()
+                self.model_file = ModelFileReader(self.path)
+                self.content = self.model_file.content
             except Exception as e:
                 logger.error(e)
                 raise FileNotFoundError(f"could not find {self.path} locally nor on s3")
@@ -105,12 +106,10 @@ class ProjectFile(BaseTextFile):
         path: str,
         recurse: bool = True,
         assert_uniform_version: bool = True,
-        client=None,
-        bucket=None,
     ):
         if not path.endswith(".hms"):
             raise ValueError(f"invalid extension for Project file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
 
         self.basins = []
         self.mets = []
@@ -120,6 +119,7 @@ class ProjectFile(BaseTextFile):
         self.gage = None
         self.grid = None
         self.pdata = None
+        self.logger = get_logger(__name__)
 
         if recurse:
             self.scan_for_basins_mets_controls()
@@ -175,7 +175,10 @@ class ProjectFile(BaseTextFile):
                 if not nextline.startswith("     Filename: "):
                     raise ValueError(f"unexpected line: {nextline}")
                 basinfile_bn = nextline[len("     Filename: ") :]
-                basinfile_path = os.path.join(self.directory, basinfile_bn)
+                if self.directory.startswith("s3://"):
+                    basinfile_path = f"{self.directory}/{basinfile_bn}"
+                else:
+                    basinfile_path = os.path.join(self.directory, basinfile_bn)
                 self.basins.append(BasinFile(basinfile_path))
 
             if line.startswith("Precipitation: "):
@@ -183,7 +186,10 @@ class ProjectFile(BaseTextFile):
                 if not nextline.startswith("     Filename: "):
                     raise ValueError(f"unexpected line: {nextline}")
                 metfile_bn = nextline[len("     Filename: ") :]
-                metfile_path = os.path.join(self.directory, metfile_bn)
+                if self.directory.startswith("s3://"):
+                    metfile_path = f"{self.directory}/{metfile_bn}"
+                else:
+                    metfile_path = os.path.join(self.directory, metfile_bn)
                 self.mets.append(MetFile(metfile_path))
 
             if line.startswith("Control: "):
@@ -191,7 +197,10 @@ class ProjectFile(BaseTextFile):
                 if not nextline.startswith("     FileName: "):
                     raise ValueError(f"unexpected line: {nextline}")
                 controlfile_bn = nextline[len("     FileName: ") :]
-                controlfile_path = os.path.join(self.directory, controlfile_bn)
+                if self.directory.startswith("s3://"):
+                    controlfile_path = f"{self.directory}/{controlfile_bn}"
+                else:
+                    controlfile_path = os.path.join(self.directory, controlfile_bn)
                 self.controls.append(ControlFile(controlfile_path))
 
     @property
@@ -235,7 +244,7 @@ class ProjectFile(BaseTextFile):
     @property
     def files(self):
         """Return associated files."""
-        # logging.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
+        # self.logger.info(f"other paths {[i.path for i in [self.terrain, self.run, self.grid, self.gage, self.pdata] if i]}")
         return (
             [self.path]
             + [basin.path for basin in self.basins]
@@ -252,9 +261,15 @@ class ProjectFile(BaseTextFile):
         """Return dss files."""
         files = set()
         if self.gage:
-            files.update(
-                [gage.attrs["Variant"]["Variant-1"]["DSS File Name"] for gage in self.gage.elements.elements.values()]
-            )
+            try:
+                files.update(
+                    [
+                        gage.attrs["Variant"]["Variant-1"]["DSS File Name"]
+                        for gage in self.gage.elements.elements.values()
+                    ]
+                )
+            except KeyError:
+                files.update([gage.attrs["Filename"] for gage in self.gage.elements.elements.values()])
         else:
             logger.warning("No gage file to extract gages from.")
 
@@ -332,14 +347,12 @@ class BasinFile(BaseTextFile):
         self,
         path: str,
         skip_scans: bool = False,
-        client=None,
-        bucket=None,
         fiona_aws_session=None,
         read_geom: bool = True,
     ):
         if not path.endswith(".basin"):
             raise ValueError(f"invalid extension for Basin file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
 
         self.header: BasinHeader = ""
         self.layer_properties: BasinLayerProperties = None
@@ -356,7 +369,12 @@ class BasinFile(BaseTextFile):
 
         if self.read_geom:
             sqlite_basename = self.identify_sqlite()
-            self.sqlite_path = os.path.join(os.path.dirname(self.path), sqlite_basename)
+
+            if self.path.startswith("s3://"):
+                self.sqlite_path = f"{os.path.dirname(self.path)}/{sqlite_basename}"
+                self.fiona_aws_session = create_fiona_aws_session()
+            else:
+                self.sqlite_path = os.path.join(os.path.dirname(self.path), sqlite_basename)
 
     def __repr__(self):
         """Representation of the HMSBasinFile class."""
@@ -420,12 +438,10 @@ class BasinFile(BaseTextFile):
         if self.read_geom:
             sqlite = SqliteDB(
                 self.sqlite_path,
-                client=self.client,
-                bucket=self.bucket,
                 fiona_aws_session=self.fiona_aws_session,
             )
 
-            # self.crs = sqlite.crs.to_wkt()
+        # self.crs = sqlite.crs.to_wkt()
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             geom = None
@@ -765,10 +781,10 @@ class BasinFile(BaseTextFile):
 class MetFile(BaseTextFile):
     """Class for parsing HEC-HMS meteorology files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         if not path.endswith(".met"):
             raise ValueError(f"invalid extension for Meteorology file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
 
         self.scan_for_elements()
 
@@ -808,17 +824,17 @@ class MetFile(BaseTextFile):
             elif line.startswith("Subbasin: "):
                 name = line[len("Subbasin: ") :]
                 attrs = utils.parse_attrs(lines[i + 1 :])
-                elements[name] = Subbasin_ET(name=name, attrs=attrs)
+                elements[name] = SubbasinET(name=name, attrs=attrs)
         self.elements = elements
 
 
 class ControlFile(BaseTextFile):
     """Class for parsing HEC-HMS control files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         if not path.endswith(".control"):
             raise ValueError(f"invalid extension for Control file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
 
     def __repr__(self):
         """Representation of the HMSControlFile class."""
@@ -837,10 +853,10 @@ class ControlFile(BaseTextFile):
 class TerrainFile(BaseTextFile):
     """Class for parsing HEC-HMS terrain files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         if not path.endswith(".terrain"):
             raise ValueError(f"Invalid extension for Terrain file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
         self.layers = []
 
         found_first = False
@@ -853,7 +869,7 @@ class TerrainFile(BaseTextFile):
                 else:
                     continue
 
-            if line == "End:":
+            if line.strip() == "End:":
                 self.layers.append(
                     {
                         "name": name,
@@ -889,10 +905,10 @@ class TerrainFile(BaseTextFile):
 class RunFile(BaseTextFile):
     """Class for parsing HEC-HMS run files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         if not path.endswith(".run"):
             raise ValueError(f"invalid extension for Run file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
 
     def __repr__(self):
         """Representation of the HMSRunFile class."""
@@ -925,14 +941,14 @@ class PairedDataFile(BaseTextFile):
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".pdata"):
             raise ValueError(f"invalid extension for Paired Data file: {path}")
-        if not os.path.exists(path):
-            try:
-                response = client.get_object(Bucket=bucket, Key=path)
-                self.content = response["Body"].read().decode()
-            except Exception as e:
-                logger.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
-                self.create_pdata(path)
-        super().__init__(path, client=client, bucket=bucket)
+        # if not os.path.exists(path):
+        #     try:
+        #         response = client.get_object(Bucket=bucket, Key=path)
+        #         self.content = response["Body"].read().decode()
+        #     except Exception as e:
+        #         logger.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
+        #         self.create_pdata(path)
+        super().__init__(path)
         self.elements = ElementSet()
         self.scan_for_tables()
 
@@ -973,17 +989,13 @@ class PairedDataFile(BaseTextFile):
 class SqliteDB:
     """SQLite database class."""
 
-    def __init__(self, path: str, client=None, bucket=None, fiona_aws_session=None):
-        sqlite_file, _ = os.path.splitext(path)
-        path = f"{sqlite_file}.sqlite"
+    def __init__(self, path: str, fiona_aws_session=None):
+        self.logger = get_logger(__name__)
+        self.logger.debug(path)
         if not path.endswith(".sqlite"):
             raise ValueError(f"invalid extension for sqlite database: {path}")
         self.path = path
-        self.client = client
-        self.bucket = bucket
         self.fiona_aws_session = fiona_aws_session
-        if not os.path.exists(self.path):
-            self.path = f"s3://{self.bucket}/{self.path}"
         if self.fiona_aws_session:
             with fiona.Env(self.fiona_aws_session):
                 self.layers = fiona.listlayers(self.path)
@@ -1006,10 +1018,10 @@ class SqliteDB:
 class GridFile(BaseTextFile):
     """Class for parsing HEC-HMS grid files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         if not path.endswith(".grid"):
             raise ValueError(f"invalid extension for Grid file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
         self.elements = ElementSet()
         self.scan_for_grids()
 
@@ -1054,10 +1066,10 @@ class GridFile(BaseTextFile):
 class GageFile(BaseTextFile):
     """Class for parsing HEC-HMS gage files."""
 
-    def __init__(self, path: str, client=None, bucket=None):
+    def __init__(self, path: str):
         if not path.endswith(".gage"):
             raise ValueError(f"invalid extension for Gage file: {path}")
-        super().__init__(path, client=client, bucket=bucket)
+        super().__init__(path)
         self.elements = ElementSet()
         self.scan_for_gages()
 

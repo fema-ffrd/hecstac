@@ -68,7 +68,7 @@ class ET(Element):
 
 
 @dataclass
-class Subbasin_ET(Element):
+class SubbasinET(Element):
     """Represents a Subbasin_ET element."""
 
     pass

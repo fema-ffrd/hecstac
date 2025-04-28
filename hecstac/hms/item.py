@@ -17,12 +17,13 @@ from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, unary_union
 
 from hecstac.common.asset_factory import AssetFactory
+from hecstac.common.logger import get_logger
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
 from hecstac.hms.parser import BasinFile, ProjectFile
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HMSModelItem(Item):
@@ -43,7 +44,9 @@ class HMSModelItem(Item):
         self.simplify_geometry = True
 
     @classmethod
-    def from_prj(cls, hms_project_file, item_id: str, simplify_geometry: bool = True):
+    def from_prj(
+        cls, hms_project_file, item_id: str, simplify_geometry: bool = True, assets: list = None, asset_dir: str = None
+    ):
         """
         Create an `HMSModelItem` from a HEC-HMS project file.
 
@@ -62,15 +65,19 @@ class HMSModelItem(Item):
             An instance of the class representing the STAC item.
         """
         pm = LocalPathManager(Path(hms_project_file).parent)
-        href = pm.item_path(item_id)
         pf = ProjectFile(hms_project_file, assert_uniform_version=False)
         # Create GeoJSON and Thumbnails
-        cls._check_files_exists(cls, pf.files + pf.rasters)
-        geojson_paths = cls.write_element_geojsons(cls, pf.basins, pm, pf)
-        thumbnail_paths = cls.make_thumbnails(cls, pf.basins, pm)
+        # cls._check_files_exists(cls, pf.files + pf.rasters)
+        geojson_paths = cls.write_element_geojsons(cls, pf.basins, pm, pf, asset_dir)
+        thumbnail_paths = cls.make_thumbnails(cls, pf.basins, pm, asset_dir)
 
         # Collect all assets
-        assets = {Path(i).name: Asset(i) for i in pf.files + pf.rasters + geojson_paths + thumbnail_paths}
+        if not assets:
+            href = pm.item_path(item_id)
+            assets = {Path(i).name: Asset(i) for i in pf.files + pf.rasters + geojson_paths + thumbnail_paths}
+        else:
+            href = hms_project_file
+            assets = {Path(i).name: Asset(i, Path(i).name) for i in assets}
         # Create the STAC Item
         stac = cls(
             Path(hms_project_file).stem,
@@ -175,12 +182,19 @@ class HMSModelItem(Item):
             if not os.path.exists(file):
                 logger.warning(f"File not found {file}")
 
-    def make_thumbnails(self, basins: list[BasinFile], pm: LocalPathManager, overwrite: bool = False) -> list[str]:
+    def make_thumbnails(
+        self, basins: list[BasinFile], pm: LocalPathManager, asset_dir: str, overwrite: bool = False
+    ) -> list[str]:
         """Create a PNG thumbnail for each basin."""
         thumbnail_paths = []
 
         for bf in basins:
-            thumbnail_path = pm.derived_item_asset(f"{bf.name}.png".replace(" ", "_").replace("-", "_"))
+            png_name = f"{bf.name}.png".replace(" ", "_").replace("-", "_")
+            if asset_dir:
+                os.makedirs(asset_dir, exist_ok=True)
+                thumbnail_path = os.path.join(asset_dir, png_name)
+            else:
+                thumbnail_path = pm.derived_item_asset(png_name)
 
             if not overwrite and os.path.exists(thumbnail_path):
                 logger.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
@@ -193,12 +207,17 @@ class HMSModelItem(Item):
 
         return thumbnail_paths
 
-    def write_element_geojsons(self, basins: list[BasinFile], pm: LocalPathManager, pf, overwrite: bool = False):
+    def write_element_geojsons(
+        self, basins: list[BasinFile], pm: LocalPathManager, pf, asset_dir: str, overwrite: bool = False
+    ):
         """Write the HMS elements (Subbasins, Juctions, Reaches, etc.) to geojson."""
         geojson_paths = []
         for element_type in basins[0].elements.element_types:
-            # logger.debug(f"Checking if geojson for {element_type} exists")
-            path = pm.derived_item_asset(f"{element_type}.geojson")
+            if asset_dir:
+                os.makedirs(asset_dir, exist_ok=True)
+                path = os.path.join(asset_dir, f"{element_type}.geojson")
+            else:
+                path = pm.derived_item_asset(f"{element_type}.geojson")
             if not overwrite and os.path.exists(path):
                 logger.info(f"Geojson for {element_type} already exists. Skipping creation.")
             else:

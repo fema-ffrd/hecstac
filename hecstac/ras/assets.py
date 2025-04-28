@@ -1,10 +1,13 @@
 """Asset instances of HEC-RAS model files."""
 
+import io
 import logging
 import os
 import re
 from functools import lru_cache
+from urllib.parse import urlparse
 
+import boto3
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -14,6 +17,7 @@ from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
+from hecstac.common.logger import get_logger
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.parser import (
     GeometryFile,
@@ -28,7 +32,7 @@ from hecstac.ras.parser import (
 )
 from hecstac.ras.utils import is_ras_prj
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 CURRENT_PLAN = "HEC-RAS:current_plan"
 PLAN_SHORT_ID = "HEC-RAS:plan_short_id"
@@ -67,8 +71,8 @@ HAS_1D = "HEC-RAS:has_1D_elements"
 N_PROFILES = "HEC-RAS:n_profiles"
 
 BOUNDARY_LOCATIONS = "HEC-RAS:boundary_locations"
-REFERENCE_LINES = "HEC-RAS:reference_lines"
-REFERENCE_POINTS = "HEC-RAS:reference_points"
+REFERENCE_LINES = "HEC-RAS:ref_lines"
+REFERENCE_POINTS = "HEC-RAS:ref_points"
 PRECIP_BC = "HEC-RAS:precip_bc"
 IC_POINTS = "HEC-RAS:initial_condition_point_name"
 
@@ -125,6 +129,24 @@ PROJECT_FILE_NAME = "HEC-RAS:project_file_name"
 GEOMETRY_TITLE = "HEC-RAS:geometry_title"
 UNSTEADY_FLOW_TITLE = "HEC-RAS:unsteady_flow_title"
 PLAN_TITLE = "HEC-RAS:plan_title"
+
+
+def save_bytes_s3(data: io.BytesIO, s3_path: str):
+    """
+    Upload a BytesIO stream to the specified S3 path.
+
+    Args:
+        data: BytesIO object containing the data to upload.
+        s3_path: S3 URI, e.g., 's3://my-bucket/path/to/file.png'
+    """
+    # Parse S3 path
+    parsed = urlparse(s3_path)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+
+    # Upload using boto3
+    s3 = boto3.client("s3")
+    s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType="image/png")
 
 
 # class PrjAsset(GenericAsset):
@@ -572,12 +594,15 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
                 logger.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
 
         # Add OpenStreetMap basemap
-        ctx.add_basemap(
-            ax,
-            crs=self.crs,
-            source=ctx.providers.OpenStreetMap.Mapnik,
-            alpha=0.4,
-        )
+        try:
+            ctx.add_basemap(
+                ax,
+                crs=self.crs,
+                source=ctx.providers.OpenStreetMap.Mapnik,
+                alpha=0.4,
+            )
+        except Exception as e:
+            logger.warning(f"Warning: Failed to add basemap for {self.href}: {e}")
         ax.set_title(f"{title} - {os.path.basename(self.href)}", fontsize=15)
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
@@ -589,12 +614,11 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         filepath = os.path.join(base_dir, filename)
 
         if filepath.startswith("s3://"):
-            pass
-            # TODO add thumbnail s3 functionality
-            # img_data = io.BytesIO()
-            # fig.savefig(img_data, format="png", bbox_inches="tight")
-            # img_data.seek(0)
-            # save_bytes_s3(img_data, filepath)
+            # pass
+            img_data = io.BytesIO()
+            fig.savefig(img_data, format="png", bbox_inches="tight")
+            img_data.seek(0)
+            save_bytes_s3(img_data, filepath)
         else:
             os.makedirs(base_dir, exist_ok=True)
             fig.savefig(filepath, dpi=80, bbox_inches="tight")
