@@ -26,10 +26,23 @@ jobs:
   get-version:
     name: Extract Package Version
     uses: ./.github/workflows/get-version.yaml
+    
+  check-version-exists:
+    name: Check Version Status
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show warning if version already exists
+        if: needs.get-version.outputs.is_new_version != 'true'
+        run: |
+          echo "::warning::Version ${{ needs.get-version.outputs.version }} already exists as a tag."
+          echo "::warning::Consider updating the version in hecstac/version.py for better tracking."
+      - name: Version check complete
+        run: echo "Proceeding with dev deployment for version ${{ needs.get-version.outputs.version }}"
 
   docker-build-push:
     name: Build and Push Docker Image
-    needs: [python-build, get-version]
+    needs: [python-build, get-version, check-version-exists]
     uses: ./.github/workflows/docker-build.yaml
     with:
       push_to_registry: true

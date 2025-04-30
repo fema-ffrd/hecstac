@@ -6,14 +6,20 @@ on:
       version:
         description: "The version string extracted from hecstac.__version__"
         value: ${{ jobs.get-version.outputs.version }}
+      is_new_version:
+        description: "Whether this version is new (not previously tagged)"
+        value: ${{ jobs.get-version.outputs.is_new_version }}
 
 jobs:
   get-version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.VERSION }}
+      is_new_version: ${{ steps.check_tag.outputs.IS_NEW_VERSION }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -22,7 +28,17 @@ jobs:
           
       - name: Extract version from hecstac
         id: get_version
-        shell: pwsh
         run: |
-          $version = python -c "import hecstac; print(hecstac.__version__);"
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          VERSION=$(python -c "import hecstac; print(hecstac.__version__)")
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+      
+      - name: Check if version exists as tag
+        id: check_tag
+        run: |
+          if git tag | grep -q "v${{ steps.get_version.outputs.VERSION }}"; then
+            echo "Version ${{ steps.get_version.outputs.VERSION }} already exists as a tag."
+            echo "IS_NEW_VERSION=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version ${{ steps.get_version.outputs.VERSION }} does not exist as a tag."
+            echo "IS_NEW_VERSION=true" >> "$GITHUB_OUTPUT"
+          fi
