@@ -14,8 +14,6 @@ from shapely.geometry import LineString, MultiPoint, Point
 from hecstac.common.logger import get_logger
 
 
-
-
 def find_model_files(ras_prj: str) -> list[str]:
     # TODO: Add option to recursively iterate through all subdirectories in a model folder.
     """Find all files with the same base name and return absolute paths."""

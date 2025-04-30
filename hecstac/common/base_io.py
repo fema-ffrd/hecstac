@@ -7,10 +7,13 @@ from urllib.parse import urlparse
 from hecstac.common.logger import get_logger
 import obstore
 
+
 class ModelFileReaderError(Exception):
     """Return Model read error."""
 
     pass
+
+
 class ModelFileReader:
     """A class to read model files from either the local file system or an S3 bucket."""
 
@@ -47,7 +50,11 @@ class ModelFileReader:
             self.path = key
             try:
                 self.content = (
-                    obstore.open_reader(self.store, self.path).readall().to_bytes().decode("utf-8").replace("\r\n", "\n")
+                    obstore.open_reader(self.store, self.path)
+                    .readall()
+                    .to_bytes()
+                    .decode("utf-8")
+                    .replace("\r\n", "\n")
                 )
             except UnicodeDecodeError as e:
                 error_msg = f"Error parsing {self.path}: {e}"

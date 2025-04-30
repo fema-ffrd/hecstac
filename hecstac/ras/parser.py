@@ -68,8 +68,6 @@ class CachedFile:
         self.file_lines = self.model_file.content.splitlines()
 
 
-
-
 class River:
     """HEC-RAS River."""
 
