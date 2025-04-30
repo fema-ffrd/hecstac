@@ -1,7 +1,7 @@
 # hecstac
-[![CI](https://github.com/fema-ffrd/hecstac/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/fema-ffrd/hecstac/actions/workflows/ci.yaml)
+[![CI](https://github.com/fema-ffrd/hecstac/actions/workflows/main-push.yaml/badge.svg?branch=main)](https://github.com/fema-ffrd/hecstac/actions/workflows/main-push.yaml)
+[![Dev CI](https://github.com/fema-ffrd/hecstac/actions/workflows/dev-push.yaml/badge.svg?branch=dev)](https://github.com/fema-ffrd/hecstac/actions/workflows/dev-push.yaml)
 [![Documentation Status](https://readthedocs.org/projects/hecstac/badge/?version=latest)](https://hecstac.readthedocs.io/en/latest/?badge=latest)
-[![Release](https://github.com/fema-ffrd/hecstac/actions/workflows/release.yaml/badge.svg)](https://github.com/fema-ffrd/hecstac/actions/workflows/release.yaml)
 [![PyPI version](https://badge.fury.io/py/hecstac.svg)](https://badge.fury.io/py/hecstac)
 
 Utilities for creating STAC items from HEC models
