@@ -291,7 +291,7 @@ def reverse(geometry, **kwargs):
     ----------
     geometry : Geometry or array_like
     **kwargs
-        See :ref:`NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
+        See `NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
 
     See Also
     --------
