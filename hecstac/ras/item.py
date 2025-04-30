@@ -300,12 +300,17 @@ class RASModelItem(Item):
 
     def add_asset(self, key, asset):
         """Subclass asset then add, eagerly load metadata safely."""
+        logger = get_logger(__name__)
         subclass = self.factory.asset_from_dict(asset)
         if subclass is None:
             return
 
         # Eager load extra fields
-        _ = subclass.extra_fields
+        try:
+            _ = subclass.extra_fields
+        except Exception as e:
+            logger.error(f"Failure reading {key}: {e}")
+            return
 
         # Safely load file only if __file_class__ is not None
         if getattr(subclass, "__file_class__", None) is not None:

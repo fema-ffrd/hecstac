@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
-
+from hecstac.common.logger import get_logger
 import obstore
 
 
@@ -21,15 +21,18 @@ class ModelFileReader:
             store : obstore.store.ObjectStore, optional
                 The obstore file system object. If not provided, it will use the S3 store.
         """
+        self.logger = get_logger(__name__)
+
         if os.path.exists(path):
             self.local = True
             self.store = None
             self.path = Path(path)
             self.content = open(self.path, "r").read()
-            # self.logger = get_logger(__name__)
+            self.logger.debug(path)
 
         else:
             self.local = False
+            self.logger.debug(path)
             parsed = urlparse(str(path))
             if parsed.scheme != "s3":
                 raise ValueError(f"Expected S3 path, got: {path}")
