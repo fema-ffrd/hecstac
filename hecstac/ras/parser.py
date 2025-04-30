@@ -63,12 +63,10 @@ class CachedFile:
         self._initialized = True
         self.logger = get_logger(__name__)
         self.fpath = fpath
-        try:
-            self.model_file = ModelFileReader(self.fpath)
-            self.file_lines = self.model_file.content.splitlines()
-            self.logger.info(f"Reading: {self.fpath}")
-        except Exception as e:
-            raise (f"Unexpected error: {e}")
+        self.logger.info(f"Reading: {self.fpath}")
+        self.model_file = ModelFileReader(self.fpath)
+        self.file_lines = self.model_file.content.splitlines()
+
 
 
 

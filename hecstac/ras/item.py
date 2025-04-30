@@ -13,7 +13,7 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.utils import datetime_to_str
 from shapely import Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
-
+from hecstac.common.base_io import ModelFileReaderError
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.logger import get_logger
 from hecstac.common.path_manager import LocalPathManager
@@ -308,8 +308,8 @@ class RASModelItem(Item):
         # Eager load extra fields
         try:
             _ = subclass.extra_fields
-        except Exception as e:
-            logger.error(f"Failure reading {key}: {e}")
+        except ModelFileReaderError as e:
+            logger.error(e)
             return
 
         # Safely load file only if __file_class__ is not None
