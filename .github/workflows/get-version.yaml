@@ -1,0 +1,28 @@
+name: Get Version
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: "The version string extracted from hecstac.__version__"
+        value: ${{ jobs.get-version.outputs.version }}
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Extract version from hecstac
+        id: get_version
+        shell: pwsh
+        run: |
+          $version = python -c "import hecstac; print(hecstac.__version__);"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
