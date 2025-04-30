@@ -9,6 +9,7 @@ import obstore
 
 class ModelFileReaderError(Exception):
     """Return Model read error."""
+
     pass
 class ModelFileReader:
     """A class to read model files from either the local file system or an S3 bucket."""
