@@ -1,42 +1,68 @@
-name: Main Branch
+name: Main Branch Push
 
 on:
   push:
     branches: [ "main" ]
     paths:
       - 'hecstac/**'
+      - 'tests/**'
       - 'Dockerfile'
       - '.dockerignore'
+      - '.github/workflows/**'
+      - 'pyproject.toml'
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
-  get-version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.VERSION }}
-    steps:
-      - uses: actions/checkout@v4
+  python-build:
+    name: Python Build and Test
+    uses: ./.github/workflows/python-build.yaml
+    with:
+      run_tests: false
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          
-      - name: Extract version from hecstac
-        id: get_version
-        shell: pwsh
+  get-version:
+    name: Extract Package Version
+    uses: ./.github/workflows/get-version.yaml
+    
+  check-version-exists:
+    name: Verify Version is New
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if version already exists
+        if: needs.get-version.outputs.is_new_version != 'true'
         run: |
-          $version = python -c "import hecstac; print(hecstac.__version__);"
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          echo "::error::ERROR: Version ${{ needs.get-version.outputs.version }} already exists as a tag."
+          echo "::error::Please update the version in hecstac/version.py before releasing to main."
+          exit 1
+      - name: Version check passed
+        run: echo "Version ${{ needs.get-version.outputs.version }} is new. Proceeding with release."
 
   docker-build-push:
-    needs: get-version
+    name: Build and Push Docker Image
+    needs: [python-build, get-version, check-version-exists]
     uses: ./.github/workflows/docker-build.yaml
     with:
       push_to_registry: true
       version: ${{ needs.get-version.outputs.version }}
       branch: 'main'
       platforms: 'linux/amd64'
+
+  pypi-publish:
+    name: Publish to PyPI
+    needs: [python-build, get-version, check-version-exists]
+    uses: ./.github/workflows/pypi-publish.yaml
+    with:
+      version: ${{ needs.get-version.outputs.version }}
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+  github-release:
+    name: Create GitHub Release
+    needs: [python-build, pypi-publish, get-version, check-version-exists]
+    uses: ./.github/workflows/github-release.yaml
+    with:
+      version: ${{ needs.get-version.outputs.version }}
