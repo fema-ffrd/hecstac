@@ -50,6 +50,7 @@ pandas==2.2.3
 pillow==11.2.1
 propcache==0.3.1
 pyarrow==20.0.0
+pydata_sphinx_theme
 Pygments==2.19.1
 pyogrio==0.10.0
 pyparsing==3.2.3
