@@ -13,8 +13,6 @@ from shapely.geometry import LineString, MultiPoint, Point
 
 from hecstac.common.logger import get_logger
 
-logger = get_logger(__name__)
-
 
 def find_model_files(ras_prj: str) -> list[str]:
     # TODO: Add option to recursively iterate through all subdirectories in a model folder.
@@ -39,7 +37,9 @@ def search_contents(
     lines: list[str], search_string: str, token: str = "=", expect_one: bool = True, require_one: bool = True
 ) -> list[str] | str:
     """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
+    logger = get_logger(__name__)
     results = []
+    # logger.debug(lines)
     for line in lines:
         if f"{search_string}{token}" in line:
             results.append(line.split(token)[1])
@@ -159,6 +159,7 @@ def delimited_pairs_to_lists(lines: list[str]) -> tuple[list[float], list[float]
 
 def check_xs_direction(cross_sections: gpd.GeoDataFrame, reach: LineString):
     """Return only cross sections that are drawn right to left looking downstream."""
+    logger = get_logger(__name__)
     river_reach_rs = []
     for _, xs in cross_sections.iterrows():
         try:
@@ -291,7 +292,7 @@ def reverse(geometry, **kwargs):
     ----------
     geometry : Geometry or array_like
     **kwargs
-        See :ref:`NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
+        See `NumPy ufunc docs <ufuncs.kwargs>` for other keyword arguments.
 
     See Also
     --------

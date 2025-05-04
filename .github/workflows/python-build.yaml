@@ -1,35 +1,28 @@
-name: CI
+name: Python Build
 
 on:
-  push:
-    branches: [ "main", "dev" ]
-    paths:
-      - 'hecstac/**'
-      - 'tests/**'
-  pull_request:
-    branches: [ "main", "dev" ]
-    paths:
-      - 'hecstac/**'
-      - 'tests/**'
-  workflow_dispatch:
-
+  workflow_call:
+    inputs:
+      run_tests:
+        type: boolean
+        default: true
+        required: false
+        description: "Whether to run tests"
+      python_versions:
+        type: string
+        default: '["3.10", "3.11", "3.12"]'
+        required: false
+        description: "JSON array of Python versions to test against"
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-
+    name: Build and Test
     strategy:
       matrix:
-        python-version:
-          - "3.10"
-          - "3.11"
-          - "3.12"
+        python-version: ${{ fromJson(inputs.python_versions) }}
         os: ["ubuntu-latest"]
 
     runs-on: ${{ matrix.os }}
@@ -59,7 +52,7 @@ jobs:
         ruff check .
         ruff format --check
 
-    # - name: Run tests with coverage
-    #   run: |
-    #     pytest tests/conflation_tests.py
-    #     pytest tests/read_ras_files_tests.py
+    - name: Run tests
+      if: inputs.run_tests
+      run: |
+        pytest tests/

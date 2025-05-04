@@ -61,12 +61,11 @@ class CachedFile:
         if hasattr(self, "_initialized") and self._initialized:
             return
         self._initialized = True
-
+        self.logger = get_logger(__name__)
         self.fpath = fpath
+        self.logger.info(f"Reading: {self.fpath}")
         self.model_file = ModelFileReader(self.fpath)
         self.file_lines = self.model_file.content.splitlines()
-        self.logger = get_logger(__name__)
-        self.logger.info(f"Reading: {self.fpath}")
 
 
 class River:

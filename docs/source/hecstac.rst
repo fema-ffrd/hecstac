@@ -11,7 +11,6 @@ Subpackages
    hecstac.events
    hecstac.hms
    hecstac.ras
-   hecstac.utils
 
 Submodules
 ----------

@@ -1,0 +1,73 @@
+name: PyPI Publish
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: "Version to publish to PyPI"
+    secrets:
+      PYPI_TOKEN:
+        required: true
+        description: "PyPI API token for authentication"
+
+jobs:
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Check if version exists on PyPI
+        id: check_pypi
+        run: |
+          # Install tools to check PyPI
+          pip install requests
+          
+          # Check if version exists on PyPI
+          VERSION_EXISTS=$(python -c "
+          import requests
+          import json
+          try:
+              response = requests.get('https://pypi.org/pypi/hecstac/json')
+              if response.status_code == 200:
+                  data = response.json()
+                  if '${{ inputs.version }}' in data.get('releases', {}):
+                      print('true')
+                  else:
+                      print('false')
+              else:
+                  print('false')  # Assume not exists if can't reach PyPI
+          except Exception:
+              print('false')  # Handle any errors
+          ")
+          
+          if [ "$VERSION_EXISTS" = "true" ]; then
+            echo "ERROR: Version ${{ inputs.version }} already exists on PyPI. Cannot publish duplicate version."
+            exit 1
+          else
+            echo "Version ${{ inputs.version }} does not exist on PyPI. Proceeding with publication."
+          fi
+          
+      - name: Install publishing dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+          
+      - name: Build wheel and source distribution
+        run: python -m build
+        
+      - name: List dist directory contents
+        run: dir dist
+        
+      - name: Publish package
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: python -m twine upload dist/*
