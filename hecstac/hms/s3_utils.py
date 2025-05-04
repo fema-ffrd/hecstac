@@ -79,8 +79,8 @@ def split_s3_key(s3_path: str) -> tuple[str, str]:
     The function performs the following steps:
         1. Removes the 's3://' prefix from the S3 path.
         2. Splits the remaining string on the first '/' character.
-        3. Returns the first part as the bucket name and the second part as the key. If there is no '/', the key will
-          be None.
+        3. Returns the first part as the bucket name and the second part as the key. If there is no '/', the key will be None.
+
     """
     if not s3_path.startswith("s3://"):
         raise ValueError(f"s3_path does not start with s3://: {s3_path}")
