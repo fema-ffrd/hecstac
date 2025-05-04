@@ -18,13 +18,7 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir --upgrade pip
 
-# clone and build rasqc && hecstac
-RUN git clone https://github.com/fema-ffrd/rasqc.git && \
-    cd rasqc/ && \
-    git checkout feature/stac-checker && \
-    pip install --no-cache-dir build && \
-    python -m build
-
+# clone and build hecstac
 COPY . /app/hecstac/
 RUN cd /app/hecstac/ && \
     pip install --no-cache-dir build && \
@@ -44,14 +38,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# copy wheels from build stage
-COPY --from=build /app/rasqc/dist/rasqc-0.0.1rc1-py3-none-any.whl /app/
+# copy & install wheel from build stage
 COPY --from=build /app/hecstac/dist/hecstac-*-py3-none-any.whl /app/
-
-# install wheels
-RUN pip install --no-cache-dir \
-    /app/rasqc-0.0.1rc1-py3-none-any.whl \
-    /app/hecstac-*-py3-none-any.whl
+RUN pip install --no-cache-dir /app/hecstac-*-py3-none-any.whl
 
 RUN rm -rf *.whl
 COPY --from=build /app/hecstac/workflows /app
