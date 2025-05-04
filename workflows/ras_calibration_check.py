@@ -6,6 +6,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
+from openpyxl.utils.exceptions import IllegalCharacterError
 
 from hecstac.common.logger import get_logger, initialize_logger
 from hecstac.common.s3_utils import init_s3_resources
@@ -110,6 +111,11 @@ def main(config: dict):
 
     except RASModelCalibrationError as e:
         raise
+    except IllegalCharacterError as e:
+        logger.error(
+            f"Unable to create calibration report, please review ras file contents and fix non-ascii characters: {e}"
+        )
+        raise
     except KeyError as e:
         logger.error(f"Missing required config key: {e}")
         raise
@@ -142,7 +148,6 @@ if __name__ == "__main__":
             except RASModelCalibrationError as e:
                 continue
             except Exception as e:
-                logger.exception(f"Unexpected error processing config {idx}: {e}")
                 continue
 
     except Exception as e:

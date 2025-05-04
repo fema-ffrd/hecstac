@@ -13,7 +13,7 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.utils import datetime_to_str
 from shapely import Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
-
+from hecstac.common.base_io import ModelFileReaderError
 from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.logger import get_logger
 from hecstac.common.path_manager import LocalPathManager
@@ -300,12 +300,17 @@ class RASModelItem(Item):
 
     def add_asset(self, key, asset):
         """Subclass asset then add, eagerly load metadata safely."""
+        logger = get_logger(__name__)
         subclass = self.factory.asset_from_dict(asset)
         if subclass is None:
             return
 
         # Eager load extra fields
-        _ = subclass.extra_fields
+        try:
+            _ = subclass.extra_fields
+        except ModelFileReaderError as e:
+            logger.error(e)
+            return
 
         # Safely load file only if __file_class__ is not None
         if getattr(subclass, "__file_class__", None) is not None:
