@@ -14,13 +14,13 @@ from dotenv import load_dotenv
 from hecstac.common.logger import initialize_logger, get_logger
 from hecstac.events.ffrd import FFRDEventItem
 
-def download_if_s3(fpath: str, dest_dir: str = "tmp_downloads") -> str:
+def download_if_s3(fpath: str) -> str:
     if fpath.startswith("s3://"):
         load_dotenv(override=True)
         fs = s3fs.S3FileSystem(key=os.getenv("AWS_ACCESS_KEY_ID"), secret=os.getenv("AWS_SECRET_ACCESS_KEY"))
-        local_dir = Path(dest_dir)
-        local_dir.mkdir(parents=True, exist_ok=True)
+        local_dir = Path()
         local_path = local_dir / Path(fpath).name
+        print(local_path)
 
         fs.get(fpath, str(local_path))
 
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     try:
         ras_model_path, ras_simulation_path = parse_args()
 
-        ras_source_model_item = Item.from_file(ras_model_path)
+        ras_source_model_item = Item.from_file(download_if_s3(ras_model_path))
         ras_simulation_file = download_if_s3(ras_simulation_path)
 
         # Event Info
