@@ -1,30 +1,23 @@
 """Creates a STAC Item from an event."""
 
 import os
-from typing import List
-
-import pandas as pd
-import geopandas as gpd
+from typing import List, Tuple
+from pathlib import Path
+import argparse
 import s3fs
+import pandas as pd
 from rashdf import RasPlanHdf
 from rashdf.plan import RasPlanHdfError
-from pystac import Asset, MediaType
-from pystac import Item
+from pystac import Asset, MediaType, Item
 from dotenv import load_dotenv
-from pystac import Item
 
-from hecstac.common.logger import initialize_logger
+from hecstac.common.logger import initialize_logger, get_logger
 from hecstac.events.ffrd import FFRDEventItem
 
-from pathlib import Path
-
-load_dotenv()
-fs = s3fs.S3FileSystem(key=os.getenv("AWS_ACCESS_KEY_ID"), secret=os.getenv("AWS_SECRET_ACCESS_KEY"))
-
-
 def download_if_s3(fpath: str, dest_dir: str = "tmp_downloads") -> str:
-    """."""
     if fpath.startswith("s3://"):
+        load_dotenv(override=True)
+        fs = s3fs.S3FileSystem(key=os.getenv("AWS_ACCESS_KEY_ID"), secret=os.getenv("AWS_SECRET_ACCESS_KEY"))
         local_dir = Path(dest_dir)
         local_dir.mkdir(parents=True, exist_ok=True)
         local_path = local_dir / Path(fpath).name
@@ -37,6 +30,7 @@ def download_if_s3(fpath: str, dest_dir: str = "tmp_downloads") -> str:
     return str(Path(fpath).resolve())
 
 def ref_lines_ts(plan_hdf: RasPlanHdf, model_name: str) -> pd.DataFrame:
+    """Extracts ref line time series data from a RasPlanHdf file"""
     rl_ts_data = []
     rl_ts_ds = plan_hdf.reference_lines_timeseries_output()
     for time in rl_ts_ds.time.values:
@@ -54,6 +48,7 @@ def ref_lines_ts(plan_hdf: RasPlanHdf, model_name: str) -> pd.DataFrame:
     return pd.DataFrame(rl_ts_data)
 
 def ref_points_ts(plan_hdf: RasPlanHdf, model_name: str) -> pd.DataFrame:
+    """Extracts ref point time series data from a RasPlanHdf file"""
     rl_ts_data = []
     rl_ts_ds = plan_hdf.reference_points_timeseries_output()
     for time in rl_ts_ds.time.values:
@@ -68,47 +63,39 @@ def ref_points_ts(plan_hdf: RasPlanHdf, model_name: str) -> pd.DataFrame:
                 'velocity': velocity.item(),
                 'water_surface': wsel.item(),
             })
-    return pd.DataFrame(rl_ts_data) 
+    return pd.DataFrame(rl_ts_data)
 
-if __name__ == "__main__":
-    initialize_logger()
+def parse_args() -> Tuple[str, List[str]]:
+    parser = argparse.ArgumentParser(description="Create STAC Item(s) for FFRD Events.")
+    parser.add_argument("ras_model_path", type=str, help="Path to a RAS source model item JSON file.")
+    parser.add_argument("ras_simulation_path", type=str, help="Path to a RAS simulation plan HDF file.")
 
-    # HMS Info
-    # hms_source_model_item_path = "C:\\Users\\sjanke\\Code\\hecstac\\Trinity_1203_EFT_RayRoberts\\Trinity_1203_EFT_RayRoberts.json"
-    # hms_source_model_item = Item.from_file(hms_source_model_item_path)
+    args = parser.parse_args()
 
-    # RAS Info
-    ras_source_model_item_path = (
-        "C:\\Users\\sjanke\\Code\\hecstac\\Trinity_1203_EFT_RayRoberts\\Trinity_1203_EFT_RayRoberts.json"
-    )
+    return (args.ras_model_path, args.ras_simulation_path)
 
-    ras_source_model_item = Item.from_file(ras_source_model_item_path)
-    ras_simulation_files = [
-        "s3://trinity-pilot/Checkpoint1-ModelsForReview/Hydraulics/EFT-RayRoberts/Model/Trinity_1203_EFT_RayRoberts.p02.hdf"
-    ]
-    local_ras_simulation_files = [download_if_s3(f) for f in ras_simulation_files]
-
-    # Event Info
-    realization = "R01"
-    block_group = "BG01"
-    event_id = "E01"
-
-    ffrd_event_item_id = f"{realization}-{block_group}-{event_id}"
-    dest_href = f"..\\{ffrd_event_item_id}.json"
-
+def create_ffrd_item(
+        destination_path: str,
+        ras_source_model_item: Item,
+        ras_simulation_file: str,
+        realization: str,
+        block_group: str,
+        event_id: str
+    ):
+    """Creates an FFRD STAC Item and attaches ref line and ref point time series parquets as assets to the item"""
     ffrd_event_item = FFRDEventItem(
         realization=realization,
         block_group=block_group,
         event_id=event_id,
         source_model_items=[ras_source_model_item],
-        ras_simulation_files=local_ras_simulation_files,
+        ras_simulation_files=ras_simulation_file,
     )
 
-    ref_lines_path = "..\\ref_lines.parquet"
-    ref_points_path = "..\\ref_points.parquet"
-    bc_lines_path = "..\\bc_lines.parquet"
+    ref_lines_path = "ref_lines.parquet"
+    ref_points_path = "ref_points.parquet"
+    bc_lines_path = "bc_lines.parquet"
 
-    with (RasPlanHdf(ras_simulation_files) as ras_plan_hdf):
+    with (RasPlanHdf(ras_simulation_file) as ras_plan_hdf):
         try:
             df = ref_lines_ts(ras_plan_hdf, "RayRoberts")
             df.to_parquet(ref_lines_path, engine="pyarrow")
@@ -119,10 +106,7 @@ if __name__ == "__main__":
                 media_type=MediaType.PARQUET,
                 roles="rashdf"
             ))
-        except RasPlanHdfError as e:
-            print(e)
 
-        try:
             df = ref_points_ts(ras_plan_hdf, "RayRoberts")
             df.to_parquet(ref_points_path, engine="pyarrow")
             ffrd_event_item.add_asset("reference_points", Asset(
@@ -135,6 +119,25 @@ if __name__ == "__main__":
         except RasPlanHdfError as e:
             print(e)
 
-    ffrd_event_item.save_object(dest_href=dest_href)
+    ffrd_event_item.save_object(dest_href=destination_path)
 
-# reference points, boundary conditions
+if __name__ == "__main__":
+    initialize_logger()
+    logger = get_logger("main")
+    try:
+        ras_model_path, ras_simulation_path = parse_args()
+
+        ras_source_model_item = Item.from_file(ras_model_path)
+        ras_simulation_file = download_if_s3(ras_simulation_path)
+
+        # Event Info
+        realization = "R01"
+        block_group = "BG01"
+        event_id = "E01"
+
+        dest_href = f"{realization}-{block_group}-{event_id}.json"
+
+        create_ffrd_item(dest_href, ras_source_model_item, ras_simulation_file, realization, block_group, event_id)
+    except Exception as e:
+        logger.exception(f"Fatal error during initialization or processing: {e}")
+    
