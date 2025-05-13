@@ -21,6 +21,7 @@ from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import save_bytes_s3
 from hecstac.ras.consts import NULL_GEOMETRY
+from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
     GeometryFile,
     GeometryHDFFile,
@@ -308,12 +309,25 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         asset.roles = ["thumbnail", "image/png"]
         return asset
 
+    def _add_geopackage_asset(self, filepath: str) -> None:
+        """Add the geometry geopackage as an asset with a relative href."""
+        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+            raise FileNotFoundError(f"Geopackage file not found: {filepath}")
+
+        asset = GenericAsset(
+            href=filepath,
+            title=filepath.split("/")[-1],
+            description="GeoPackage file with geometry data extracted from .gxx file.",
+        )
+        asset.roles = ["RAS-GEOMETRY-GPKG", "APPLICATION/GEOPACKAGE+SQLITE3"]
+        return asset
+
     def thumbnail(
         self,
         layers: list,
         title: str = "Model_Thumbnail",
         thumbnail_dest: str = None,
-    ):
+    ) -> str:
         """Create a thumbnail figure for a geometry file."""
         # Set up figure
         map_layers = []
@@ -337,6 +351,30 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
         # Add asset and return
         return self._add_thumbnail_asset(filepath)
+
+    def geopackage(self, dst: str, metadata: dict) -> str:
+        """Make a geopackage for a geometry file."""
+        n_reaches = len(self.file.reaches)
+        n_cross_sections = len(self.file.cross_sections)
+        if n_reaches == 0 or n_cross_sections == 0:
+            raise Invalid1DGeometryError(f"{self.href} had {n_reaches} reaches and {n_cross_sections} cross-sections")
+
+        file_ext = os.path.basename(self.href).split(".")[-1]
+        filename = f"geopackage_{file_ext}.gpkg"  # TODO: bad name bc they all come in to QGIS with same name.
+        filepath = os.path.join(dst, filename)
+
+        layers = {
+            "River": self.file.reach_gdf,
+            "XS": self.file.xs_gdf,
+            "Junction": self.file.junction_gdf,
+            "Structure": self.file.structures_gdf,
+            "metadata": metadata,
+            "XS_concave_hull": self.file.concave_hull_gdf,
+        }
+        for l in layers:
+            if layers[l] is not None:
+                layers[l].set_crs(self.crs).to_file(filepath, layer=l)
+        return self._add_geopackage_asset(filepath)
 
 
 class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):

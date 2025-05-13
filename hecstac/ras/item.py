@@ -20,7 +20,15 @@ from hecstac.common.asset_factory import AssetFactory
 from hecstac.common.base_io import ModelFileReaderError
 from hecstac.common.logger import get_logger
 from hecstac.common.path_manager import LocalPathManager
-from hecstac.ras.assets import RAS_EXTENSION_MAPPING, GeometryAsset, GeometryHdfAsset, ProjectAsset
+from hecstac.ras.assets import (
+    RAS_EXTENSION_MAPPING,
+    GeometryAsset,
+    GeometryHdfAsset,
+    PlanAsset,
+    QuasiUnsteadyFlowAsset,
+    SteadyFlowAsset,
+    UnsteadyFlowAsset,
+)
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files
@@ -122,6 +130,11 @@ class RASModelItem(Item):
         """Return any RasGeomHdf in assets."""
         return [a for a in self.assets.values() if isinstance(a, (GeometryHdfAsset, GeometryAsset))]
 
+    @cached_property
+    def plan_assets(self) -> list[PlanAsset]:
+        """Return any RasGeomHdf in assets."""
+        return [a for a in self.assets.values() if isinstance(a, PlanAsset)]
+
     @property
     def crs(self) -> CRS:
         """Get the authority code for the model CRS."""
@@ -148,15 +161,14 @@ class RASModelItem(Item):
             self._geometry_cached = NULL_STAC_GEOMETRY
             return self._geometry_cached
 
-        hdf_geom_assets = [asset for asset in self.geometry_assets if isinstance(asset, GeometryHdfAsset)]
-        if len(hdf_geom_assets) == 0:
-            logger.error("No geometry found for RAS item.")
+        if len(self.geometry_assets) == 0:
+            self.logger.error("No geometry found for RAS item.")
             self._geometry_cached = NULL_STAC_GEOMETRY
             return self._geometry_cached
 
         geometries = []
-        for i in hdf_geom_assets:
-            logger.debug(f"Processing geometry from {i.href}")
+        for i in self.geometry_assets:
+            self.logger.debug(f"Processing geometry from {i.href}")
             try:
                 geometries.append(i.geometry_wgs84)
             except Exception as e:
@@ -275,6 +287,97 @@ class RASModelItem(Item):
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
+
+    def add_model_geopackages(self, local_dst=None, s3_dst=None):
+        """Generate model geopackage asset for each geometry file.
+
+        Parameters
+        ----------
+        local_dst : str, optional
+            Directory for created geopackages. If None then geopackages will be exported to same level as the item.
+        s3_dst : str, optional
+            S3 prefix for created geopackages. If None then geopackages will be exported to same level as the item.
+        """
+        if local_dst:
+            dst = local_dst
+        elif s3_dst:
+            dst = s3_dst
+        else:
+            self.logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
+            dst = os.path.dirname(self.self_href)
+
+        for geom in self.geometry_assets:
+            # TODO: Implement hdf geopackages.
+            if isinstance(geom, GeometryAsset):
+                self.logger.info(f"Writing: {dst}")
+                self.assets[f"{geom.href.rsplit('/')[-1]}_geopackage"] = geom.geopackage(dst, self.gpkg_metadata)
+
+    @property
+    def _primary_plan(self) -> PlanAsset:
+        """Primary plan for use in Ripple1D."""  # TODO: develop test for this logic. easily tested
+        if len(self.plan_assets) == 0:
+            return None
+        elif len(self.plan_assets) == 1:
+            return self.plan_assets[0]
+
+        candidate_plans = [i for i in self.plan_assets if not i.file.is_encroached]
+
+        if len(candidate_plans) > 1:
+            cur_plan = [i for i in candidate_plans if i.name == self.pf.plan_current]
+            if len(cur_plan) == 0:
+                return cur_plan
+            else:
+                return candidate_plans[0]
+        elif len(candidate_plans) == 0:
+            return self.plan_assets[0]
+        else:
+            return candidate_plans[0]
+
+    @property
+    def _primary_flow(self) -> SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset:
+        """Flow asset listed in the primary plan."""
+        for i in self.assets:
+            if isinstance(i, (SteadyFlowAsset, UnsteadyFlowAsset, QuasiUnsteadyFlowAsset)):
+                if i.name == self._primary_plan.file.flow_file:
+                    return i
+        return None
+
+    @property
+    def _primary_geometry(self) -> GeometryAsset:
+        """Geometry asset listed in the primary plan."""
+        for i in self.assets:
+            if isinstance(i, GeometryAsset):
+                if i.name == self._primary_plan.file.geometry_file:
+                    return i
+        return None
+
+    def gpkg_metadata(self) -> dict:
+        """Generate metadata for the geopackage metadata table."""
+        metadata = {}
+        metadata["plans_files"] = "\n".join([i.name for i in self.assets if isinstance(i, PlanAsset)])
+        metadata["geom_files"] = "\n".join([i.name for i in self.geometry_assets])
+        metadata["steady_flow_files"] = "\n".join([i.name for i in self.assets if isinstance(i, SteadyFlowAsset)])
+        metadata["unsteady_flow_files"] = "\n".join([i.name for i in self.assets if isinstance(i, UnsteadyFlowAsset)])
+        metadata["ras_project_file"] = self.ras_project_file
+        metadata["ras_project_title"] = self.pf.project_title
+        metadata["plans_titles"] = "\n".join([i.title for i in self.assets if isinstance(i, PlanAsset)])
+        metadata["geom_titles"] = "\n".join([i.title for i in self.geometry_assets])
+        metadata["steady_flow_titles"] = "\n".join([i.title for i in self.assets if isinstance(i, SteadyFlowAsset)])
+        metadata["active_plan"] = self.pf.plan_current
+        metadata["primary_plan_file"] = self._primary_plan.name
+        metadata["primary_plan_title"] = self._primary_plan.title
+        metadata["primary_flow_file"] = self._primary_flow.name
+        metadata["primary_geom_file"] = self._primary_geometry.name
+        metadata["primary_geom_title"] = self._primary_geometry.title
+        metadata["primary_flow_title"] = self._primary_flow.title
+        metadata["ras_version"] = self.pf.ras_version
+        metadata["hecstac_version"] = hecstac.__version__
+        if isinstance(self._primary_flow, SteadyFlowAsset):
+            metadata["profile_names"] = self._primary_flow.file.profile_names
+        else:
+            metadata["profile_names"] = None
+        metadata["units"] = self.pf.project_units
+        return metadata
 
     def add_asset(self, key, asset):
         """Subclass asset then add, eagerly load metadata safely."""

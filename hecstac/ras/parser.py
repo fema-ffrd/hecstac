@@ -795,6 +795,11 @@ class PlanFile(CachedFile):
         return search_contents(self.file_lines, "Short Identifier", expect_one=True).strip()
 
     @property
+    def is_encroached(self) -> bool:
+        """Check if any nodes are encroached."""
+        return any(["Encroach Node" in i for i in self.file_lines])
+
+    @property
     def breach_locations(self) -> dict:
         """
         Return breach locations.
@@ -976,7 +981,17 @@ class GeometryFile(CachedFile):
     @property
     def structures_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all structures in the geometry text file."""
-        return gpd.GeoDataFrame(pd.concat([structure.gdf for structure in self.structures.values()], ignore_index=True))
+        if len(self.structures) > 0:
+            return gpd.GeoDataFrame(
+                pd.concat([structure.gdf for structure in self.structures.values()], ignore_index=True)
+            )
+        else:
+            return None
+
+    @property
+    def concave_hull_gdf(self) -> gpd.GeoDataFrame:
+        """Convert shapely convave hull to geopandas."""
+        return gpd.GeoDataFrame({"geometry": [self.concave_hull]}, geometry="geometry")
 
     @property
     @lru_cache
@@ -1096,6 +1111,11 @@ class SteadyFlowFile(CachedFile):
     def n_profiles(self) -> int:
         """Return number of profiles."""
         return int(search_contents(self.file_lines, "Number of Profiles"))
+
+    @property
+    def profile_names(self):
+        """Profile names."""
+        return search_contents(self.contents, "Profile Names").split(",")
 
 
 class UnsteadyFlowFile(CachedFile):
