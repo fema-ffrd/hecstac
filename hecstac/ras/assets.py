@@ -18,6 +18,7 @@ from shapely import MultiPolygon, Polygon
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
+from hecstac.common.s3_utils import save_bytes_s3
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.parser import (
     GeometryFile,
@@ -129,49 +130,6 @@ PROJECT_FILE_NAME = "HEC-RAS:project_file_name"
 GEOMETRY_TITLE = "HEC-RAS:geometry_title"
 UNSTEADY_FLOW_TITLE = "HEC-RAS:unsteady_flow_title"
 PLAN_TITLE = "HEC-RAS:plan_title"
-
-
-def save_bytes_s3(data: io.BytesIO, s3_path: str):
-    """
-    Upload a BytesIO stream to the specified S3 path.
-
-    Args:
-        data: BytesIO object containing the data to upload.
-        s3_path: S3 URI, e.g., 's3://my-bucket/path/to/file.png'
-    """
-    # Parse S3 path
-    parsed = urlparse(s3_path)
-    bucket = parsed.netloc
-    key = parsed.path.lstrip("/")
-
-    # Upload using boto3
-    s3 = boto3.client("s3")
-    s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType="image/png")
-
-
-# class PrjAsset(GenericAsset):
-#     """A helper class to delegate .prj files into RAS project or Projection file classes."""
-
-#     regex_parse_str = r".+\.prj$"
-
-#     def __new__(cls, *args, **kwargs):
-#         """Delegate to Project or Projection asset."""
-#         if cls is PrjAsset:  # Ensuring we don't instantiate Parent directly
-#             href = kwargs.get("href") or args[0]
-#             is_ras = is_ras_prj(href)
-#             if is_ras:
-#                 return ProjectAsset(*args, **kwargs)
-#             else:
-#                 return ProjectionAsset(*args, **kwargs)
-#         return super().__new__(cls)
-
-
-# class ProjectionAsset(GenericAsset):
-#     """A geospatial projection file."""
-
-#     __roles__ = ["projection", MediaType.TEXT]
-#     __description__ = "A geospatial projection file."
-#     __file_class__ = None
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):
