@@ -3,15 +3,67 @@
 import logging
 import os
 from functools import wraps
+from io import BytesIO
 from pathlib import Path
+from typing import Callable
 
+import contextily as ctx
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
+from pyproj import CRS
 from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
 
 from hecstac.common.logger import get_logger
+from hecstac.common.s3_utils import save_bytes_s3
+
+logger = get_logger(__name__)
+
+
+def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str):
+    """Generate a thumbnail and save it."""
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    # Add data
+    legend_handles = []
+    for layer in layers:
+        try:
+            legend_handles += layer(ax)
+        except Exception as e:
+            logger.warning(f"Warning: Failed to process layer '{layer}' for thumbnail at {filepath}: {e}")
+
+    # Add OpenStreetMap basemap
+    try:
+        ctx.add_basemap(
+            ax,
+            crs=crs,
+            source=ctx.providers.OpenStreetMap.Mapnik,
+            alpha=0.4,
+        )
+    except Exception as e:
+        logger.warning(f"Warning: Failed to add basemap for {filepath}: {e}")
+
+    # Formatting
+    ax.set_title(title)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
+    fig.tight_layout()
+
+    # Save
+    if filepath.startswith("s3://"):
+        img_data = BytesIO()
+        fig.savefig(img_data, format="png", bbox_inches="tight")
+        img_data.seek(0)
+        save_bytes_s3(img_data, filepath)
+    else:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        fig.savefig(filepath, dpi=80, bbox_inches="tight")
+
+    # Close fig
+    plt.close(fig)
 
 
 def find_model_files(ras_prj: str) -> list[str]:

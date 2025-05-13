@@ -1,9 +1,12 @@
 """Utilities for S3."""
 
+from __future__ import annotations
+
 import io
 import json
 import os
 import re
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import boto3
@@ -11,7 +14,9 @@ import pandas as pd
 from botocore.config import Config
 
 from hecstac.common.logger import get_logger
-from hecstac.ras.item import RASModelItem
+
+if TYPE_CHECKING:
+    from hecstac.ras.item import RASModelItem
 
 
 def init_s3_resources() -> tuple:

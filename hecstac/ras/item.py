@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import os
 from functools import cached_property
 from pathlib import Path
 
@@ -260,8 +261,8 @@ class RASModelItem(Item):
             thumbnail_dest = s3_thumbnail_dst
 
         else:
-            logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
-            thumbnail_dest = self.self_href
+            self.logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
+            thumbnail_dest = os.path.dirname(self.self_href)
 
         for geom in self.geometry_assets:
             if isinstance(geom, GeometryHdfAsset) and geom.has_2d:
@@ -269,8 +270,11 @@ class RASModelItem(Item):
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
-
-        # TODO: Add 1d model thumbnails
+            elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
+                logger.info(f"Writing: {thumbnail_dest}")
+                self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
+                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
+                )
 
     def add_asset(self, key, asset):
         """Subclass asset then add, eagerly load metadata safely."""

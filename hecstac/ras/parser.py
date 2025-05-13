@@ -775,7 +775,7 @@ class PlanFile(CachedFile):
     @property
     def plan_version(self) -> str:
         """Return program version."""
-        return search_contents(self.file_lines, "Program Version")
+        return search_contents(self.file_lines, "Program Version", require_one=False)
 
     @property
     def geometry_file(self) -> str:
@@ -824,7 +824,7 @@ class GeometryFile(CachedFile):
     @property
     def geom_version(self) -> str:
         """Return program version."""
-        return search_contents(self.file_lines, "Program Version")
+        return search_contents(self.file_lines, "Program Version", require_one=False)
 
     @property
     def geometry_time(self) -> list[datetime.datetime]:
@@ -984,9 +984,9 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]

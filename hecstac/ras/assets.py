@@ -11,6 +11,7 @@ import boto3
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from pystac import MediaType
 from shapely import MultiPolygon, Polygon
@@ -31,7 +32,7 @@ from hecstac.ras.parser import (
     UnsteadyFlowFile,
     UnsteadyHDFFile,
 )
-from hecstac.ras.utils import is_ras_prj
+from hecstac.ras.utils import export_thumbnail, is_ras_prj
 
 logger = get_logger(__name__)
 
@@ -231,6 +232,111 @@ class GeometryAsset(GenericAsset[GeometryFile]):
             return NULL_GEOMETRY
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
+
+    def _plot_river(self, ax: Axes):
+        """Add the river centerline to a pyplot."""
+        c = "#050dd5"
+        self.file.reach_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="River")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color=c,
+                linewidth=2,
+                label="River",
+            )
+        ]
+        return legend_handle
+
+    def _plot_cross_sections(self, ax: Axes):
+        """Add cross-sections to a pyplot."""
+        c = "#5eeb34"
+        self.file.xs_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="XS")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color=c,
+                linewidth=2,
+                label="XS",
+            )
+        ]
+        return legend_handle
+
+    def _plot_junctions(self, ax: Axes):
+        """Add junctions to a pyplot."""
+        c = "#eb344c"
+        self.file.junction_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="Junction")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="none",
+                markerfacecolor=c,
+                markersize=8,
+                label="Junction",
+            )
+        ]
+        return legend_handle
+
+    def _plot_structures(self, ax: Axes):
+        """Add structures to a pyplot."""
+        c = "k"
+        self.file.structures_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="Structure")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color=c,
+                linewidth=2,
+                label="Structure",
+            )
+        ]
+        return legend_handle
+
+    def _add_thumbnail_asset(self, filepath: str) -> None:
+        """Add the thumbnail image as an asset with a relative href."""
+        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+            raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
+
+        asset = GenericAsset(
+            href=filepath,
+            title=filepath.split("/")[-1],
+            description="Thumbnail image for the model",
+        )
+        asset.roles = ["thumbnail", "image/png"]
+        return asset
+
+    def thumbnail(
+        self,
+        layers: list,
+        title: str = "Model_Thumbnail",
+        thumbnail_dest: str = None,
+    ):
+        """Create a thumbnail figure for a geometry file."""
+        # Set up figure
+        map_layers = []
+        for layer in layers:
+            if layer == "River":
+                map_layers.append(self._plot_river)
+            elif layer == "XS":
+                map_layers.append(self._plot_cross_sections)
+            elif layer == "Structure":
+                map_layers.append(self._plot_structures)
+            elif layer == "Junction":
+                map_layers.append(self._plot_junctions)
+
+        title = f"{title} - {os.path.basename(self.href)}"
+        file_ext = os.path.basename(self.href).split(".")[-1]
+        filename = f"thumbnail_{file_ext}.png"
+        filepath = os.path.join(thumbnail_dest, filename)
+
+        # Export
+        export_thumbnail(map_layers, title, self.crs, filepath)
+
+        # Add asset and return
+        return self._add_thumbnail_asset(filepath)
 
 
 class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
@@ -432,9 +538,9 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
 
-    def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
+    def _plot_mesh_areas(self, ax: Axes) -> list[Line2D]:
         """Plot mesh areas on the given axes."""
-        mesh_polygons.plot(
+        self.file.mesh_cells.set_crs(self.crs).plot(
             ax=ax,
             edgecolor="silver",
             facecolor="none",
@@ -454,9 +560,11 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         ]
         return legend_handle
 
-    def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list[Line2D]:
+    def _plot_breaklines(self, ax: Axes) -> list[Line2D]:
         """Plot breaklines on the given axes."""
-        breaklines.plot(ax=ax, edgecolor="black", linestyle="-", alpha=0.3, label="Breaklines")
+        self.file.breaklines.set_crs(self.crs).plot(
+            ax=ax, edgecolor="black", linestyle="-", alpha=0.3, label="Breaklines"
+        )
         legend_handle = [
             Line2D(
                 [0],
@@ -470,8 +578,9 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         ]
         return legend_handle
 
-    def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list[Line2D]:
+    def _plot_bc_lines(self, ax: Axes) -> list[Line2D]:
         """Plot boundary condition lines on the given axes."""
+        bc_lines = self.file.bc_lines.set_crs(self.crs)
         legend_handles = [
             Line2D([0], [0], color="none", linestyle="None", label="BC Lines"),
         ]
@@ -531,55 +640,24 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         thumbnail_dest : str, optional
             Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
         """
-        fig, ax = plt.subplots(figsize=(12, 12))
-        legend_handles = []
-
+        map_layers = []
         for layer in layers:
-            try:
-                if layer == "mesh_areas":
-                    mesh_areas_data = self.file.mesh_cells
-                    mesh_areas_geo = mesh_areas_data.set_crs(self.crs)
-                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_geo)
-                elif layer == "breaklines":
-                    breaklines_data = self.file.breaklines
-                    breaklines_data_geo = breaklines_data.set_crs(self.crs)
-                    legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
-                elif layer == "bc_lines":
-                    bc_lines_data = self.file.bc_lines
-                    bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
-                    legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
-            except Exception as e:
-                logger.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
-
-        # Add OpenStreetMap basemap
-        try:
-            ctx.add_basemap(
-                ax,
-                crs=self.crs,
-                source=ctx.providers.OpenStreetMap.Mapnik,
-                alpha=0.4,
-            )
-        except Exception as e:
-            logger.warning(f"Warning: Failed to add basemap for {self.href}: {e}")
-        ax.set_title(f"{title} - {os.path.basename(self.href)}", fontsize=15)
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
-
+            if layer == "mesh_areas":
+                map_layers.append(self._plot_mesh_areas)
+            elif layer == "breaklines":
+                map_layers.append(self._plot_breaklines)
+            elif layer == "bc_lines":
+                map_layers.append(self._plot_bc_lines)
+            # TODO: Add support for river centerline and cross-sections (from .hdf)
+        title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
         filename = f"thumbnail_{hdf_ext}.png"
-        base_dir = os.path.dirname(thumbnail_dest)
-        filepath = os.path.join(base_dir, filename)
+        filepath = os.path.join(thumbnail_dest, filename)
 
-        if filepath.startswith("s3://"):
-            # pass
-            img_data = io.BytesIO()
-            fig.savefig(img_data, format="png", bbox_inches="tight")
-            img_data.seek(0)
-            save_bytes_s3(img_data, filepath)
-        else:
-            os.makedirs(base_dir, exist_ok=True)
-            fig.savefig(filepath, dpi=80, bbox_inches="tight")
+        # Export
+        export_thumbnail(map_layers, title, self.crs, filepath)
+
+        # Add asset and return
         return self._add_thumbnail_asset(filepath)
 
 
