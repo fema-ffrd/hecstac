@@ -209,6 +209,19 @@ def delimited_pairs_to_lists(lines: list[str]) -> tuple[list[float], list[float]
     return (stations, mannings)
 
 
+def data_triplets_from_text_block(lines: list[str], width: int) -> list[tuple[float]]:
+    """Split lines at given width to get paired data string. Split the string in half and convert to tuple of floats."""
+    pairs = []
+    for line in lines:
+        for i in range(0, len(line), width):
+            x = line[i : int(i + width / 3)]
+            y = line[int(i + width / 3) : int(i + (width * 2 / 3))]
+            z = line[int(i + (width * 2 / 3)) : int(i + (width))]
+            pairs.append((float(x), float(y), float(z)))
+
+    return pairs
+
+
 def check_xs_direction(cross_sections: gpd.GeoDataFrame, reach: LineString):
     """Return only cross sections that are drawn right to left looking downstream."""
     logger = get_logger(__name__)
