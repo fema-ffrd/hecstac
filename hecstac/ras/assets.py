@@ -368,12 +368,12 @@ class GeometryAsset(GenericAsset[GeometryFile]):
             "XS": self.file.xs_gdf,
             "Junction": self.file.junction_gdf,
             "Structure": self.file.structures_gdf,
-            "metadata": metadata,
             "XS_concave_hull": self.file.concave_hull_gdf,
         }
         for l in layers:
             if layers[l] is not None:
                 layers[l].set_crs(self.crs).to_file(filepath, layer=l)
+        gpd.GeoDataFrame(metadata).to_file(filepath, layer="metadata")
         return self._add_geopackage_asset(filepath)
 
 

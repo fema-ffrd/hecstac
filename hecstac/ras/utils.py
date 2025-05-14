@@ -89,9 +89,7 @@ def search_contents(
     lines: list[str], search_string: str, token: str = "=", expect_one: bool = True, require_one: bool = True
 ) -> list[str] | str:
     """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
-    logger = get_logger(__name__)
     results = []
-    # logger.debug(lines)
     for line in lines:
         if f"{search_string}{token}" in line:
             results.append(line.split(token)[1])

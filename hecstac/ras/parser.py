@@ -89,7 +89,6 @@ class XS:
         river: str,
         reach: str,
         reach_geom: LineString = None,
-        units: str = "English",
     ):
         self.ras_data = ras_data
         self.river = river
@@ -99,8 +98,10 @@ class XS:
         self.river_reach_rs_str = f"{river} {reach} {self.river_station_str}"
         self._is_interpolated: bool | None = None
         self.reach_geom: LineString = reach_geom
-        self.computed_channel_reach_length_ratio = self.computed_channel_reach_length / self.channel_reach_length
         self.has_lateral_structures = False
+        self.computed_channel_reach_length = None
+        self.computed_channel_reach_length_ratio = None
+        self.thalweg_drop = None
 
     def split_xs_header(self, position: int):
         """
@@ -238,7 +239,7 @@ class XS:
     @property
     def bank_stations(self) -> list[str]:
         """Bank stations."""
-        return search_contents(self.ras_data, "Bank Sta", expect_one=True).split(",")
+        return search_contents(self.ras_data, "Bank Sta", expect_one=True, require_one=False).split(",")
 
     @property
     def banks_encompass_channel(self):
@@ -254,6 +255,10 @@ class XS:
     def set_computed_reach_length(self, computed_river_station: float):
         """Set the channel reach length computed from the reach/xs/ds_xs geometry."""
         self.computed_channel_reach_length = self.computed_river_station - computed_river_station
+
+    def set_computed_reach_length_ratio(self):
+        """Set the ratio of the computed channel reach length to the model channel reach length."""
+        self.computed_channel_reach_length_ratio = self.computed_channel_reach_length / self.channel_reach_length
 
     @property
     @lru_cache
@@ -336,7 +341,7 @@ class XS:
     @property
     def skew(self):
         """The skew applied to the cross section."""
-        skew = search_contents(self.ras_data, "Skew Angle", expect_one=False)
+        skew = search_contents(self.ras_data, "Skew Angle", expect_one=False, require_one=False)
         if len(skew) == 1:
             return float(skew[0])
         elif len(skew) > 1:
@@ -362,7 +367,7 @@ class XS:
         """The manning's values of the cross section."""
         try:
             lines = text_block_from_start_str_length(
-                "#Mann=" + search_contents(self.ras_data, "#Mann", expect_one=True),
+                "#Mann=" + search_contents(self.ras_data, "#Mann", expect_one=True, require_one=False),
                 math.ceil(self.number_of_mannings_points / 4),
                 self.ras_data,
             )
@@ -379,7 +384,7 @@ class XS:
     @property
     def has_ineffectives(self):
         """A boolean indicating if the cross section contains ineffective flow areas."""
-        ineff = search_contents(self.ras_data, "#XS Ineff", expect_one=False)
+        ineff = search_contents(self.ras_data, "#XS Ineff", expect_one=False, require_one=False)
         if len(ineff) > 0:
             return True
         else:
@@ -388,7 +393,7 @@ class XS:
     @property
     def has_levees(self):
         """A boolean indicating if the cross section contains levees."""
-        levees = search_contents(self.ras_data, "Levee", expect_one=False)
+        levees = search_contents(self.ras_data, "Levee", expect_one=False, require_one=False)
         if len(levees) > 0:
             return True
         else:
@@ -397,7 +402,7 @@ class XS:
     @property
     def has_blocks(self):
         """A boolean indicating if the cross section contains blocked obstructions."""
-        blocks = search_contents(self.ras_data, "#Block Obstruct", expect_one=False)
+        blocks = search_contents(self.ras_data, "#Block Obstruct", expect_one=False, require_one=False)
         if len(blocks) > 0:
             return True
         else:
@@ -458,21 +463,21 @@ class XS:
     @property
     def htab_min_elevation(self):
         """The starting elevation for the cross section's htab."""
-        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False)
+        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
         if len(result) == 1:
             return result[0].split(",")[0]
 
     @property
     def htab_min_increment(self):
         """The increment for the cross section's htab."""
-        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False)
+        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
         if len(result) == 1:
             return result[0].split(",")[1]
 
     @property
     def htab_points(self):
         """The number of points on the cross section's htab."""
-        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False)
+        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
         if len(result) == 1:
             return result[0].split(",")[2]
 
@@ -639,7 +644,6 @@ class XS:
                 "intersects_reach_once": [self.intersects_reach_once],
                 "min_elevation_in_channel": [self.min_elevation_in_channel],
             },
-            crs=self.crs,
             geometry="geometry",
         )
 
@@ -882,7 +886,7 @@ class Structure:
     @lru_cache
     def weir_length(self):
         """The length weir."""
-        if self.type == 6:
+        if self.type == StructureType.LATERAL_STRUCTURE:
             try:
                 return float(list(zip(*self.station_elevation_points))[0][-1])
             except IndexError as e:
@@ -996,20 +1000,30 @@ class Reach:
         return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False)
 
     @property
-    def cross_sections(self) -> dict[str, "XS"]:
+    @lru_cache
+    def cross_sections(self):
         """Cross sections."""
-        cross_sections = {}
+        cross_sections, bridge_xs = [], []
         for header in self.reach_nodes:
             type, _, _, _, _ = header.split(",")[:5]
+
+            if int(type) in [2, 3, 4]:
+                bridge_xs = bridge_xs[:-2] + [4, 3]
             if int(type) != 1:
                 continue
+            if len(bridge_xs) == 0:
+                bridge_xs = [0]
+            else:
+                bridge_xs.append(max([0, bridge_xs[-1] - 1]))
             xs_lines = text_block_from_start_end_str(
                 f"Type RM Length L Ch R ={header}",
                 ["Type RM Length L Ch R", "River Reach"],
                 self.ras_data,
             )
-            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach)
-            cross_sections[cross_section.river_reach_rs] = cross_section
+            cross_sections.append(XS(xs_lines, self.river_reach, self.river, self.reach, self.geom))
+
+        cross_sections = self.add_bridge_xs(cross_sections, bridge_xs)
+        cross_sections = self.compute_multi_xs_variables(cross_sections)
 
         return cross_sections
 
@@ -1092,6 +1106,19 @@ class Reach:
             ds_thalweg = xs.thalweg
         return {xs.river_reach_rs: xs for xs in updated_xs[::-1]}
 
+    @property
+    def geom(self):
+        """Geometry of the reach."""
+        return LineString(self.coords)
+
+    def add_bridge_xs(self, cross_sections, bridge_xs):
+        """Add bridge cross sections attribute to the cross sections."""
+        updated_xs = []
+        for xs, br_xs in zip(cross_sections, bridge_xs):
+            xs.set_bridge_xs(br_xs)
+            updated_xs.append(xs)
+        return updated_xs
+
 
 class Junction:
     """HEC-RAS Junction."""
@@ -1107,12 +1134,12 @@ class Junction:
     @property
     def x(self) -> float:
         """Junction x coordinate."""
-        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0))
+        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0)[0])
 
     @property
     def y(self):
         """Junction y coordinate."""
-        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1))
+        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1)[0])
 
     @property
     def point(self) -> Point:
@@ -1544,7 +1571,7 @@ class GeometryFile(CachedFile):
                 polygons.append(polygon)
         if self.junction_gdf is not None:
             for _, j in self.junction_gdf.iterrows():
-                polygons.append(self.junction_hull(j))
+                polygons.append(self.junction_hull(xs_df, j))
         out_hull = self.clean_polygons(polygons)
         return out_hull
 
@@ -1617,7 +1644,7 @@ class GeometryFile(CachedFile):
         if they are update 'has_lateral_structures' to True.
         """
         for structure in self.structures.values():
-            if int(structure.type) == 6:
+            if structure.type == StructureType.LATERAL_STRUCTURE:
                 try:
                     us_rs = xs_gdf.loc[
                         (xs_gdf["river"] == structure.river)

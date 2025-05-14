@@ -95,7 +95,13 @@ class RASModelItem(Item):
 
         return stac
 
-    @cached_property
+    @property
+    def ras_project_file(self) -> str:
+        """Get the path to the HEC-RAS .prj file."""
+        return self._properties.get("project_file_name")
+
+    @property
+    @lru_cache
     def factory(self) -> AssetFactory:
         """Return AssetFactory for this item."""
         return AssetFactory(RAS_EXTENSION_MAPPING)
@@ -351,6 +357,7 @@ class RASModelItem(Item):
                     return i
         return None
 
+    @property
     def gpkg_metadata(self) -> dict:
         """Generate metadata for the geopackage metadata table."""
         metadata = {}
