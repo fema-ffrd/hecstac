@@ -1,33 +1,17 @@
 """Creates a STAC Item from an event."""
 
-import os
 from typing import List, Tuple
-from pathlib import Path
 import argparse
-import s3fs
+import logging
+import json
 import pandas as pd
 from rashdf import RasPlanHdf
 from rashdf.plan import RasPlanHdfError
 from pystac import Asset, MediaType, Item
-from dotenv import load_dotenv
 
 from hecstac.common.logger import initialize_logger, get_logger
 from hecstac.events.ffrd import FFRDEventItem
-
-def download_if_s3(fpath: str) -> str:
-    if fpath.startswith("s3://"):
-        load_dotenv(override=True)
-        fs = s3fs.S3FileSystem(key=os.getenv("AWS_ACCESS_KEY_ID"), secret=os.getenv("AWS_SECRET_ACCESS_KEY"))
-        local_dir = Path()
-        local_path = local_dir / Path(fpath).name
-        print(local_path)
-
-        fs.get(fpath, str(local_path))
-
-        # Return absolute path
-        return str(local_path.resolve())
-
-    return str(Path(fpath).resolve())
+from hecstac.common.base_io import ModelFileReader
 
 def ref_lines_ts(plan_hdf: RasPlanHdf, model_name: str) -> pd.DataFrame:
     """Extracts ref line time series data from a RasPlanHdf file"""
@@ -66,6 +50,7 @@ def ref_points_ts(plan_hdf: RasPlanHdf, model_name: str) -> pd.DataFrame:
     return pd.DataFrame(rl_ts_data)
 
 def parse_args() -> Tuple[str, List[str]]:
+    """Function to parse args from the cli"""
     parser = argparse.ArgumentParser(description="Create STAC Item(s) for FFRD Events.")
     parser.add_argument("ras_model_path", type=str, help="Path to a RAS source model item JSON file.")
     parser.add_argument("ras_simulation_path", type=str, help="Path to a RAS simulation plan HDF file.")
@@ -78,9 +63,11 @@ def create_ffrd_item(
         destination_path: str,
         ras_source_model_item: Item,
         ras_simulation_file: str,
+        model_name: str,
         realization: str,
         block_group: str,
-        event_id: str
+        event_id: str,
+        logger: logging.Logger
     ):
     """Creates an FFRD STAC Item and attaches ref line and ref point time series parquets as assets to the item"""
     ffrd_event_item = FFRDEventItem(
@@ -88,16 +75,14 @@ def create_ffrd_item(
         block_group=block_group,
         event_id=event_id,
         source_model_items=[ras_source_model_item],
-        ras_simulation_files=ras_simulation_file,
+        ras_simulation_files=[ras_simulation_file]
     )
 
     ref_lines_path = "ref_lines.parquet"
     ref_points_path = "ref_points.parquet"
-    bc_lines_path = "bc_lines.parquet"
-
-    with (RasPlanHdf(ras_simulation_file) as ras_plan_hdf):
+    with (RasPlanHdf.open_uri(ras_simulation_file) as ras_plan_hdf):
         try:
-            df = ref_lines_ts(ras_plan_hdf, "RayRoberts")
+            df = ref_lines_ts(ras_plan_hdf, model_name)
             df.to_parquet(ref_lines_path, engine="pyarrow")
             ffrd_event_item.add_asset("reference_lines", Asset(
                 href=ref_lines_path,
@@ -106,8 +91,11 @@ def create_ffrd_item(
                 media_type=MediaType.PARQUET,
                 roles="rashdf"
             ))
+        except RasPlanHdfError as e:
+            logger.warning(e)
 
-            df = ref_points_ts(ras_plan_hdf, "RayRoberts")
+        try:
+            df = ref_points_ts(ras_plan_hdf, model_name)
             df.to_parquet(ref_points_path, engine="pyarrow")
             ffrd_event_item.add_asset("reference_points", Asset(
                 href=ref_points_path,
@@ -117,27 +105,31 @@ def create_ffrd_item(
                 roles="rashdf"
             ))
         except RasPlanHdfError as e:
-            print(e)
+            logger.warning(e)
 
     ffrd_event_item.save_object(dest_href=destination_path)
 
-if __name__ == "__main__":
+def main():
+    """Script entrypoint for creating a new ffrd event stac item"""
     initialize_logger()
     logger = get_logger("main")
     try:
         ras_model_path, ras_simulation_path = parse_args()
 
-        ras_source_model_item = Item.from_file(download_if_s3(ras_model_path))
-        ras_simulation_file = download_if_s3(ras_simulation_path)
+        ras_model_dict = json.loads((ModelFileReader(ras_model_path).content))
+        ras_source_model_item = Item.from_dict(ras_model_dict)
 
         # Event Info
         realization = "R01"
         block_group = "BG01"
         event_id = "E01"
+        model_name = "RayRoberts"
 
-        dest_href = f"{realization}-{block_group}-{event_id}.json"
+        dest_href = f"./new_ffrd_event_item/{realization}-{block_group}-{event_id}.json"
 
-        create_ffrd_item(dest_href, ras_source_model_item, ras_simulation_file, realization, block_group, event_id)
+        create_ffrd_item(dest_href, ras_source_model_item, ras_simulation_path, model_name, realization, block_group, event_id, logger)
     except Exception as e:
         logger.exception(f"Fatal error during initialization or processing: {e}")
-    
+
+if __name__ == "__main__":
+    main()
