@@ -4,6 +4,7 @@ import io
 import logging
 import os
 import re
+import sqlite3
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -352,7 +353,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         # Add asset and return
         return self._add_thumbnail_asset(filepath)
 
-    def geopackage(self, dst: str, metadata: dict) -> str:
+    def geopackage(self, dst: str, model_meta: dict) -> str:
         """Make a geopackage for a geometry file."""
         n_reaches = len(self.file.reaches)
         n_cross_sections = len(self.file.cross_sections)
@@ -373,7 +374,11 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         for l in layers:
             if layers[l] is not None:
                 layers[l].set_crs(self.crs).to_file(filepath, layer=l)
-        gpd.GeoDataFrame(metadata).to_file(filepath, layer="metadata")
+        with sqlite3.connect(filepath) as con:
+            cur = con.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)")
+            for k, v in model_meta.items():
+                cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (k, v))
         return self._add_geopackage_asset(filepath)
 
 

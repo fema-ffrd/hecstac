@@ -1764,7 +1764,7 @@ class SteadyFlowFile(CachedFile):
     @property
     def profile_names(self):
         """Profile names."""
-        return search_contents(self.contents, "Profile Names").split(",")
+        return search_contents(self.file_lines, "Profile Names").split(",")
 
 
 class UnsteadyFlowFile(CachedFile):
