@@ -139,7 +139,7 @@ PLAN_TITLE = "HEC-RAS:plan_title"
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
-    regex_parse_str = r".+\.prj$"
+    regex_parse_str = r".+\.[pP][rR][jJ]$"
     __roles__ = ["ras-project", MediaType.TEXT]
     __description__ = "The HEC-RAS project file."
     __file_class__ = ProjectFile
