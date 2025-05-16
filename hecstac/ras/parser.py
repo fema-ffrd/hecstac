@@ -1364,7 +1364,11 @@ class GeometryFile(CachedFile):
     @cached_property
     def geom_version(self) -> str:
         """Return program version."""
-        return search_contents(self.file_lines, "Program Version", require_one=False)
+        v = search_contents(self.file_lines, "Program Version", require_one=False)
+        if len(v) == 0:
+            return "N/A"
+        else:
+            return v
 
     @cached_property
     def geometry_time(self) -> list[datetime.datetime]:
@@ -1755,13 +1759,13 @@ class SteadyFlowFile(CachedFile):
         """Retrieve flow change locations."""
         flow_change_locations = []
         tmp_n_flow_change_locations = self.n_flow_change_locations
-        for ind, location in enumerate(search_contents(self.file_str.splitlines(), "River Rch & RM", expect_one=False)):
+        for ind, location in enumerate(search_contents(self.file_lines, "River Rch & RM", expect_one=False)):
             # parse river, reach, and river station for the flow change location
             river, reach, rs = location.split(",")
             lines = text_block_from_start_end_str(
                 f"River Rch & RM={location}",
                 ["River Rch & RM", "Boundary for River Rch & Prof#"],
-                self.file_str.splitlines(),
+                self.file_lines,
             )
             flows = []
 

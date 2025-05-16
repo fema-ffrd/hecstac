@@ -341,7 +341,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
         title = f"{title} - {os.path.basename(self.href)}"
         file_ext = os.path.basename(self.href).split(".")[-1]
-        filename = f"thumbnail_{file_ext}.png"
+        filename = f"thumbnail.{file_ext}.png"
         filepath = os.path.join(thumbnail_dest, filename)
 
         # Export
@@ -401,7 +401,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
             raise Invalid1DGeometryError(f"{self.href} had {n_reaches} reaches and {n_cross_sections} cross-sections")
 
         # Define data
-        filename = f"{self.href}.gpkg"
+        filename = f"{self.name}.gpkg"
         filepath = os.path.join(dst, filename)
         layers = {
             "River": self.file.reach_gdf,
@@ -734,7 +734,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             # TODO: Add support for river centerline and cross-sections (from .hdf)
         title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
-        filename = f"thumbnail_{hdf_ext}.png"
+        filename = f"thumbnail.{hdf_ext}.png"
         filepath = os.path.join(thumbnail_dest, filename)
 
         # Export
