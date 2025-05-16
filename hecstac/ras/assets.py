@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import sqlite3
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from urllib.parse import urlparse
 
 import boto3
@@ -208,26 +208,22 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
         return self._extra_fields
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
         return self.file.concave_hull
 
-    @property
-    @lru_cache
+    @cached_property
     def has_1d(self) -> bool:
         """Check if geometry has any river centerlines."""
         return self.file.has_1d
 
-    @property
-    @lru_cache
+    @cached_property
     def has_2d(self) -> bool:
         """Check if geometry has any 2D areas."""
         return self.file.has_2d
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
@@ -591,15 +587,13 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         self._extra_fields[REFERENCE_LINES] = self.reference_lines
         return self._extra_fields
 
-    @property
-    @lru_cache
+    @cached_property
     def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
         """Docstring."""  # TODO: fill out
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
-    @property
-    @lru_cache
+    @cached_property
     def has_2d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
         try:
@@ -608,20 +602,17 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         except ValueError:
             return False
 
-    @property
-    @lru_cache
+    @cached_property
     def has_1d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
         return False  # TODO: implement
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
         return self.file.mesh_areas(self.crs)
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
