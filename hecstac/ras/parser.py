@@ -4,6 +4,7 @@ import datetime
 import logging
 import math
 from collections import defaultdict
+from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
@@ -580,72 +581,75 @@ class XS:
 
     @property
     @lru_cache
+    def gdf_data_dict(self):
+        """Cross section geodataframe."""
+        return {
+            "geometry": self.geom,
+            "river": self.river,
+            "reach": self.reach,
+            "river_reach": self.river_reach,
+            "river_station": self.river_station,
+            "river_reach_rs": self.river_reach_rs,
+            "river_reach_rs_str": self.river_reach_rs_str,
+            "thalweg": self.thalweg,
+            "xs_max_elevation": self.xs_max_elevation,
+            "left_reach_length": self.left_reach_length,
+            "right_reach_length": self.right_reach_length,
+            "channel_reach_length": self.channel_reach_length,
+            "computed_channel_reach_length": self.computed_channel_reach_length,
+            "computed_channel_reach_length_ratio": self.computed_channel_reach_length_ratio,
+            "left_reach_length_ratio": self.left_reach_length_ratio,
+            "right_reach_length_ratio": self.right_reach_length_ratio,
+            "reach_lengths_populated": self.reach_lengths_populated,
+            "ras_data": "\n".join(self.ras_data),
+            "station_elevation_points": self.station_elevation_points,
+            "bank_stations": self.bank_stations,
+            "left_bank_station": self.left_bank_station,
+            "right_bank_station": self.right_bank_station,
+            "left_bank_elevation": self.left_bank_elevation,
+            "right_bank_elevation": self.right_bank_elevation,
+            "number_of_station_elevation_points": self.number_of_station_elevation_points,
+            "number_of_coords": self.number_of_coords,
+            "station_length": self.station_length,
+            "cutline_length": self.geom.length,
+            "xs_length_ratio": self.xs_length_ratio,
+            "banks_encompass_channel": self.banks_encompass_channel,
+            "skew": self.skew,
+            "max_n": self.max_n,
+            "min_n": self.min_n,
+            "has_lateral_structure": self.has_lateral_structures,
+            "has_ineffective": self.has_ineffectives,
+            "has_levees": self.has_levees,
+            "has_blocks": self.has_blocks,
+            "channel_obstruction": self.channel_obstruction,
+            "thalweg_drop": self.thalweg_drop,
+            "left_max_elevation": self.left_max_elevation,
+            "right_max_elevation": self.right_max_elevation,
+            "overtop_elevation": self.overtop_elevation,
+            "min_elevation": self.min_elevation,
+            "channel_width": self.channel_width,
+            "channel_depth": self.channel_depth,
+            "station_elevation_point_density": self.station_elevation_point_density,
+            "htab_min_elevation": self.htab_min_elevation,
+            "htab_min_increment": self.htab_min_increment,
+            "htab points": self.htab_points,
+            "correct_cross_section_direction": self.correct_cross_section_direction,
+            "horizontal_varying_mannings": self.horizontal_varying_mannings,
+            "number_of_mannings_points": self.number_of_mannings_points,
+            "expansion_coefficient": self.expansion_coefficient,
+            "contraction_coefficient": self.contraction_coefficient,
+            "centerline_intersection_station": self.centerline_intersection_station,
+            "bridge_xs": self.bridge_xs,
+            "cross_section_intersects_reach": self.cross_section_intersects_reach,
+            "intersects_reach_once": self.intersects_reach_once,
+            "min_elevation_in_channel": self.min_elevation_in_channel,
+        }
+
+    @property
+    @lru_cache
     def gdf(self):
         """Cross section geodataframe."""
-        return gpd.GeoDataFrame(
-            {
-                "geometry": [self.geom],
-                "river": [self.river],
-                "reach": [self.reach],
-                "river_reach": [self.river_reach],
-                "river_station": [self.river_station],
-                "river_reach_rs": [self.river_reach_rs],
-                "river_reach_rs_str": [self.river_reach_rs_str],
-                "thalweg": [self.thalweg],
-                "xs_max_elevation": [self.xs_max_elevation],
-                "left_reach_length": [self.left_reach_length],
-                "right_reach_length": [self.right_reach_length],
-                "channel_reach_length": [self.channel_reach_length],
-                "computed_channel_reach_length": [self.computed_channel_reach_length],
-                "computed_channel_reach_length_ratio": [self.computed_channel_reach_length_ratio],
-                "left_reach_length_ratio": [self.left_reach_length_ratio],
-                "right_reach_length_ratio": [self.right_reach_length_ratio],
-                "reach_lengths_populated": [self.reach_lengths_populated],
-                "ras_data": ["\n".join(self.ras_data)],
-                "station_elevation_points": [self.station_elevation_points],
-                "bank_stations": [self.bank_stations],
-                "left_bank_station": [self.left_bank_station],
-                "right_bank_station": [self.right_bank_station],
-                "left_bank_elevation": [self.left_bank_elevation],
-                "right_bank_elevation": [self.right_bank_elevation],
-                "number_of_station_elevation_points": [self.number_of_station_elevation_points],
-                "number_of_coords": [self.number_of_coords],
-                "station_length": [self.station_length],
-                "cutline_length": [self.geom.length],
-                "xs_length_ratio": [self.xs_length_ratio],
-                "banks_encompass_channel": [self.banks_encompass_channel],
-                "skew": [self.skew],
-                "max_n": [self.max_n],
-                "min_n": [self.min_n],
-                "has_lateral_structure": [self.has_lateral_structures],
-                "has_ineffective": [self.has_ineffectives],
-                "has_levees": [self.has_levees],
-                "has_blocks": [self.has_blocks],
-                "channel_obstruction": [self.channel_obstruction],
-                "thalweg_drop": [self.thalweg_drop],
-                "left_max_elevation": [self.left_max_elevation],
-                "right_max_elevation": [self.right_max_elevation],
-                "overtop_elevation": [self.overtop_elevation],
-                "min_elevation": [self.min_elevation],
-                "channel_width": [self.channel_width],
-                "channel_depth": [self.channel_depth],
-                "station_elevation_point_density": [self.station_elevation_point_density],
-                "htab_min_elevation": [self.htab_min_elevation],
-                "htab_min_increment": [self.htab_min_increment],
-                "htab points": [self.htab_points],
-                "correct_cross_section_direction": [self.correct_cross_section_direction],
-                "horizontal_varying_mannings": [self.horizontal_varying_mannings],
-                "number_of_mannings_points": [self.number_of_mannings_points],
-                "expansion_coefficient": [self.expansion_coefficient],
-                "contraction_coefficient": [self.contraction_coefficient],
-                "centerline_intersection_station": [self.centerline_intersection_station],
-                "bridge_xs": [self.bridge_xs],
-                "cross_section_intersects_reach": [self.cross_section_intersects_reach],
-                "intersects_reach_once": [self.intersects_reach_once],
-                "min_elevation_in_channel": [self.min_elevation_in_channel],
-            },
-            geometry="geometry",
-        )
+        return gpd.GeoDataFrame(self.gdf_data_dict, geometry="geometry")
 
     @property
     def n_subdivisions(self) -> int:
@@ -813,9 +817,14 @@ class Structure:
         return float(self.split_structure_header(1))
 
     @property
+    def type_int(self) -> int:
+        """Structure type."""
+        return int(self.split_structure_header(0))
+
+    @property
     def type(self) -> StructureType:
         """Structure type."""
-        return StructureType(int(self.split_structure_header(0)))
+        return StructureType(self.type_int)
 
     def structure_data(self, position: int) -> str | int:
         """Structure data."""
@@ -863,7 +872,7 @@ class Structure:
                 "river_reach": [self.river_reach],
                 "river_station": [self.river_station],
                 "river_reach_rs": [self.river_reach_rs],
-                "type": [self.type],
+                "type": [self.type_int],
                 "distance": [self.distance],
                 "width": [self.width],
                 "ras_data": ["\n".join(self.ras_data)],
@@ -1516,7 +1525,7 @@ class GeometryFile(CachedFile):
     @property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all cross sections in the geometry text file."""
-        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+        xs_gdf = pd.DataFrame.from_dict([xs.gdf_data_dict for xs in self.cross_sections.values()])
 
         subsets = []
         for _, reach in self.reach_gdf.iterrows():
@@ -1762,9 +1771,57 @@ class SteadyFlowFile(CachedFile):
         return int(search_contents(self.file_lines, "Number of Profiles"))
 
     @property
+    def n_flow_change_locations(self):
+        """Number of flow change locations."""
+        return len(search_contents(self.file_lines, "River Rch & RM", expect_one=False))
+
+    @property
     def profile_names(self):
         """Profile names."""
         return search_contents(self.file_lines, "Profile Names").split(",")
+
+    @property
+    def flow_change_locations(self):
+        """Retrieve flow change locations."""
+        flow_change_locations = []
+        for location in search_contents(self.file_lines, "River Rch & RM", expect_one=False):
+            # parse river, reach, and river station for the flow change location
+            river, reach, rs = location.split(",")
+            lines = text_block_from_start_end_str(
+                f"River Rch & RM={location}", ["River Rch & RM", "Boundary for River Rch & Prof#"], self.file_lines
+            )
+            flows = []
+
+            for line in lines[1:]:
+
+                if "River Rch & RM" in line:
+                    break
+                for i in range(0, len(line), 8):
+                    flows.append(float(line[i : i + 8].lstrip(" ")))
+                    if len(flows) == self.n_profiles:
+                        flow_change_locations.append(
+                            FlowChangeLocation(
+                                river,
+                                reach.rstrip(" "),
+                                float(rs.replace("*", "")),
+                                flows,
+                                self.profile_names,
+                            )
+                        )
+
+                    if len(flow_change_locations) == self.n_flow_change_locations:
+                        return flow_change_locations
+
+
+@dataclass
+class FlowChangeLocation:
+    """HEC-RAS Flow Change Locations."""
+
+    river: str = None
+    reach: str = None
+    rs: float = None
+    flows: list[float] = None
+    profile_names: list[str] = None
 
 
 class UnsteadyFlowFile(CachedFile):

@@ -96,17 +96,12 @@ class RASModelItem(Item):
 
         return stac
 
-    @property
-    def ras_project_file(self) -> str:
-        """Get the path to the HEC-RAS .prj file."""
-        return self._properties.get("project_file_name")
-
-    @property
+    @cached_property
     def factory(self) -> AssetFactory:
         """Return AssetFactory for this item."""
         return AssetFactory(RAS_EXTENSION_MAPPING)
 
-    @property
+    @cached_property
     def pm(self) -> LocalPathManager:
         """Get the path manager rooted at project file's href."""
         return LocalPathManager(str(Path(self.project_asset.href).parent))
@@ -224,7 +219,7 @@ class RASModelItem(Item):
         self.properties[self.RAS_HAS_1D] = self.has_1d
         self.properties[self.RAS_HAS_2D] = self.has_2d
         self.properties[self.PROJECT_TITLE] = self.pf.project_title
-        self.properties[self.PROJECT_VERSION] = self.pf.ras_version
+        self.properties[self.PROJECT_VERSION] = self._primary_geometry.file.geom_version
         self.properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
         self.properties[self.PROJECT_STATUS] = self.pf.project_status
         self.properties[self.MODEL_UNITS] = self.pf.project_units
@@ -244,7 +239,7 @@ class RASModelItem(Item):
             self.datetime = datetime.datetime.now()
             self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
 
-    @property
+    @cached_property
     def model_datetime(self) -> list[datetime.datetime]:
         """Parse datetime from model geometry and return result."""
         datetimes = []
@@ -294,7 +289,7 @@ class RASModelItem(Item):
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
 
-    def add_model_geopackages(self, local_dst=None, s3_dst=None):
+    def add_model_geopackages(self, local_dst: str = None, s3_dst: str = None, geometries: list = None):
         """Generate model geopackage asset for each geometry file.
 
         Parameters
@@ -303,6 +298,8 @@ class RASModelItem(Item):
             Directory for created geopackages. If None then geopackages will be exported to same level as the item.
         s3_dst : str, optional
             S3 prefix for created geopackages. If None then geopackages will be exported to same level as the item.
+        geometries : list, optional
+            A list of geometry file names to make the gpkg for.
         """
         if local_dst:
             dst = local_dst
@@ -313,12 +310,19 @@ class RASModelItem(Item):
             dst = os.path.dirname(self.self_href)
 
         for geom in self.geometry_assets:
+            if geometries is not None and geom.name not in geometries:
+                continue
+            asset_name = f"{geom.href.rsplit('/')[-1]}_geopackage"
             # TODO: Implement hdf geopackages.
             if isinstance(geom, GeometryAsset):
                 logger.info(f"Writing: {dst}")
-                self.assets[f"{geom.href.rsplit('/')[-1]}_geopackage"] = geom.geopackage(dst, self.gpkg_metadata)
+                if isinstance(self._primary_flow, SteadyFlowAsset):
+                    flow_file = self._primary_flow.file
+                else:
+                    flow_file = None
+                self.assets[asset_name] = geom.geopackage(dst, self.gpkg_metadata, flow_file)
 
-    @property
+    @cached_property
     def _primary_plan(self) -> PlanAsset:
         """Primary plan for use in Ripple1D."""  # TODO: develop test for this logic. easily tested
         if len(self.plan_assets) == 0:
@@ -330,8 +334,8 @@ class RASModelItem(Item):
 
         if len(candidate_plans) > 1:
             cur_plan = [i for i in candidate_plans if i.name == self.pf.plan_current]
-            if len(cur_plan) == 0:
-                return cur_plan
+            if len(cur_plan) == 1:
+                return cur_plan[0]
             else:
                 return candidate_plans[0]
         elif len(candidate_plans) == 0:
@@ -339,7 +343,7 @@ class RASModelItem(Item):
         else:
             return candidate_plans[0]
 
-    @property
+    @cached_property
     def _primary_flow(self) -> SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset:
         """Flow asset listed in the primary plan."""
         for i in self.assets.values():
@@ -348,7 +352,7 @@ class RASModelItem(Item):
                     return i
         return None
 
-    @property
+    @cached_property
     def _primary_geometry(self) -> GeometryAsset:
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
@@ -357,7 +361,7 @@ class RASModelItem(Item):
                     return i
         return None
 
-    @property
+    @cached_property
     def gpkg_metadata(self) -> dict:
         """Generate metadata for the geopackage metadata table."""
         metadata = {}
@@ -381,7 +385,7 @@ class RASModelItem(Item):
         metadata["primary_flow_title"] = self._primary_flow.file.flow_title
         metadata["primary_geom_file"] = self._primary_geometry.name
         metadata["primary_geom_title"] = self._primary_geometry.file.geom_title
-        metadata["ras_version"] = self.pf.ras_version
+        metadata["ras_version"] = self._primary_geometry.file.geom_version
         metadata["hecstac_version"] = hecstac.__version__
         if isinstance(self._primary_flow, SteadyFlowAsset):
             metadata["profile_names"] = "\n".join(self._primary_flow.file.profile_names)
@@ -409,5 +413,4 @@ class RASModelItem(Item):
 
         if self.crs is None and isinstance(subclass, GeometryHdfAsset) and subclass.file.projection is not None:
             self.crs = subclass.file.projection
-
         return super().add_asset(key, subclass)

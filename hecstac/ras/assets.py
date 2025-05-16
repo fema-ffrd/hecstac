@@ -12,6 +12,7 @@ import boto3
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from pystac import MediaType
@@ -353,32 +354,80 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         # Add asset and return
         return self._add_thumbnail_asset(filepath)
 
-    def geopackage(self, dst: str, model_meta: dict) -> str:
+    def _attributed_xs_for_gpkg(self, model_meta: dict, flow_file: SteadyFlowFile = None) -> gpd.GeoDataFrame:
+        """Load XS geometry and attribute for geopackage creation."""
+        # River centerline
+        xs_gdf = self.file.xs_gdf
+
+        if flow_file is not None:
+            xs_gdf[["flows", "profile_names"]] = None, None
+
+            fcls = pd.DataFrame(flow_file.flow_change_locations)
+            fcls["river_reach"] = fcls["river"] + fcls["reach"]
+
+            for river_reach in fcls["river_reach"].unique():
+                # get flow change locations for this reach
+                fcls_rr = fcls.loc[fcls["river_reach"] == river_reach, :].sort_values(by="rs", ascending=False)
+
+                # iterate through this reaches flow change locations and set cross section flows/profile names
+                for _, row in fcls_rr.iterrows():
+                    # add flows to xs_gdf
+                    xs_gdf.loc[
+                        (xs_gdf["river"] == row["river"])
+                        & (xs_gdf["reach"] == row["reach"])
+                        & (xs_gdf["river_station"] <= row["rs"]),
+                        "flows",
+                    ] = "\n".join([str(f) for f in row["flows"]])
+
+                    # add profile names to xs_gdf
+                    xs_gdf.loc[
+                        (xs_gdf["river"] == row["river"])
+                        & (xs_gdf["reach"] == row["reach"])
+                        & (xs_gdf["river_station"] <= row["rs"]),
+                        "profile_names",
+                    ] = "\n".join(row["profile_names"])
+
+        xs_gdf["flow_tile"] = model_meta["primary_flow_title"]
+        xs_gdf["plan_title"] = model_meta["primary_plan_title"]
+        xs_gdf["geom_title"] = model_meta["primary_geom_title"]
+        xs_gdf["version"] = model_meta["ras_version"]
+        xs_gdf["units"] = model_meta["units"]
+        xs_gdf["project_title"] = model_meta["ras_project_title"]
+
+        return xs_gdf
+
+    def geopackage(self, dst: str, model_meta: dict, flow_file: SteadyFlowFile = None) -> str:
         """Make a geopackage for a geometry file."""
+        # Validate that geometry is ready for gpkg creation
         n_reaches = len(self.file.reaches)
         n_cross_sections = len(self.file.cross_sections)
         if n_reaches == 0 or n_cross_sections == 0:
             raise Invalid1DGeometryError(f"{self.href} had {n_reaches} reaches and {n_cross_sections} cross-sections")
 
-        file_ext = os.path.basename(self.href).split(".")[-1]
-        filename = f"geopackage_{file_ext}.gpkg"  # TODO: bad name bc they all come in to QGIS with same name.
+        # Define data
+        filename = f"{self.href}.gpkg"
         filepath = os.path.join(dst, filename)
-
         layers = {
             "River": self.file.reach_gdf,
-            "XS": self.file.xs_gdf,
+            "XS": self._attributed_xs_for_gpkg(model_meta, flow_file),
             "Junction": self.file.junction_gdf,
             "Structure": self.file.structures_gdf,
             "XS_concave_hull": self.file.concave_hull_gdf,
         }
+
+        # Write spatial layers
         for l in layers:
             if layers[l] is not None:
                 layers[l].set_crs(self.crs).to_file(filepath, layer=l)
+
+        # Write non-spatial layer
         with sqlite3.connect(filepath) as con:
             cur = con.cursor()
-            cur.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT)")
+            cur.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT);")
             for k, v in model_meta.items():
-                cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)", (k, v))
+                cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?);", (k, v))
+            con.commit()
+        con.close()
         return self._add_geopackage_asset(filepath)
 
 
