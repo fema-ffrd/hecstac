@@ -86,7 +86,7 @@ class RASModelItem(Item):
             NULL_STAC_BBOX,
             NULL_DATETIME,
             {cls.PROJECT: Path(ras_project_file).name},
-            href=ras_project_file.replace(".prj", ".json"),
+            href=ras_project_file.replace(".prj", ".json").replace(".PRJ", ".json"),
             assets=assets,
         )
         if crs:
