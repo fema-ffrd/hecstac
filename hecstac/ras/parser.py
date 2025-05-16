@@ -1754,11 +1754,14 @@ class SteadyFlowFile(CachedFile):
     def flow_change_locations(self):
         """Retrieve flow change locations."""
         flow_change_locations = []
-        for location in search_contents(self.file_lines, "River Rch & RM", expect_one=False):
+        tmp_n_flow_change_locations = self.n_flow_change_locations
+        for ind, location in enumerate(search_contents(self.file_str.splitlines(), "River Rch & RM", expect_one=False)):
             # parse river, reach, and river station for the flow change location
             river, reach, rs = location.split(",")
             lines = text_block_from_start_end_str(
-                f"River Rch & RM={location}", ["River Rch & RM", "Boundary for River Rch & Prof#"], self.file_lines
+                f"River Rch & RM={location}",
+                ["River Rch & RM", "Boundary for River Rch & Prof#"],
+                self.file_str.splitlines(),
             )
             flows = []
 
@@ -1766,20 +1769,27 @@ class SteadyFlowFile(CachedFile):
 
                 if "River Rch & RM" in line:
                     break
+
                 for i in range(0, len(line), 8):
-                    flows.append(float(line[i : i + 8].lstrip(" ")))
+                    tmp_str = line[i : i + 8].lstrip(" ")
+                    if len(tmp_str) == 0:
+                        tmp_n_flow_change_locations -= 1  # invalid entry
+                        if len(flow_change_locations) == tmp_n_flow_change_locations:
+                            return flow_change_locations
+                        else:
+                            break
+                    flows.append(float(tmp_str))
                     if len(flows) == self.n_profiles:
                         flow_change_locations.append(
-                            FlowChangeLocation(
-                                river,
-                                reach.rstrip(" "),
-                                float(rs.replace("*", "")),
-                                flows,
-                                self.profile_names,
-                            )
+                            {
+                                "river": river,
+                                "reach": reach.rstrip(" "),
+                                "rs": float(rs),
+                                "flows": flows,
+                                "profile_names": self.profile_names,
+                            }
                         )
-
-                    if len(flow_change_locations) == self.n_flow_change_locations:
+                    if len(flow_change_locations) == tmp_n_flow_change_locations:
                         return flow_change_locations
 
 
