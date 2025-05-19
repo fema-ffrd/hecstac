@@ -1412,7 +1412,8 @@ class GeometryFile(CachedFile):
     @cached_property
     def reaches(self) -> dict[str, Reach]:
         """A dictionary of the reaches contained in the HEC-RAS geometry file."""
-        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False, require_one=False)
+        reg = r"^\s*River Reach=.*"
+        river_reaches = search_contents(self.file_lines, reg, expect_one=False, require_one=False, regex=True)
         return {river_reach: Reach(self.file_lines, river_reach) for river_reach in river_reaches}
 
     @cached_property

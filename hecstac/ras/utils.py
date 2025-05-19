@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
@@ -86,12 +87,24 @@ def is_ras_prj(url: str) -> bool:
 
 
 def search_contents(
-    lines: list[str], search_string: str, token: str = "=", expect_one: bool = True, require_one: bool = True
+    lines: list[str],
+    search_string: str,
+    token: str = "=",
+    expect_one: bool = True,
+    require_one: bool = True,
+    regex: bool = False,
 ) -> list[str] | str:
-    """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
+    """Split a line by a token and returns the second half of the line if the search_string is found in the first half.
+
+    The regex option assumes that the token is included in the regex.
+    """
+    if regex:
+        matches = lambda x: re.match(search_string, x)
+    else:
+        matches = lambda x: f"{search_string}{token}" in x
     results = []
     for line in lines:
-        if f"{search_string}{token}" in line:
+        if matches(line):
             results.append(line.split(token)[1])
 
     if expect_one and len(results) > 1:
