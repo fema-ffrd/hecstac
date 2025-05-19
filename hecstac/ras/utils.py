@@ -105,7 +105,9 @@ def search_contents(
     results = []
     for line in lines:
         if matches(line):
-            results.append(line.split(token)[1])
+            val = line.split(token)[1]
+            if val != "":
+                results.append(val)
 
     if expect_one and len(results) > 1:
         raise ValueError(f"expected 1 result for {search_string}, got {len(results)} results")
