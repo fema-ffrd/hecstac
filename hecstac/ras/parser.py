@@ -3,7 +3,7 @@
 import datetime
 import logging
 import math
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property, lru_cache
@@ -89,7 +89,7 @@ class XS:
         river_reach: str,
         river: str,
         reach: str,
-        reach_geom: LineString = None,
+        reach_geom: LineString = None,  # TODO: Does adding this to every section create a massive memory footprint?
     ):
         self.ras_data = ras_data
         self.river = river
@@ -989,34 +989,41 @@ class Reach:
     @cached_property
     def reach_nodes(self) -> list[str]:
         """Reach nodes."""
-        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False)
+        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False, require_one=False)
 
     @cached_property
     def cross_sections(self):
         """Cross sections."""
-        cross_sections, bridge_xs = [], []
+        cross_sections = OrderedDict()
+        bridge_xs = []
         for header in self.reach_nodes:
             type, _, _, _, _ = header.split(",")[:5]
 
+            # Identify bridge cross-sections
             if int(type) in [2, 3, 4]:
-                bridge_xs = bridge_xs[:-2] + [4, 3]
+                bridge_xs = bridge_xs[:-2] + [4, 3]  # Update after discovery
             if int(type) != 1:
                 continue
             if len(bridge_xs) == 0:
-                bridge_xs = [0]
+                bridge_xs = [0]  # Initialize list
             else:
-                bridge_xs.append(max([0, bridge_xs[-1] - 1]))
+                bridge_xs.append(max([0, bridge_xs[-1] - 1]))  # Autodecrement XS number until zero
+
+            # Get xs text
             xs_lines = text_block_from_start_end_str(
                 f"Type RM Length L Ch R ={header}",
                 ["Type RM Length L Ch R", "River Reach"],
                 self.ras_data,
             )
-            cross_sections.append(XS(xs_lines, self.river_reach, self.river, self.reach, self.geom))
+            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.geom)
+            cross_sections[cross_section.river_reach_rs] = cross_section
 
-        cross_sections = self.add_bridge_xs(cross_sections, bridge_xs)
-        cross_sections = self.compute_multi_xs_variables(cross_sections)
+        for i, br in zip(cross_sections, bridge_xs):
+            cross_sections[i].set_bridge_xs(br)
+        if len(cross_sections) > 1:
+            cross_sections = self.compute_multi_xs_variables(cross_sections)
 
-        return cross_sections
+        return dict(cross_sections)  # Cast to regular dict
 
     @cached_property
     def structures(self) -> dict[str, "Structure"]:
@@ -1081,34 +1088,25 @@ class Reach:
         """Structures geodataframe."""
         return pd.concat([structure.gdf for structure in self.structures.values()])
 
-    def compute_multi_xs_variables(self, cross_sections: list) -> dict:
+    def compute_multi_xs_variables(self, cross_sections: OrderedDict) -> dict:
         """Compute variables that depend on multiple cross sections.
 
         Set the thalweg drop, computed channel reach length and computed channel reach length
         ratio between a cross section and the cross section downstream.
         """
-        ds_thalweg = cross_sections[-1].thalweg
-        updated_xs = [cross_sections[-1]]
-        for xs in cross_sections[::-1][1:]:
-            xs.set_thalweg_drop(ds_thalweg)
-            xs.set_computed_reach_length(updated_xs[-1].computed_river_station)
-            xs.set_computed_reach_length_ratio()
-            updated_xs.append(xs)
-            ds_thalweg = xs.thalweg
-        return {xs.river_reach_rs: xs for xs in updated_xs[::-1]}
+        keys = list(cross_sections.keys())
+        last_xs = cross_sections[keys[-1]]
+        for xs in keys[::-1][1:]:
+            cross_sections[xs].set_thalweg_drop(last_xs.thalweg)
+            cross_sections[xs].set_computed_reach_length(last_xs.computed_river_station)
+            cross_sections[xs].set_computed_reach_length_ratio()
+            last_xs = cross_sections[xs]
+        return cross_sections
 
     @cached_property
     def geom(self):
         """Geometry of the reach."""
         return LineString(self.coords)
-
-    def add_bridge_xs(self, cross_sections, bridge_xs):
-        """Add bridge cross sections attribute to the cross sections."""
-        updated_xs = []
-        for xs, br_xs in zip(cross_sections, bridge_xs):
-            xs.set_bridge_xs(br_xs)
-            updated_xs.append(xs)
-        return updated_xs
 
 
 class Junction:
