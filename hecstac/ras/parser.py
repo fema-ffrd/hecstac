@@ -1325,7 +1325,9 @@ class PlanFile(CachedFile):
     @cached_property
     def short_identifier(self) -> str:
         """Return short identifier."""
-        return search_contents(self.file_lines, "Short Identifier", expect_one=True).strip()
+        si = search_contents(self.file_lines, "Short Identifier", expect_one=True, require_one=False)
+        if len(si) == 1:
+            return si.strip()
 
     @cached_property
     def is_encroached(self) -> bool:
