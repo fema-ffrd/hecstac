@@ -213,6 +213,15 @@ class RASModelItem(Item):
         _ = self.properties
         return super().to_dict(*args, **kwargs)
 
+    def to_file(self, *args, out_path: str = None, lightweight=True, **kwargs) -> None:
+        """Save the item to it's self href."""
+        d = self.to_dict(*args, lightweight=lightweight, **kwargs)
+        if out_path is None:
+            out_path = self.get_self_href()
+        with open(out_path, mode="w") as f:
+            json.dump(d, f, indent=4)
+        return out_path
+
     def update_properties(self) -> dict:
         """Force recalculation of HEC-RAS properties."""
         self.properties[self.PROJECT] = self.project_asset.name
