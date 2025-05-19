@@ -2169,14 +2169,22 @@ class PlanHDFFile(RASHDFFile):
         """Return Simulation End Time."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("Simulation End Time").isoformat()
+        t = self._plan_info_attrs.get("Simulation End Time")
+        if t is None:
+            return None
+        else:
+            return t.isoformat()
 
     @cached_property
     def plan_information_simulation_start_time(self):
         """Return Simulation Start Time."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("Simulation Start Time").isoformat()
+        t = self._plan_info_attrs.get("Simulation Start Time")
+        if t is None:
+            return None
+        else:
+            return t.isoformat()
 
     @cached_property
     def plan_parameters_1d_flow_tolerance(self):
