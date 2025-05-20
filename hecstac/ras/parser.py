@@ -44,7 +44,7 @@ from hecstac.ras.utils import (
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
-    return f"{Path(fpath).stem}.{suffix}"
+    return f"{Path(fpath).stem}.{suffix.strip(" ")}"
 
 
 class CachedFile:
