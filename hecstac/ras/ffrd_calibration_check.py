@@ -61,7 +61,6 @@ class RASModelCalibrationChecker:
         s3_parts = Path(prefix).parts
         self.ras_model_name = ras_model_name or s3_parts[-1]
         self.ras_project_key = f"{self.prefix}/{self.ras_model_name}.prj"
-        self.item_id = Path(self.ras_project_key).stem
         self.logger = get_logger(__name__)
 
     def parse_files(self):
@@ -81,7 +80,6 @@ class RASModelCalibrationChecker:
         """Create a STAC Item from a RAS model."""
         ras_item = RASModelItem.from_prj(
             build_s3_path(self.bucket, self.prefix, self.ras_model_name),
-            self.item_id,
             crs=self.crs,
             assets=ras_files,
         )
