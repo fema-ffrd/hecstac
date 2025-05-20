@@ -355,7 +355,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         # River centerline
         xs_gdf = self.file.xs_gdf
 
-        if flow_file is not None:
+        if flow_file is not None and flow_file.flow_change_locations is not None:
             xs_gdf[["flows", "profile_names"]] = None, None
 
             fcls = pd.DataFrame(flow_file.flow_change_locations)
