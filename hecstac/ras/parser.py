@@ -1261,7 +1261,7 @@ class ProjectFile(CachedFile):
                 self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
             )
         if version == []:
-            self.logger.warning("Unable to parse project version")
+            self.logger.debug("Unable to parse project version")
             return "N/A"
         else:
             return version[0]
@@ -2412,6 +2412,6 @@ class GeometryHDFFile(RASHDFFile):
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            self.logger.warning("No reference lines found.")
+            self.logger.debug("No reference lines found.")
         else:
             return ref_lines
