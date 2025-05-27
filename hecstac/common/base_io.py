@@ -4,8 +4,12 @@ import os
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
-from hecstac.common.logger import get_logger
+
 import obstore
+
+from hecstac.common.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ModelFileReaderError(Exception):
@@ -33,7 +37,11 @@ class ModelFileReader:
             self.local = True
             self.store = None
             self.path = Path(path)
-            self.content = open(self.path, "r").read()
+            try:
+                self.content = open(self.path, "r").read()
+            except UnicodeDecodeError as e:
+                logger.warning(f"File contains invalid utf-8 characters at byte {e.start}.")
+                self.content = open(self.path, "r", errors="ignore").read()
 
         else:
             self.local = False

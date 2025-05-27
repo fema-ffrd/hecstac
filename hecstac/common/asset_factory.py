@@ -56,7 +56,7 @@ class GenericAsset(Asset, Generic[T]):
         self._extra_fields = extra_fields
 
     @property
-    def file(self):
+    def file(self) -> T:
         """Return cached file or instantiate new."""
         if not hasattr(self, "_file_obj"):
             if self.__file_class__:

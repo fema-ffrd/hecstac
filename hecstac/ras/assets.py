@@ -4,22 +4,29 @@ import io
 import logging
 import os
 import re
-from functools import lru_cache
+import sqlite3
+from functools import cached_property, lru_cache
 from urllib.parse import urlparse
 
 import boto3
 import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import pandas as pd
+from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
+from pyproj import CRS
 from pystac import MediaType
 from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
+from hecstac.common.s3_utils import save_bytes_s3
 from hecstac.ras.consts import NULL_GEOMETRY
+from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
+    CachedFile,
     GeometryFile,
     GeometryHDFFile,
     PlanFile,
@@ -30,7 +37,7 @@ from hecstac.ras.parser import (
     UnsteadyFlowFile,
     UnsteadyHDFFile,
 )
-from hecstac.ras.utils import is_ras_prj
+from hecstac.ras.utils import export_thumbnail, is_ras_prj
 
 logger = get_logger(__name__)
 
@@ -129,55 +136,15 @@ PROJECT_FILE_NAME = "HEC-RAS:project_file_name"
 GEOMETRY_TITLE = "HEC-RAS:geometry_title"
 UNSTEADY_FLOW_TITLE = "HEC-RAS:unsteady_flow_title"
 PLAN_TITLE = "HEC-RAS:plan_title"
+FLOW_TITLE = "HEC-RAS:flow_title"
 
-
-def save_bytes_s3(data: io.BytesIO, s3_path: str):
-    """
-    Upload a BytesIO stream to the specified S3 path.
-
-    Args:
-        data: BytesIO object containing the data to upload.
-        s3_path: S3 URI, e.g., 's3://my-bucket/path/to/file.png'
-    """
-    # Parse S3 path
-    parsed = urlparse(s3_path)
-    bucket = parsed.netloc
-    key = parsed.path.lstrip("/")
-
-    # Upload using boto3
-    s3 = boto3.client("s3")
-    s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType="image/png")
-
-
-# class PrjAsset(GenericAsset):
-#     """A helper class to delegate .prj files into RAS project or Projection file classes."""
-
-#     regex_parse_str = r".+\.prj$"
-
-#     def __new__(cls, *args, **kwargs):
-#         """Delegate to Project or Projection asset."""
-#         if cls is PrjAsset:  # Ensuring we don't instantiate Parent directly
-#             href = kwargs.get("href") or args[0]
-#             is_ras = is_ras_prj(href)
-#             if is_ras:
-#                 return ProjectAsset(*args, **kwargs)
-#             else:
-#                 return ProjectionAsset(*args, **kwargs)
-#         return super().__new__(cls)
-
-
-# class ProjectionAsset(GenericAsset):
-#     """A geospatial projection file."""
-
-#     __roles__ = ["projection", MediaType.TEXT]
-#     __description__ = "A geospatial projection file."
-#     __file_class__ = None
+PRJ_CRS = "authority_code"
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
-    regex_parse_str = r".+\.prj$"
+    regex_parse_str = r".+\.[pP][rR][jJ]$"
     __roles__ = ["ras-project", MediaType.TEXT]
     __description__ = "The HEC-RAS project file."
     __file_class__ = ProjectFile
@@ -192,6 +159,37 @@ class ProjectAsset(GenericAsset[ProjectFile]):
         self._extra_fields[QUASI_UNSTEADY_FLOW_FILES] = self.file.quasi_unsteady_flow_files
         self._extra_fields[UNSTEADY_FLOW_FILES] = self.file.unsteady_flow_files
         return self._extra_fields
+
+
+class ProjectionAsset(GenericAsset[CachedFile]):
+    """.prj projection file."""
+
+    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    __roles__ = ["projection", MediaType.TEXT]
+    __description__ = "A coordinate reference system projection file."
+    __file_class__ = CachedFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[PRJ_CRS] = CRS.from_wkt(self.file.model_file.content).to_authority()
+
+
+class PrjAsset(GenericAsset[CachedFile]):
+    """Factory to create HEC-RAS project file assets or projection assets."""
+
+    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    __roles__ = []
+    __description__ = "N/A"
+    __file_class__ = CachedFile
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ProjectAsset | ProjectionAsset:
+        """Subclass."""
+        if is_ras_prj(data["href"]):
+            return ProjectAsset.from_dict(data)
+        else:
+            return ProjectionAsset.from_dict(data)
 
 
 class PlanAsset(GenericAsset[PlanFile]):
@@ -246,26 +244,22 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
         return self._extra_fields
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
         return self.file.concave_hull
 
-    @property
-    @lru_cache
+    @cached_property
     def has_1d(self) -> bool:
         """Check if geometry has any river centerlines."""
         return self.file.has_1d
 
-    @property
-    @lru_cache
+    @cached_property
     def has_2d(self) -> bool:
         """Check if geometry has any 2D areas."""
         return self.file.has_2d
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
@@ -273,6 +267,200 @@ class GeometryAsset(GenericAsset[GeometryFile]):
             return NULL_GEOMETRY
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
+
+    def _plot_river(self, ax: Axes):
+        """Add the river centerline to a pyplot."""
+        c = "#050dd5"
+        self.file.reach_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="River")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color=c,
+                linewidth=2,
+                label="River",
+            )
+        ]
+        return legend_handle
+
+    def _plot_cross_sections(self, ax: Axes):
+        """Add cross-sections to a pyplot."""
+        c = "#5eeb34"
+        self.file.xs_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="XS")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color=c,
+                linewidth=2,
+                label="XS",
+            )
+        ]
+        return legend_handle
+
+    def _plot_junctions(self, ax: Axes):
+        """Add junctions to a pyplot."""
+        c = "#eb344c"
+        self.file.junction_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="Junction")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="none",
+                markerfacecolor=c,
+                markersize=8,
+                label="Junction",
+            )
+        ]
+        return legend_handle
+
+    def _plot_structures(self, ax: Axes):
+        """Add structures to a pyplot."""
+        c = "k"
+        self.file.structures_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="Structure")
+        legend_handle = [
+            Line2D(
+                [0],
+                [0],
+                color=c,
+                linewidth=2,
+                label="Structure",
+            )
+        ]
+        return legend_handle
+
+    def _add_thumbnail_asset(self, filepath: str) -> None:
+        """Add the thumbnail image as an asset with a relative href."""
+        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+            raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
+
+        asset = GenericAsset(
+            href=filepath,
+            title=filepath.split("/")[-1],
+            description="Thumbnail image for the model",
+        )
+        asset.roles = ["thumbnail", "image/png"]
+        return asset
+
+    def _add_geopackage_asset(self, filepath: str) -> None:
+        """Add the geometry geopackage as an asset with a relative href."""
+        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+            raise FileNotFoundError(f"Geopackage file not found: {filepath}")
+
+        asset = GenericAsset(
+            href=filepath,
+            title=filepath.split("/")[-1],
+            description="GeoPackage file with geometry data extracted from .gxx file.",
+        )
+        asset.roles = ["RAS-GEOMETRY-GPKG", "APPLICATION/GEOPACKAGE+SQLITE3"]
+        return asset
+
+    def thumbnail(
+        self,
+        layers: list,
+        title: str = "Model_Thumbnail",
+        thumbnail_dest: str = None,
+    ) -> str:
+        """Create a thumbnail figure for a geometry file."""
+        # Set up figure
+        map_layers = []
+        for layer in layers:
+            if layer == "River":
+                map_layers.append(self._plot_river)
+            elif layer == "XS":
+                map_layers.append(self._plot_cross_sections)
+            elif layer == "Structure":
+                map_layers.append(self._plot_structures)
+            elif layer == "Junction":
+                map_layers.append(self._plot_junctions)
+
+        title = f"{title} - {os.path.basename(self.href)}"
+        file_ext = os.path.basename(self.href).split(".")[-1]
+        filename = f"thumbnail.{file_ext}.png"
+        filepath = os.path.join(thumbnail_dest, filename)
+
+        # Export
+        export_thumbnail(map_layers, title, self.crs, filepath)
+
+        # Add asset and return
+        return self._add_thumbnail_asset(filepath)
+
+    def _attributed_xs_for_gpkg(self, model_meta: dict, flow_file: SteadyFlowFile = None) -> gpd.GeoDataFrame:
+        """Load XS geometry and attribute for geopackage creation."""
+        # River centerline
+        xs_gdf = self.file.xs_gdf
+
+        if flow_file is not None and flow_file.flow_change_locations is not None:
+            xs_gdf[["flows", "profile_names"]] = None, None
+
+            fcls = pd.DataFrame(flow_file.flow_change_locations)
+            fcls["river_reach"] = fcls["river"] + fcls["reach"]
+
+            for river_reach in fcls["river_reach"].unique():
+                # get flow change locations for this reach
+                fcls_rr = fcls.loc[fcls["river_reach"] == river_reach, :].sort_values(by="rs", ascending=False)
+
+                # iterate through this reaches flow change locations and set cross section flows/profile names
+                for _, row in fcls_rr.iterrows():
+                    # add flows to xs_gdf
+                    xs_gdf.loc[
+                        (xs_gdf["river"] == row["river"])
+                        & (xs_gdf["reach"] == row["reach"])
+                        & (xs_gdf["river_station"] <= row["rs"]),
+                        "flows",
+                    ] = "\n".join([str(f) for f in row["flows"]])
+
+                    # add profile names to xs_gdf
+                    xs_gdf.loc[
+                        (xs_gdf["river"] == row["river"])
+                        & (xs_gdf["reach"] == row["reach"])
+                        & (xs_gdf["river_station"] <= row["rs"]),
+                        "profile_names",
+                    ] = "\n".join(row["profile_names"])
+
+        xs_gdf["flow_tile"] = model_meta["primary_flow_title"]
+        xs_gdf["plan_title"] = model_meta["primary_plan_title"]
+        xs_gdf["geom_title"] = model_meta["primary_geom_title"]
+        xs_gdf["version"] = model_meta["ras_version"]
+        xs_gdf["units"] = model_meta["units"]
+        xs_gdf["project_title"] = model_meta["ras_project_title"]
+
+        return xs_gdf
+
+    def geopackage(self, dst: str, model_meta: dict, flow_file: SteadyFlowFile = None) -> str:
+        """Make a geopackage for a geometry file."""
+        # Validate that geometry is ready for gpkg creation
+        n_reaches = len(self.file.reaches)
+        n_cross_sections = len(self.file.cross_sections)
+        if n_reaches == 0 or n_cross_sections == 0:
+            raise Invalid1DGeometryError(f"{self.href} had {n_reaches} reaches and {n_cross_sections} cross-sections")
+
+        # Define data
+        filename = f"{self.name}.gpkg"
+        filepath = os.path.join(dst, filename)
+        layers = {
+            "River": self.file.reach_gdf,
+            "XS": self._attributed_xs_for_gpkg(model_meta, flow_file),
+            "Junction": self.file.junction_gdf,
+            "Structure": self.file.structures_gdf,
+            "XS_concave_hull": self.file.concave_hull_gdf,
+        }
+
+        # Write spatial layers
+        for l in layers:
+            if layers[l] is not None:
+                layers[l].set_crs(self.crs).to_file(filepath, layer=l)
+
+        # Write non-spatial layer
+        with sqlite3.connect(filepath) as con:
+            cur = con.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT);")
+            for k, v in model_meta.items():
+                cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?);", (k, v))
+            con.commit()
+        con.close()
+        return self._add_geopackage_asset(filepath)
 
 
 class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
@@ -286,7 +474,7 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[TITLE] = self.file.flow_title
+        self._extra_fields[FLOW_TITLE] = self.file.flow_title
         self._extra_fields[N_PROFILES] = self.file.n_profiles
         return self._extra_fields
 
@@ -435,15 +623,13 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         self._extra_fields[REFERENCE_LINES] = self.reference_lines
         return self._extra_fields
 
-    @property
-    @lru_cache
+    @cached_property
     def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
         """Docstring."""  # TODO: fill out
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
-    @property
-    @lru_cache
+    @cached_property
     def has_2d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
         try:
@@ -452,20 +638,17 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         except ValueError:
             return False
 
-    @property
-    @lru_cache
+    @cached_property
     def has_1d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
         return False  # TODO: implement
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry(self) -> Polygon | MultiPolygon:
         """Retrieves concave hull of cross-sections."""
         return self.file.mesh_areas(self.crs)
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
@@ -474,9 +657,9 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
 
-    def _plot_mesh_areas(self, ax, mesh_polygons: gpd.GeoDataFrame) -> list[Line2D]:
+    def _plot_mesh_areas(self, ax: Axes) -> list[Line2D]:
         """Plot mesh areas on the given axes."""
-        mesh_polygons.plot(
+        self.file.mesh_cells.set_crs(self.crs).plot(
             ax=ax,
             edgecolor="silver",
             facecolor="none",
@@ -496,9 +679,11 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         ]
         return legend_handle
 
-    def _plot_breaklines(self, ax, breaklines: gpd.GeoDataFrame) -> list[Line2D]:
+    def _plot_breaklines(self, ax: Axes) -> list[Line2D]:
         """Plot breaklines on the given axes."""
-        breaklines.plot(ax=ax, edgecolor="black", linestyle="-", alpha=0.3, label="Breaklines")
+        self.file.breaklines.set_crs(self.crs).plot(
+            ax=ax, edgecolor="black", linestyle="-", alpha=0.3, label="Breaklines"
+        )
         legend_handle = [
             Line2D(
                 [0],
@@ -512,8 +697,9 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         ]
         return legend_handle
 
-    def _plot_bc_lines(self, ax, bc_lines: gpd.GeoDataFrame) -> list[Line2D]:
+    def _plot_bc_lines(self, ax: Axes) -> list[Line2D]:
         """Plot boundary condition lines on the given axes."""
+        bc_lines = self.file.bc_lines.set_crs(self.crs)
         legend_handles = [
             Line2D([0], [0], color="none", linestyle="None", label="BC Lines"),
         ]
@@ -573,55 +759,24 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         thumbnail_dest : str, optional
             Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
         """
-        fig, ax = plt.subplots(figsize=(12, 12))
-        legend_handles = []
-
+        map_layers = []
         for layer in layers:
-            try:
-                if layer == "mesh_areas":
-                    mesh_areas_data = self.file.mesh_cells
-                    mesh_areas_geo = mesh_areas_data.set_crs(self.crs)
-                    legend_handles += self._plot_mesh_areas(ax, mesh_areas_geo)
-                elif layer == "breaklines":
-                    breaklines_data = self.file.breaklines
-                    breaklines_data_geo = breaklines_data.set_crs(self.crs)
-                    legend_handles += self._plot_breaklines(ax, breaklines_data_geo)
-                elif layer == "bc_lines":
-                    bc_lines_data = self.file.bc_lines
-                    bc_lines_data_geo = bc_lines_data.set_crs(self.crs)
-                    legend_handles += self._plot_bc_lines(ax, bc_lines_data_geo)
-            except Exception as e:
-                logger.warning(f"Warning: Failed to process layer '{layer}' for {self.href}: {e}")
-
-        # Add OpenStreetMap basemap
-        try:
-            ctx.add_basemap(
-                ax,
-                crs=self.crs,
-                source=ctx.providers.OpenStreetMap.Mapnik,
-                alpha=0.4,
-            )
-        except Exception as e:
-            logger.warning(f"Warning: Failed to add basemap for {self.href}: {e}")
-        ax.set_title(f"{title} - {os.path.basename(self.href)}", fontsize=15)
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
-
+            if layer == "mesh_areas":
+                map_layers.append(self._plot_mesh_areas)
+            elif layer == "breaklines":
+                map_layers.append(self._plot_breaklines)
+            elif layer == "bc_lines":
+                map_layers.append(self._plot_bc_lines)
+            # TODO: Add support for river centerline and cross-sections (from .hdf)
+        title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
-        filename = f"thumbnail_{hdf_ext}.png"
-        base_dir = os.path.dirname(thumbnail_dest)
-        filepath = os.path.join(base_dir, filename)
+        filename = f"thumbnail.{hdf_ext}.png"
+        filepath = os.path.join(thumbnail_dest, filename)
 
-        if filepath.startswith("s3://"):
-            # pass
-            img_data = io.BytesIO()
-            fig.savefig(img_data, format="png", bbox_inches="tight")
-            img_data.seek(0)
-            save_bytes_s3(img_data, filepath)
-        else:
-            os.makedirs(base_dir, exist_ok=True)
-            fig.savefig(filepath, dpi=80, bbox_inches="tight")
+        # Export
+        export_thumbnail(map_layers, title, self.crs, filepath)
+
+        # Add asset and return
         return self._add_thumbnail_asset(filepath)
 
 
@@ -905,7 +1060,7 @@ class MiscXMLFileAsset(GenericAsset):
 
 
 RAS_ASSET_CLASSES = [
-    ProjectAsset,
+    PrjAsset,
     PlanAsset,
     GeometryAsset,
     SteadyFlowAsset,

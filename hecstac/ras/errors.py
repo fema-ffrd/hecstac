@@ -9,5 +9,9 @@ class GeometryAssetMissingCRSError(Exception):
     """Required crs is missing from geometry asset definition."""
 
 
-class GeometryAssetNoXSError(Exception):
-    """1D geometry asset has no cross sections; cross sections are required to calculate the goemetry of the asset."""
+class Invalid1DGeometryError(Exception):
+    """1D geometry asset either has no cross sections or reaches."""
+
+
+class InvalidStructureDataError(Exception):
+    """Raised when a HEC-RAS geometry structure is invalid."""
