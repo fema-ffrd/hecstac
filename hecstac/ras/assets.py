@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
+from pyproj import CRS
 from pystac import MediaType
 from shapely import MultiPolygon, Polygon
 
@@ -25,6 +26,7 @@ from hecstac.common.s3_utils import save_bytes_s3
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
+    CachedFile,
     GeometryFile,
     GeometryHDFFile,
     PlanFile,
@@ -134,6 +136,9 @@ PROJECT_FILE_NAME = "HEC-RAS:project_file_name"
 GEOMETRY_TITLE = "HEC-RAS:geometry_title"
 UNSTEADY_FLOW_TITLE = "HEC-RAS:unsteady_flow_title"
 PLAN_TITLE = "HEC-RAS:plan_title"
+FLOW_TITLE = "HEC-RAS:flow_title"
+
+PRJ_CRS = "authority_code"
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):
@@ -154,6 +159,37 @@ class ProjectAsset(GenericAsset[ProjectFile]):
         self._extra_fields[QUASI_UNSTEADY_FLOW_FILES] = self.file.quasi_unsteady_flow_files
         self._extra_fields[UNSTEADY_FLOW_FILES] = self.file.unsteady_flow_files
         return self._extra_fields
+
+
+class ProjectionAsset(GenericAsset[CachedFile]):
+    """.prj projection file."""
+
+    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    __roles__ = ["projection", MediaType.TEXT]
+    __description__ = "A coordinate reference system projection file."
+    __file_class__ = CachedFile
+
+    @GenericAsset.extra_fields.getter
+    def extra_fields(self) -> dict:
+        """Return extra fields with added dynamic keys/values."""
+        self._extra_fields[PRJ_CRS] = CRS.from_wkt(self.file.model_file.content).to_authority()
+
+
+class PrjAsset(GenericAsset[CachedFile]):
+    """Factory to create HEC-RAS project file assets or projection assets."""
+
+    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    __roles__ = []
+    __description__ = "N/A"
+    __file_class__ = CachedFile
+
+    @classmethod
+    def from_dict(cls, data: dict) -> ProjectAsset | ProjectionAsset:
+        """Subclass."""
+        if is_ras_prj(data["href"]):
+            return ProjectAsset.from_dict(data)
+        else:
+            return ProjectionAsset.from_dict(data)
 
 
 class PlanAsset(GenericAsset[PlanFile]):
@@ -438,7 +474,7 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[TITLE] = self.file.flow_title
+        self._extra_fields[FLOW_TITLE] = self.file.flow_title
         self._extra_fields[N_PROFILES] = self.file.n_profiles
         return self._extra_fields
 
@@ -1024,7 +1060,7 @@ class MiscXMLFileAsset(GenericAsset):
 
 
 RAS_ASSET_CLASSES = [
-    ProjectAsset,
+    PrjAsset,
     PlanAsset,
     GeometryAsset,
     SteadyFlowAsset,

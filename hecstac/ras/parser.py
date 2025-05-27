@@ -1738,7 +1738,7 @@ class SteadyFlowFile(CachedFile):
     @cached_property
     def flow_title(self) -> str:
         """Return flow title."""
-        return search_contents(self.file_lines, "Flow Title")
+        return search_contents(self.file_lines, "Flow Title", expect_one=True, require_one=False)
 
     @cached_property
     def n_profiles(self) -> int:

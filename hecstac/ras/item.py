@@ -2,9 +2,12 @@
 
 import datetime
 import json
+import logging
 import os
+import traceback
 from functools import cached_property
 from pathlib import Path
+from typing import Union
 
 import pystac
 import pystac.errors
@@ -29,6 +32,7 @@ from hecstac.ras.assets import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
+    UnsteadyFlowHdfAsset,
 )
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 from hecstac.ras.parser import ProjectFile
@@ -42,7 +46,7 @@ class RASModelItem(Item):
 
     PROJECT = "HEC-RAS:project"
     PROJECT_TITLE = "HEC-RAS:project_title"
-    MODEL_UNITS = "HEC-RAS:unit system"
+    MODEL_UNITS = "HEC-RAS:unit_system"
     MODEL_GAGES = "HEC-RAS:gages"  # TODO: Is this deprecated?
     PROJECT_VERSION = "HEC-RAS:version"
     PROJECT_DESCRIPTION = "HEC-RAS:description"
@@ -325,11 +329,15 @@ class RASModelItem(Item):
             # TODO: Implement hdf geopackages.
             if isinstance(geom, GeometryAsset):
                 logger.info(f"Writing: {dst}")
-                if isinstance(self._primary_flow, SteadyFlowAsset):
-                    flow_file = self._primary_flow.file
-                else:
-                    flow_file = None
-                self.assets[asset_name] = geom.geopackage(dst, self.gpkg_metadata, flow_file)
+                try:
+                    if isinstance(self._primary_flow, SteadyFlowAsset):
+                        flow_file = self._primary_flow.file
+                    else:
+                        flow_file = None
+                    self.assets[asset_name] = geom.geopackage(dst, self.gpkg_metadata, flow_file)
+                except Exception as e:
+                    logging.error(f"Error on {geom.name}: {str(e)}")
+                    logging.error(str(traceback.format_exc()))
 
     @cached_property
     def _primary_plan(self) -> PlanAsset:
