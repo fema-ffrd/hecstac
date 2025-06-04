@@ -629,6 +629,46 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
+    def reference_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        if self.file.reference_lines is not None and not self.file.reference_lines.empty:
+            trimmed_ref_lines = self.file.reference_lines[["refln_name", "geometry"]]
+            refln_gdf = gpd.GeoDataFrame(trimmed_ref_lines, geometry="geometry", crs=self.crs)
+            if output_crs:
+                refln_gdf = refln_gdf.to_crs(output_crs)
+            return refln_gdf
+        else:
+            return None
+
+    def reference_points_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        if self.file.reference_points is not None and not self.file.reference_points.empty:
+            trimmed_ref_points = self.file.reference_points[["refpt_name", "geometry"]]
+            refpt_gdf = gpd.GeoDataFrame(trimmed_ref_points, geometry="geometry", crs=self.crs)
+            if output_crs:
+                refpt_gdf = refpt_gdf.to_crs(output_crs)
+            return refpt_gdf
+        else:
+            return None
+
+    def bc_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        if self.file.bc_lines is not None and not self.file.bc_lines.empty:
+            trimmed_bc_lines = self.file.bc_lines[["name", "geometry"]]
+            bc_line_gdf = gpd.GeoDataFrame(trimmed_bc_lines, geometry="geometry", crs=self.crs)
+            if output_crs:
+                bc_line_gdf = bc_line_gdf.to_crs(output_crs)
+            return bc_line_gdf
+        else:
+            return None
+
+    def model_perimeter(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        mesh_areas = self.file.mesh_areas()
+        if mesh_areas:
+            perimeter_gdf = gpd.GeoDataFrame(geometry=[mesh_areas], crs=self.crs)
+            if output_crs:
+                perimeter_gdf = perimeter_gdf.to_crs(output_crs)
+            return perimeter_gdf
+        else:
+            return None
+
     @cached_property
     def has_2d(self) -> bool:
         """Check if the geometry asset has 2d geometry."""
