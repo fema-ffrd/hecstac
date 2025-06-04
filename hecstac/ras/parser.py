@@ -44,7 +44,7 @@ from hecstac.ras.utils import (
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
-    return f"{Path(fpath).stem}.{suffix.strip(" ")}"
+    return f"{Path(fpath).stem}.{suffix.strip(' ')}"
 
 
 class CachedFile:
@@ -2415,3 +2415,13 @@ class GeometryHDFFile(RASHDFFile):
             self.logger.debug("No reference lines found.")
         else:
             return ref_lines
+
+    @cached_property
+    def reference_points(self) -> gpd.GeoDataFrame | None:
+        """Return geometry reference points."""
+        ref_points = self.hdf_object.reference_points()
+
+        if ref_points is None or ref_points.empty:
+            self.logger.debug("No reference points found.")
+        else:
+            return ref_points
