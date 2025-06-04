@@ -39,20 +39,29 @@ def init_s3_resources() -> tuple:
     return session, s3_client, s3_resource
 
 
-def list_keys_regex(s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix="") -> list:
-    """List all keys in an S3 bucket with a given prefix and suffix."""
+def list_keys_regex(
+    s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix: str = "", recursive: bool = True
+) -> list:
+    """List all keys in an S3 bucket matching a given prefix pattern and suffix."""
+
     keys = []
-    kwargs = {"Bucket": bucket, "Prefix": prefix_includes}
+    prefix = prefix_includes.split("*")[0]  # Use the static part of the prefix for listing
+    kwargs = {"Bucket": bucket, "Prefix": prefix}
+    if not recursive:
+        kwargs["Delimiter"] = "/"
+
     prefix_pattern = re.compile(prefix_includes.replace("*", ".*"))
+
     while True:
         resp = s3_client.list_objects_v2(**kwargs)
-        keys += [
-            obj["Key"] for obj in resp["Contents"] if prefix_pattern.match(obj["Key"]) and obj["Key"].endswith(suffix)
-        ]
-        try:
-            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
-        except KeyError:
+        for obj in resp.get("Contents", []):
+            key = obj["Key"]
+            if prefix_pattern.match(key) and key.endswith(suffix):
+                keys.append(key)
+        if not resp.get("IsTruncated"):
             break
+        kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+
     return keys
 
 
