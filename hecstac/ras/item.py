@@ -285,7 +285,6 @@ class RASModelItem(Item):
             thumbnail_dest = thumbnail_dir
         elif s3_thumbnail_dst:
             thumbnail_dest = s3_thumbnail_dst
-
         else:
             logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
             thumbnail_dest = os.path.dirname(self.self_href)
@@ -296,11 +295,11 @@ class RASModelItem(Item):
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
-            elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
-                logger.info(f"Writing: {thumbnail_dest}")
-                self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
-                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
-                )
+            # elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
+            #     logger.info(f"Writing: {thumbnail_dest}")
+            #     self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
+            #         layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
+            #     )
 
     def add_model_geopackages(self, local_dst: str = None, s3_dst: str = None, geometries: list = None):
         """Generate model geopackage asset for each geometry file.
@@ -432,7 +431,7 @@ class RASModelItem(Item):
             self.crs = subclass.file.projection
         return super().add_asset(key, subclass)
 
-    def add_geospatial_assets(self, output_prefix="s3://my-bucket/prefix"):
+    def add_geospatial_assets(self, output_prefix: str):
         for i in self.geometry_assets:
             if isinstance(i, GeometryHdfAsset):
                 refln_gdf = i.reference_lines_spatial()
@@ -441,26 +440,66 @@ class RASModelItem(Item):
                 perimeter_gdf = i.model_perimeter()
 
                 if refln_gdf is not None and not refln_gdf.empty:
-                    refln_pq_path = f"{output_prefix}/reference_lines.pq"
+                    refln_pq_path = f"{output_prefix}/ref_lines.pq"
                     refln_gdf.to_parquet(refln_pq_path)
+                    self.add_asset(
+                        "ref_lines",
+                        Asset(
+                            href=refln_pq_path,
+                            title="Reference Lines",
+                            description="Parquet file containing model reference lines and their geometry.",
+                            media_type="application/x-parquet",
+                            roles=["data"],
+                        ),
+                    )
                 else:
                     logger.warning("No reference lines found, unable to create asset.")
 
                 if refpt_gdf is not None and not refpt_gdf.empty:
-                    refpt_pq_path = f"{output_prefix}/reference_points.pq"
+                    refpt_pq_path = f"{output_prefix}/ref_points.pq"
                     refpt_gdf.to_parquet(refpt_pq_path)
+                    self.add_asset(
+                        "ref_points",
+                        Asset(
+                            href=refpt_pq_path,
+                            title="Reference Points",
+                            description="Parquet file containing model reference points and their geometry.",
+                            media_type="application/x-parquet",
+                            roles=["data"],
+                        ),
+                    )
                 else:
                     logger.warning("No reference points found, unable to create asset.")
 
                 if bc_line_gdf is not None and not bc_line_gdf.empty:
                     bc_line_pq_path = f"{output_prefix}/bc_lines.pq"
                     bc_line_gdf.to_parquet(bc_line_pq_path)
+                    self.add_asset(
+                        "bc_lines",
+                        Asset(
+                            href=bc_line_pq_path,
+                            title="Boundary Condition Lines",
+                            description="Parquet file containing model boundary condition lines and their geometry.",
+                            media_type="application/x-parquet",
+                            roles=["data"],
+                        ),
+                    )
                 else:
                     logger.warning("No boundary condition lines found, unable to create asset.")
 
                 if perimeter_gdf is not None and not perimeter_gdf.empty:
-                    model_perimeter_pq_path = f"{output_prefix}/model_perimeter.pq"
+                    model_perimeter_pq_path = f"{output_prefix}/model_geometry.pq"
                     perimeter_gdf.to_parquet(model_perimeter_pq_path)
+                    self.add_asset(
+                        "model_geometry",
+                        Asset(
+                            href=model_perimeter_pq_path,
+                            title="Model Geometry",
+                            description="Parquet file containing model geometry.",
+                            media_type="application/x-parquet",
+                            roles=["data"],
+                        ),
+                    )
                 else:
                     logger.warning("Unable to create perimeter asset.")
 

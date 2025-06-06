@@ -186,7 +186,7 @@ class PrjAsset(GenericAsset[CachedFile]):
     @classmethod
     def from_dict(cls, data: dict) -> ProjectAsset | ProjectionAsset:
         """Subclass."""
-        if is_ras_prj(data["href"]):
+        if 1 == 1:
             return ProjectAsset.from_dict(data)
         else:
             return ProjectionAsset.from_dict(data)
@@ -620,19 +620,18 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         """Return extra fields with added dynamic keys/values."""
         self._extra_fields[VERSION] = self.file.file_version
         self._extra_fields[UNITS] = self.file.units_system
-        self._extra_fields[REFERENCE_LINES] = self.reference_lines
+        self._extra_fields[REFERENCE_LINES] = self.reference_line_names
         return self._extra_fields
 
     @cached_property
-    def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
+    def reference_line_names(self) -> list[str] | None:
         """Docstring."""  # TODO: fill out
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
     def reference_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
-            trimmed_ref_lines = self.file.reference_lines[["refln_name", "geometry"]]
-            refln_gdf = gpd.GeoDataFrame(trimmed_ref_lines, geometry="geometry", crs=self.crs)
+            refln_gdf = self.file.reference_lines[["refln_name", "mesh_name", "geometry"]]
             if output_crs:
                 refln_gdf = refln_gdf.to_crs(output_crs)
             return refln_gdf
@@ -641,8 +640,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def reference_points_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
         if self.file.reference_points is not None and not self.file.reference_points.empty:
-            trimmed_ref_points = self.file.reference_points[["refpt_name", "geometry"]]
-            refpt_gdf = gpd.GeoDataFrame(trimmed_ref_points, geometry="geometry", crs=self.crs)
+            refpt_gdf = self.file.reference_points[["refpt_name", "mesh_name", "geometry"]]
             if output_crs:
                 refpt_gdf = refpt_gdf.to_crs(output_crs)
             return refpt_gdf
@@ -651,8 +649,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def bc_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
         if self.file.bc_lines is not None and not self.file.bc_lines.empty:
-            trimmed_bc_lines = self.file.bc_lines[["name", "geometry"]]
-            bc_line_gdf = gpd.GeoDataFrame(trimmed_bc_lines, geometry="geometry", crs=self.crs)
+            bc_line_gdf = self.file.bc_lines[["name", "mesh_name", "geometry"]]
             if output_crs:
                 bc_line_gdf = bc_line_gdf.to_crs(output_crs)
             return bc_line_gdf
@@ -777,7 +774,8 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             title=filepath.split("/")[-1],
             description="Thumbnail image for the model",
         )
-        asset.roles = ["thumbnail", "image/png"]
+        asset.roles = ["thumbnail"]
+        asset.media_type = "image/png"
         return asset
 
     def thumbnail(
