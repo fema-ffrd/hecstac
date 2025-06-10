@@ -172,11 +172,13 @@ class FFRDEventItem(Item):
     def _add_ts_assets_from_dict(self, asset_dict, description):
         for name, paths in asset_dict.items():
             for path in paths:
+                var_type = path.split("/")[-1].split(".")[0]
+                title = f"{name}-{var_type}"
                 self.add_asset(
-                    name,
+                    title,
                     Asset(
                         href=path,
-                        title=name,
+                        title=title,
                         description=description,
                         media_type="application/x-parquet",
                         roles=["data"],
