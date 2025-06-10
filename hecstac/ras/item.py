@@ -236,7 +236,7 @@ class RASModelItem(Item):
         self.properties[self.RAS_HAS_1D] = self.has_1d
         self.properties[self.RAS_HAS_2D] = self.has_2d
         self.properties[self.PROJECT_TITLE] = self.pf.project_title
-        self.properties[self.PROJECT_VERSION] = self._primary_geometry.file.file_version
+        self.properties[self.PROJECT_VERSION] = self.project_version
         self.properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
         self.properties[self.PROJECT_STATUS] = self.pf.project_status
         self.properties[self.MODEL_UNITS] = self.pf.project_units
@@ -255,6 +255,14 @@ class RASModelItem(Item):
             logger.warning(f"Could not extract item datetime from geometry.")
             self.datetime = datetime.datetime.now()
             self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
+
+    @cached_property
+    def project_version(self):
+        """Attempt to return the geometry used to perform the last update on the primary geometry file."""
+        if self._primary_geometry is not None:
+            return self._primary_geometry.file.file_version
+        else:
+            return None
 
     @cached_property
     def model_datetime(self) -> list[datetime.datetime]:
