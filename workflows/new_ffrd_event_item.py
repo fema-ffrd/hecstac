@@ -7,10 +7,6 @@ from hecstac.common.s3_utils import list_keys_regex, init_s3_resources, save_byt
 from hecstac.common.logger import initialize_logger
 from hecstac.events.ffrd import FFRDEventItem
 
-fs = fsspec.filesystem("s3")
-_, s3_client, _ = init_s3_resources()
-logger = initialize_logger()
-
 
 def extract_plan_info(plan_path):
     """Extract model name and event name from given plan file."""
@@ -59,8 +55,10 @@ def create_event_item(plan_file_path: str, source_model_path: str, output_prefix
 
 
 if __name__ == "__main__":
+    _, s3_client, _ = init_s3_resources()
+    logger = initialize_logger()
     config = {
-        "plan_file_path": "s3://trinity-pilot/calibration/hydraulics/blw-elkhart/blw-elkhart.p03.hdf",
+        "plan_file_path": "s3://trinity-pilot/calibration/hydraulics/blw-elkhart/blw-elkhart.p01.hdf",
         "source_model_path": "s3://trinity-pilot/stac/prod-support/calibration/model=blw-elkhart/item.json",
         "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration",
     }
