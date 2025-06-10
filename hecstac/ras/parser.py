@@ -1371,6 +1371,11 @@ class GeometryFile(CachedFile):
             return v
 
     @cached_property
+    def file_version(self) -> str:
+        """Provide consistent syntax with RasHDFFile."""
+        return self.geom_version
+
+    @cached_property
     def geometry_time(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry."""
         dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False, require_one=False)
