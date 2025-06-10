@@ -808,7 +808,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             # TODO: Add support for river centerline and cross-sections (from .hdf)
         title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
-        filename = f"thumbnail.{hdf_ext}.png"
+        filename = f"thumbnail.{hdf_ext}_hdf.png"
         filepath = os.path.join(thumbnail_dest, filename)
 
         # Export

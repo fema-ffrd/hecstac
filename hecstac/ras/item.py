@@ -295,11 +295,11 @@ class RASModelItem(Item):
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
                 )
-            # elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
-            #     logger.info(f"Writing: {thumbnail_dest}")
-            #     self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
-            #         layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
-            #     )
+            elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
+                logger.info(f"Writing: {thumbnail_dest}")
+                self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
+                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
+                )
 
     def add_model_geopackages(self, local_dst: str = None, s3_dst: str = None, geometries: list = None):
         """Generate model geopackage asset for each geometry file.
