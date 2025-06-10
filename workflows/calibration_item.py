@@ -44,9 +44,7 @@ def create_calibration_item(ras_project_path, output_prefix):
     calibration_model_files = list_calibration_model_files(bucket, prefix)
 
     ras_item = RASModelItem.from_prj(ras_project_path, crs=None, assets=calibration_model_files)
-    ras_item.set_self_href(
-        "https://trinity-pilot.s3.amazonaws.com/stac/prod-support/calibration/model=blw-elkhart/item.json"
-    )
+    ras_item.set_self_href(output_item_path)
     ras_item.add_model_thumbnails(layers=["mesh_areas", "breaklines", "bc_lines"])
     ras_item.add_geospatial_assets(output_assets_prefix)
 
