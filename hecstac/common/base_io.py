@@ -6,10 +6,12 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import obstore
+from dotenv import load_dotenv
 
 from hecstac.common.logger import get_logger
 
 logger = get_logger(__name__)
+load_dotenv()
 
 
 class ModelFileReaderError(Exception):
