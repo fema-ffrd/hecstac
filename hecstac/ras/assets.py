@@ -4,8 +4,10 @@ import io
 import logging
 import os
 import re
+import shutil
 import sqlite3
 from functools import cached_property, lru_cache
+from tempfile import NamedTemporaryFile, TemporaryFile
 from urllib.parse import urlparse
 
 import boto3
@@ -22,7 +24,7 @@ from shapely import MultiPolygon, Polygon
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
-from hecstac.common.s3_utils import save_bytes_s3
+from hecstac.common.s3_utils import make_uri_public, save_bytes_s3, save_file_s3
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
@@ -332,7 +334,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+        if not filepath.startswith("s3://") and not filepath.startswith("https://") and not os.path.exists(filepath):
             raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
 
         asset = GenericAsset(
@@ -345,7 +347,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
     def _add_geopackage_asset(self, filepath: str) -> None:
         """Add the geometry geopackage as an asset with a relative href."""
-        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+        if not filepath.startswith("s3://") and not filepath.startswith("https://") and not os.path.exists(filepath):
             raise FileNotFoundError(f"Geopackage file not found: {filepath}")
 
         asset = GenericAsset(
@@ -357,10 +359,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         return asset
 
     def thumbnail(
-        self,
-        layers: list,
-        title: str = "Model_Thumbnail",
-        thumbnail_dest: str = None,
+        self, layers: list, title: str = "Model_Thumbnail", thumbnail_dest: str = None, make_public: bool = True
     ) -> str:
         """Create a thumbnail figure for a geometry file."""
         # Set up figure
@@ -384,6 +383,8 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         export_thumbnail(map_layers, title, self.crs, filepath)
 
         # Add asset and return
+        if make_public:
+            filepath = make_uri_public(filepath)
         return self._add_thumbnail_asset(filepath)
 
     def _attributed_xs_for_gpkg(self, model_meta: dict, flow_file: SteadyFlowFile = None) -> gpd.GeoDataFrame:
@@ -428,7 +429,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
         return xs_gdf
 
-    def geopackage(self, dst: str, model_meta: dict, flow_file: SteadyFlowFile = None) -> str:
+    def geopackage(self, dst: str, model_meta: dict, flow_file: SteadyFlowFile = None, make_public: bool = True) -> str:
         """Make a geopackage for a geometry file."""
         # Validate that geometry is ready for gpkg creation
         n_reaches = len(self.file.reaches)
@@ -448,18 +449,29 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         }
 
         # Write spatial layers
-        for l in layers:
-            if layers[l] is not None:
-                layers[l].set_crs(self.crs).to_file(filepath, layer=l)
+        with NamedTemporaryFile(suffix=".gpkg") as f:
+            for l in layers:
+                if layers[l] is not None:
+                    layers[l].set_crs(self.crs).to_file(f.name, layer=l, driver="GPKG")
 
-        # Write non-spatial layer
-        with sqlite3.connect(filepath) as con:
-            cur = con.cursor()
-            cur.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT);")
-            for k, v in model_meta.items():
-                cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?);", (k, v))
-            con.commit()
-        con.close()
+            # Write non-spatial layer
+            with sqlite3.connect(f.name) as con:
+                cur = con.cursor()
+                cur.execute("CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT);")
+                for k, v in model_meta.items():
+                    cur.execute("INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?);", (k, v))
+                con.commit()
+            con.close()
+
+            # Check if dst is on S3.  VSIS3 doesn't seem to allow sqlite writes via geopandas at the moment.
+            # Need to make file locally then upload
+            if filepath.lower().startswith("s3://"):
+                save_file_s3(f.name, filepath)
+            else:
+                shutil.copy(f.name, filepath)
+
+        if make_public:
+            filepath = make_uri_public(filepath)
         return self._add_geopackage_asset(filepath)
 
 
@@ -741,10 +753,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         return asset
 
     def thumbnail(
-        self,
-        layers: list,
-        title: str = "Model_Thumbnail",
-        thumbnail_dest: str = None,
+        self, layers: list, title: str = "Model_Thumbnail", thumbnail_dest: str = None, make_public: bool = True
     ):
         """
         Create a thumbnail figure for a geometry hdf file, includingvarious geospatial layers such as USGS gages, mesh areas, breaklines, and boundary condition (BC) lines.
@@ -777,6 +786,8 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         export_thumbnail(map_layers, title, self.crs, filepath)
 
         # Add asset and return
+        if make_public:
+            filepath = make_uri_public(filepath)
         return self._add_thumbnail_asset(filepath)
 
 

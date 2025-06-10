@@ -59,7 +59,7 @@ def list_keys_regex(s3_client: boto3.Session.client, bucket: str, prefix_include
 def save_bytes_s3(
     data: io.BytesIO,
     s3_path: str,
-    content_type: str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    content_type: str = "",
 ):
     """Upload BytesIO to S3."""
     parsed = urlparse(s3_path)
@@ -67,6 +67,18 @@ def save_bytes_s3(
     key = parsed.path.lstrip("/")
     s3 = boto3.client("s3")
     s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType=content_type)
+
+
+def save_file_s3(
+    local_path: str,
+    s3_path: str,
+):
+    """Upload BytesIO to S3."""
+    parsed = urlparse(s3_path)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+    s3 = boto3.client("s3")
+    s3.upload_file(Filename=local_path, Bucket=bucket, Key=key)
 
 
 def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
@@ -136,4 +148,11 @@ def qc_results_to_excel_s3(results: dict, s3_key: str) -> None:
         passed_df.to_excel(writer, sheet_name="passed", index=False)
 
     buffer.seek(0)
-    save_bytes_s3(buffer, s3_key)
+    save_bytes_s3(buffer, s3_key, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def make_uri_public(uri: str) -> str:
+    """Convert from an AWS S3 URI to an https url."""
+    bucket = urlparse(uri).netloc
+    path = urlparse(uri).path
+    return f"https://{bucket}.s3.amazonaws.com/{path}"
