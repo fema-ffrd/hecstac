@@ -311,12 +311,13 @@ class RASModelItem(Item):
             thumbnail_dest = os.path.dirname(self.self_href)
 
         for geom in self.geometry_assets:
-            if isinstance(geom, GeometryHdfAsset) and geom.has_2d:
+            # TODO: right now since hdf thumbs don't have 1D elements, we need to run all 1D through regular geom.
+            if isinstance(geom, GeometryHdfAsset) and not geom.has_1d:
                 logger.info(f"Writing: {thumbnail_dest}")
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
                 )
-            elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
+            elif isinstance(geom, GeometryAsset) and (not os.path.exists(geom.href + ".hdf") or geom.has_1d):
                 logger.info(f"Writing: {thumbnail_dest}")
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
@@ -402,7 +403,7 @@ class RASModelItem(Item):
             if isinstance(i, (GeometryAsset, GeometryHdfAsset)):
                 if i.name.startswith(self._primary_plan.file.geometry_file):
                     return i
-        return None
+        return
 
     @cached_property
     def gpkg_metadata(self) -> dict:
