@@ -44,7 +44,7 @@ from hecstac.ras.utils import (
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
-    return f"{Path(fpath).stem}.{suffix.strip(" ")}"
+    return f"{Path(fpath).stem}.{suffix.strip(' ')}"
 
 
 class CachedFile:
@@ -1665,9 +1665,7 @@ class GeometryFile(CachedFile):
                     ] = True
 
                     if structure.tail_water_river in xs_gdf.river:
-
                         if structure.multiple_xs:
-
                             ds_xs = xs_gdf.loc[
                                 (xs_gdf["river"] == structure.tail_water_river)
                                 & (xs_gdf["reach"] == structure.tail_water_reach)
@@ -1690,7 +1688,6 @@ class GeometryFile(CachedFile):
                                 "has_lateral_structure",
                             ] = True
                         else:
-
                             ds_xs = xs_gdf.loc[
                                 (xs_gdf["river"] == structure.tail_water_river)
                                 & (xs_gdf["reach"] == structure.tail_water_reach)
@@ -1776,7 +1773,6 @@ class SteadyFlowFile(CachedFile):
             flows = []
 
             for line in lines[1:]:
-
                 if "River Rch & RM" in line:
                     break
 
