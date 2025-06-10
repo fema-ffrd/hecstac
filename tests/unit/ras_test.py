@@ -23,16 +23,15 @@ OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 def ras_models():
     directory = DATA_DIR / "metadata.json"
     with open(directory) as f:
-        models = json.load(f)
-    for m in models:
-        prj_path = DATA_DIR / m["directory"] / m["prj_file"]
-        yield (str(prj_path), m["crs"])
+        meta = json.load(f)
+    for m in meta["models"]:
+        yield (m["prj_path"], m["crs"], m["assets"])
 
 
-@pytest.mark.parametrize("prj_path, crs", ras_models())
-def test_stac_creation(prj_path: str, crs: str):
+@pytest.mark.parametrize("prj_path, crs, assets", ras_models())
+def test_stac_creation(prj_path: str, crs: str, assets: list):
     """Test STAC item creation and serialization/deserialization."""
-    item = RASModelItem.from_prj(prj_path, crs)
+    item = RASModelItem.from_prj(prj_path, crs, assets=assets)
 
     # In-memory check
     dict_1 = item.to_dict()
@@ -80,11 +79,11 @@ def print_mismatch(i, dict_1, dict_2, tb):
     print("=" * 50)
 
 
-@pytest.mark.parametrize("prj_path, crs", ras_models())
-def test_thumbnail_creation(prj_path: str, crs: str):
+@pytest.mark.parametrize("prj_path, crs, assets", ras_models())
+def test_thumbnail_creation(prj_path: str, crs: str, assets: list):
     """Test thumbnail writing for RAS items."""
     # Load item
-    item = RASModelItem.from_prj(prj_path, crs)
+    item = RASModelItem.from_prj(prj_path, crs, assets=assets)
 
     # Establish files that will be made and clear if necessary
     out_paths = set()
@@ -104,11 +103,11 @@ def test_thumbnail_creation(prj_path: str, crs: str):
         assert os.path.exists(i), f"Failed to generate thumbnail for {i}"
 
 
-@pytest.mark.parametrize("prj_path, crs", ras_models())
-def test_geopackage_creation(prj_path: str, crs: str):
+@pytest.mark.parametrize("prj_path, crs, assets", ras_models())
+def test_geopackage_creation(prj_path: str, crs: str, assets: list):
     """Test geopackage writing for RAS items."""
     # Load item
-    item = RASModelItem.from_prj(prj_path, crs)
+    item = RASModelItem.from_prj(prj_path, crs, assets=assets)
 
     # Establish files that will be made and clear if necessary
     out_paths = set()
@@ -133,6 +132,6 @@ def test_geopackage_creation(prj_path: str, crs: str):
 
 if __name__ == "__main__":
     for m in ras_models():
-        test_stac_creation(*m)
+        # test_stac_creation(*m)
         test_thumbnail_creation(*m)
-        test_geopackage_creation(*m)
+        # test_geopackage_creation(*m)

@@ -1371,6 +1371,11 @@ class GeometryFile(CachedFile):
             return v
 
     @cached_property
+    def file_version(self) -> str:
+        """Provide consistent syntax with RasHDFFile."""
+        return self.geom_version
+
+    @cached_property
     def geometry_time(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry."""
         dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False, require_one=False)
@@ -1539,9 +1544,9 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all(
-            [i.is_empty for i in xs_df.geometry]
-        ), "No valid cross-sections found.  Possibly non-georeferenced model"
+        assert not all([i.is_empty for i in xs_df.geometry]), (
+            "No valid cross-sections found.  Possibly non-georeferenced model"
+        )
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]
@@ -1660,9 +1665,7 @@ class GeometryFile(CachedFile):
                     ] = True
 
                     if structure.tail_water_river in xs_gdf.river:
-
                         if structure.multiple_xs:
-
                             ds_xs = xs_gdf.loc[
                                 (xs_gdf["river"] == structure.tail_water_river)
                                 & (xs_gdf["reach"] == structure.tail_water_reach)
@@ -1685,7 +1688,6 @@ class GeometryFile(CachedFile):
                                 "has_lateral_structure",
                             ] = True
                         else:
-
                             ds_xs = xs_gdf.loc[
                                 (xs_gdf["river"] == structure.tail_water_river)
                                 & (xs_gdf["reach"] == structure.tail_water_reach)
@@ -1771,7 +1773,6 @@ class SteadyFlowFile(CachedFile):
             flows = []
 
             for line in lines[1:]:
-
                 if "River Rch & RM" in line:
                     break
 

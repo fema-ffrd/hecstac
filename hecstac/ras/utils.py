@@ -17,6 +17,7 @@ from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
 
+from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import save_bytes_s3
 
@@ -69,6 +70,7 @@ def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str
 
 def find_model_files(ras_prj: str) -> list[str]:
     # TODO: Add option to recursively iterate through all subdirectories in a model folder.
+    # TODO: Add option to search for files on S3.
     """Find all files with the same base name and return absolute paths."""
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
@@ -78,8 +80,7 @@ def find_model_files(ras_prj: str) -> list[str]:
 
 def is_ras_prj(url: str) -> bool:
     """Check if a file is a HEC-RAS project file."""
-    with open(url) as f:
-        file_str = f.read()
+    file_str = ModelFileReader(url).content
     if "Proj Title" in file_str.split("\n")[0]:
         return True
     else:

@@ -153,7 +153,11 @@ class RASModelItem(Item):
         """Apply the projection extension to this item given a CRS."""
         prj_ext = ProjectionExtension.ext(self, add_if_missing=True)
         crs = CRS(crs)
-        prj_ext.apply(epsg=crs.to_epsg(), wkt2=crs.to_wkt())
+        if crs.to_authority() is not None:
+            auth = ":".join(crs.to_authority())
+        else:
+            auth = None
+        prj_ext.apply(code=auth, wkt2=crs.to_wkt())
 
     @property
     def geometry(self) -> dict:
@@ -232,7 +236,7 @@ class RASModelItem(Item):
         self.properties[self.RAS_HAS_1D] = self.has_1d
         self.properties[self.RAS_HAS_2D] = self.has_2d
         self.properties[self.PROJECT_TITLE] = self.pf.project_title
-        self.properties[self.PROJECT_VERSION] = self._primary_geometry.file.geom_version
+        self.properties[self.PROJECT_VERSION] = self._primary_geometry.file.file_version
         self.properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
         self.properties[self.PROJECT_STATUS] = self.pf.project_status
         self.properties[self.MODEL_UNITS] = self.pf.project_units
@@ -268,7 +272,12 @@ class RASModelItem(Item):
         return list(set(datetimes))
 
     def add_model_thumbnails(
-        self, layers: list, title_prefix: str = "Model_Thumbnail", thumbnail_dir=None, s3_thumbnail_dst=None
+        self,
+        layers: list,
+        title_prefix: str = "Model_Thumbnail",
+        thumbnail_dir=None,
+        s3_thumbnail_dir=None,
+        make_public: bool = True,
     ):
         """Generate model thumbnail asset for each geometry file.
 
@@ -280,11 +289,15 @@ class RASModelItem(Item):
             Thumbnail title prefix, by default "Model_Thumbnail".
         thumbnail_dir : str, optional
             Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
+        s3_thumbnail_dir : str, optional
+            Directory for created thumbnails on AWS S3. If None then thumbnails will be exported to same level as the item.
+        make_public : bool, optional
+            Whether to use public-style url for created assets.
         """
         if thumbnail_dir:
             thumbnail_dest = thumbnail_dir
-        elif s3_thumbnail_dst:
-            thumbnail_dest = s3_thumbnail_dst
+        elif s3_thumbnail_dir:
+            thumbnail_dest = s3_thumbnail_dir
         else:
             logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
             thumbnail_dest = os.path.dirname(self.self_href)
@@ -293,15 +306,17 @@ class RASModelItem(Item):
             if isinstance(geom, GeometryHdfAsset) and geom.has_2d:
                 logger.info(f"Writing: {thumbnail_dest}")
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
-                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
+                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
                 )
             elif isinstance(geom, GeometryAsset) and not (os.path.exists(geom.href + ".hdf") and geom.has_2d):
                 logger.info(f"Writing: {thumbnail_dest}")
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
-                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest
+                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
                 )
 
-    def add_model_geopackages(self, local_dst: str = None, s3_dst: str = None, geometries: list = None):
+    def add_model_geopackages(
+        self, local_dst: str = None, s3_dst: str = None, geometries: list = None, make_public: bool = True
+    ):
         """Generate model geopackage asset for each geometry file.
 
         Parameters
@@ -312,6 +327,8 @@ class RASModelItem(Item):
             S3 prefix for created geopackages. If None then geopackages will be exported to same level as the item.
         geometries : list, optional
             A list of geometry file names to make the gpkg for.
+        make_public : bool, optional
+            Whether to use public-style url for created assets.
         """
         if local_dst:
             dst = local_dst
@@ -333,7 +350,9 @@ class RASModelItem(Item):
                         flow_file = self._primary_flow.file
                     else:
                         flow_file = None
-                    self.assets[asset_name] = geom.geopackage(dst, self.gpkg_metadata, flow_file)
+                    self.assets[asset_name] = geom.geopackage(
+                        dst, self.gpkg_metadata, flow_file, make_public=make_public
+                    )
                 except Exception as e:
                     logging.error(f"Error on {geom.name}: {str(e)}")
                     logging.error(str(traceback.format_exc()))
@@ -369,11 +388,11 @@ class RASModelItem(Item):
         return None
 
     @cached_property
-    def _primary_geometry(self) -> GeometryAsset:
+    def _primary_geometry(self) -> GeometryAsset | GeometryHdfAsset:
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
-            if isinstance(i, GeometryAsset):
-                if i.name == self._primary_plan.file.geometry_file:
+            if isinstance(i, (GeometryAsset, GeometryHdfAsset)):
+                if i.name.startswith(self._primary_plan.file.geometry_file):
                     return i
         return None
 
