@@ -1,11 +1,10 @@
 import pandas as pd
-import fsspec
-import logging
 import os
+from rashdf import RasPlanHdf
 
 
 def save_df_as_pq(df: pd.DataFrame, path: str):
-    """Save DataFrame to parquet on locally or on s3."""
+    """Save DataFrame to parquet on local or on s3."""
     if "s3://" in path:
         df.to_parquet(path)
     else:
@@ -14,9 +13,8 @@ def save_df_as_pq(df: pd.DataFrame, path: str):
         df.to_parquet(path)
 
 
-def save_reference_lines(plan_hdf, output_prefix):
+def save_reference_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     """Process and save flow and water surface time series data for reference lines."""
-
     ref_line_ts = plan_hdf.reference_lines_timeseries_output()
 
     refln_paths = {}
@@ -41,7 +39,7 @@ def save_reference_lines(plan_hdf, output_prefix):
     return refln_paths
 
 
-def save_reference_points(plan_hdf, output_prefix):
+def save_reference_points(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     """Process and save velocity and water surface time series data for reference points."""
     ref_point_ts = plan_hdf.reference_points_timeseries_output()
 
@@ -67,7 +65,7 @@ def save_reference_points(plan_hdf, output_prefix):
     return refpt_paths
 
 
-def save_bc_lines(plan_hdf, output_prefix):
+def save_bc_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     """Process and save velocity and water surface time series data for reference points."""
     bs_line_ts = plan_hdf.bc_lines_timeseries_output()
 
