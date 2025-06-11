@@ -97,6 +97,7 @@ class FFRDEventItem(Item):
 
     @cached_property
     def plan_hdf(self):
+        """Returns the main RAS plan HDF file from the ras simulation files."""
         plan_hdf_pattern = re.compile(r"p\d{2}\.hdf$")
         for ras_file in self.ras_simulation_files:
             if plan_hdf_pattern.search(ras_file):
@@ -169,7 +170,8 @@ class FFRDEventItem(Item):
         if asset is not None:
             self.add_asset(asset.title, asset)
 
-    def _add_ts_assets_from_dict(self, asset_dict, description):
+    def _add_ts_assets_from_dict(self, asset_dict: dict, description: str):
+        """Add time data as item assets."""
         for name, paths in asset_dict.items():
             for path in paths:
                 var_type = path.split("/")[-1].split(".")[0]
@@ -185,7 +187,18 @@ class FFRDEventItem(Item):
                     ),
                 )
 
-    def add_ts_assets(self, prefix):
+    def add_ts_assets(self, prefix: str):
+        """
+        Extract and add time series assets from the plan HDF file to the STAC item. Stores each asset as a parquet.
+
+        This includes:
+        - Boundary condition line time series
+        - Reference line time series
+        - Reference point time series
+
+        Args:
+            prefix (str): S3 or local path prefix where the time series assets will be stored.
+        """
         plan_hdf = self.plan_hdf
 
         # Boundary condition lines
