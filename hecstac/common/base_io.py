@@ -62,15 +62,19 @@ class ModelFileReader:
             )
             self.path = key
             try:
-                self.content = (
-                    obstore.open_reader(self.store, self.path)
-                    .readall()
-                    .to_bytes()
-                    .decode("utf-8")
-                    .replace("\r\n", "\n")
-                )
-            except UnicodeDecodeError as e:
-                error_msg = f"Error parsing {self.path}: {e}"
-                raise ModelFileReaderError(error_msg)
+                for i in ["utf-8", "latin_1", "iso8859_15"]:
+                    try:
+                        self.content = (
+                            obstore.open_reader(self.store, self.path)
+                            .readall()
+                            .to_bytes()
+                            .decode(i)
+                            .replace("\r\n", "\n")
+                        )
+                        break
+                    except UnicodeDecodeError as e:
+                        error_msg = f"Error parsing {self.path} with {i}: {e}"
+                else:
+                    raise ModelFileReaderError(error_msg)
             except Exception as e:
                 raise ModelFileReaderError(f"An unexpected error occurred: {e}")
