@@ -383,7 +383,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         export_thumbnail(map_layers, title, self.crs, filepath)
 
         # Add asset and return
-        if make_public:
+        if make_public and filepath.startswith("s3://"):
             filepath = make_uri_public(filepath)
         return self._add_thumbnail_asset(filepath)
 
@@ -470,7 +470,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
             else:
                 shutil.copy(f.name, filepath)
 
-        if make_public:
+        if make_public and filepath.startswith("s3://"):
             filepath = make_uri_public(filepath)
         return self._add_geopackage_asset(filepath)
 
@@ -786,7 +786,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         export_thumbnail(map_layers, title, self.crs, filepath)
 
         # Add asset and return
-        if make_public:
+        if make_public and filepath.startswith("s3://"):
             filepath = make_uri_public(filepath)
         return self._add_thumbnail_asset(filepath)
 
