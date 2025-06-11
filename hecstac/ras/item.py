@@ -450,76 +450,57 @@ class RASModelItem(Item):
             self.crs = subclass.file.projection
         return super().add_asset(key, subclass)
 
+    def _process_and_add_pq_asset(self, gdf, path, asset_key, title, description):
+        if gdf is not None and not gdf.empty:
+            gdf.to_parquet(path)
+            self.add_asset(
+                asset_key,
+                Asset(
+                    href=path,
+                    title=title,
+                    description=description,
+                    media_type="application/x-parquet",
+                    roles=["data"],
+                ),
+            )
+        else:
+            logger.warning(f"No data found for {title.lower()}, unable to create asset.")
+
     def add_geospatial_assets(self, output_prefix: str):
+        """
+        Extracts geospatial data from geometry hdf asset and adds them as Parquet assets.
+
+        Args:
+            output_prefix (str): Path prefix where the Parquet files will be saved.
+        """
         for i in self.geometry_assets:
             if isinstance(i, GeometryHdfAsset):
-                refln_gdf = i.reference_lines_spatial()
-                refpt_gdf = i.reference_points_spatial()
-                bc_line_gdf = i.bc_lines_spatial()
-                perimeter_gdf = i.model_perimeter()
-
-                if refln_gdf is not None and not refln_gdf.empty:
-                    refln_pq_path = f"{output_prefix}/ref_lines.pq"
-                    refln_gdf.to_parquet(refln_pq_path)
-                    self.add_asset(
-                        "ref_lines",
-                        Asset(
-                            href=refln_pq_path,
-                            title="Reference Lines",
-                            description="Parquet file containing model reference lines and their geometry.",
-                            media_type="application/x-parquet",
-                            roles=["data"],
-                        ),
-                    )
-                else:
-                    logger.warning("No reference lines found, unable to create asset.")
-
-                if refpt_gdf is not None and not refpt_gdf.empty:
-                    refpt_pq_path = f"{output_prefix}/ref_points.pq"
-                    refpt_gdf.to_parquet(refpt_pq_path)
-                    self.add_asset(
-                        "ref_points",
-                        Asset(
-                            href=refpt_pq_path,
-                            title="Reference Points",
-                            description="Parquet file containing model reference points and their geometry.",
-                            media_type="application/x-parquet",
-                            roles=["data"],
-                        ),
-                    )
-                else:
-                    logger.warning("No reference points found, unable to create asset.")
-
-                if bc_line_gdf is not None and not bc_line_gdf.empty:
-                    bc_line_pq_path = f"{output_prefix}/bc_lines.pq"
-                    bc_line_gdf.to_parquet(bc_line_pq_path)
-                    self.add_asset(
-                        "bc_lines",
-                        Asset(
-                            href=bc_line_pq_path,
-                            title="Boundary Condition Lines",
-                            description="Parquet file containing model boundary condition lines and their geometry.",
-                            media_type="application/x-parquet",
-                            roles=["data"],
-                        ),
-                    )
-                else:
-                    logger.warning("No boundary condition lines found, unable to create asset.")
-
-                if perimeter_gdf is not None and not perimeter_gdf.empty:
-                    model_perimeter_pq_path = f"{output_prefix}/model_geometry.pq"
-                    perimeter_gdf.to_parquet(model_perimeter_pq_path)
-                    self.add_asset(
-                        "model_geometry",
-                        Asset(
-                            href=model_perimeter_pq_path,
-                            title="Model Geometry",
-                            description="Parquet file containing model geometry.",
-                            media_type="application/x-parquet",
-                            roles=["data"],
-                        ),
-                    )
-                else:
-                    logger.warning("Unable to create perimeter asset.")
-
+                self._process_and_add_pq_asset(
+                    i.reference_lines_spatial(),
+                    f"{output_prefix}/ref_lines.pq",
+                    "ref_lines",
+                    "Reference Lines",
+                    "Parquet file containing model reference lines and their geometry.",
+                )
+                self._process_and_add_pq_asset(
+                    i.reference_points_spatial(),
+                    f"{output_prefix}/ref_points.pq",
+                    "ref_points",
+                    "Reference Points",
+                    "Parquet file containing model reference points and their geometry.",
+                )
+                self._process_and_add_pq_asset(
+                    i.bc_lines_spatial(),
+                    f"{output_prefix}/bc_lines.pq",
+                    "bc_lines",
+                    "Boundary Condition Lines",
+                    "Parquet file containing model boundary condition lines and their geometry.",
+                )
+                self._process_and_add_pq_asset(
+                    i.model_perimeter(),
+                    f"{output_prefix}/model_geometry.pq",
+                    "model_geometry",
+                    "Model Geometry",
+                    "Parquet file containing model geometry.",
+                )
                 break
