@@ -1,5 +1,7 @@
 """HEC-RAS STAC Item class."""
 
+from __future__ import annotations
+
 import datetime
 import json
 import logging
@@ -99,6 +101,13 @@ class RASModelItem(Item):
         stac.update_properties()
 
         return stac
+
+    @classmethod
+    def from_dict(cls, stac: dict) -> RASModelItem:
+        """Load a model from a stac item dictionary."""
+        item = super().from_dict(stac)
+        item.update_properties()
+        return item
 
     @cached_property
     def factory(self) -> AssetFactory:
