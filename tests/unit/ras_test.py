@@ -86,20 +86,14 @@ def test_thumbnail_creation(prj_path: str, crs: str, assets: list):
     item = RASModelItem.from_prj(prj_path, crs, assets=assets)
 
     # Establish files that will be made and clear if necessary
-    out_paths = set()
-    out_dir = Path(prj_path.replace(str(DATA_DIR), str(OUTPUT_DIR))).parent
+    out_dir = Path(OUTPUT_DIR) / Path(prj_path).parent.name
     out_dir.mkdir(exist_ok=True, parents=True)
-    for i in item.geometry_assets:
-        tmp_path = out_dir / f"thumbnail.{i.name.replace('.hdf', '').split('.')[-1]}.png"
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        out_paths.add(tmp_path)
 
     # Create thumbnails
     item.add_model_thumbnails(layers=["XS", "River", "Structure", "Junction", "mesh_areas"], thumbnail_dir=str(out_dir))
 
     # Check that they were generated
-    for i in out_paths:
+    for i in [i.href for i in item.assets.values() if i.roles and "thumbnail" in i.roles]:
         assert os.path.exists(i), f"Failed to generate thumbnail for {i}"
 
 
@@ -110,14 +104,8 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
     item = RASModelItem.from_prj(prj_path, crs, assets=assets)
 
     # Establish files that will be made and clear if necessary
-    out_paths = set()
-    out_dir = Path(prj_path.replace(str(DATA_DIR), str(OUTPUT_DIR))).parent
+    out_dir = Path(OUTPUT_DIR) / Path(prj_path).parent.name
     out_dir.mkdir(exist_ok=True, parents=True)
-    for i in item.geometry_assets:
-        tmp_path = out_dir / f"{i.name.replace('.hdf', '')}.gpkg"
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        out_paths.add(tmp_path)
 
     # Create thumbnails
     try:
@@ -126,12 +114,12 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
         return  # Properly handled
 
     # Check that they were generated
-    for i in out_paths:
+    for i in [i.href for i in item.assets.values() if i.roles and "RAS-GEOMETRY-GPKG" in i.roles]:
         assert os.path.exists(i), f"Failed to generate geopackage for {i}"
 
 
 if __name__ == "__main__":
     for m in ras_models():
-        # test_stac_creation(*m)
+        test_stac_creation(*m)
         test_thumbnail_creation(*m)
-        # test_geopackage_creation(*m)
+        test_geopackage_creation(*m)
