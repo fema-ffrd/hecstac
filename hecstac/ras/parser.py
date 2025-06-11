@@ -3,6 +3,7 @@
 import datetime
 import logging
 import math
+import os
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from enum import Enum
@@ -1544,9 +1545,9 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]
@@ -1882,7 +1883,12 @@ class RASHDFFile(CachedFile):
         self.logger.info(f"Reading: {self.fpath}")
 
         self.hdf_object = hdf_constructor.open_uri(
-            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
+            fpath,
+            fsspec_kwargs={
+                "default_cache_type": "blockcache",
+                "default_block_size": 10**5,
+                "anon": (os.getenv("AWS_ACCESS_KEY_ID") is None and os.getenv("AWS_SECRET_ACCESS_KEY") is None),
+            },
         )
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
@@ -2102,9 +2108,6 @@ class PlanHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasPlanHdf, **kwargs)
 
-        self.hdf_object = RasPlanHdf.open_uri(
-            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
-        )
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
@@ -2390,9 +2393,6 @@ class GeometryHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
-        self.hdf_object = RasGeomHdf.open_uri(
-            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
-        )
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
