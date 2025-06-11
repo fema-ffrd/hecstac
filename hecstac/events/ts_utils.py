@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 from rashdf import RasPlanHdf
+from rashdf.plan import RasPlanHdfError
 
 
 def save_df_as_pq(df: pd.DataFrame, path: str):
@@ -15,7 +16,10 @@ def save_df_as_pq(df: pd.DataFrame, path: str):
 
 def save_reference_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     """Process and save flow and water surface time series data for reference lines."""
-    ref_line_ts = plan_hdf.reference_lines_timeseries_output()
+    try:
+        ref_line_ts = plan_hdf.reference_lines_timeseries_output()
+    except RasPlanHdfError:
+        return None
 
     refln_paths = {}
 
@@ -41,7 +45,10 @@ def save_reference_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
 
 def save_reference_points(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     """Process and save velocity and water surface time series data for reference points."""
-    ref_point_ts = plan_hdf.reference_points_timeseries_output()
+    try:
+        ref_point_ts = plan_hdf.reference_points_timeseries_output()
+    except RasPlanHdfError:
+        return None
 
     refpt_paths = {}
 
@@ -67,8 +74,10 @@ def save_reference_points(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
 
 def save_bc_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     """Process and save velocity and water surface time series data for reference points."""
-    bs_line_ts = plan_hdf.bc_lines_timeseries_output()
-
+    try:
+        bs_line_ts = plan_hdf.bc_lines_timeseries_output()
+    except RasPlanHdfError:
+        return None
     bc_ln_paths = {}
 
     for bc_line_id in bs_line_ts.bc_line_id.values:

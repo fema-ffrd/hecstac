@@ -204,14 +204,23 @@ class FFRDEventItem(Item):
         # Boundary condition lines
         logger.info("Processing BC Line time series data.")
         bc_ln_paths = save_bc_lines(plan_hdf, prefix)
-        self._add_ts_assets_from_dict(bc_ln_paths, "Parquet containing bc line time series data.")
+        if bc_ln_paths:
+            self._add_ts_assets_from_dict(bc_ln_paths, "Parquet containing bc line time series data.")
+        else:
+            logger.info("No bc lines found.")
 
         # Reference lines
         logger.info("Processing reference line time series data.")
         refln_paths = save_reference_lines(plan_hdf, prefix)
-        self._add_ts_assets_from_dict(refln_paths, "Parquet containing reference line time series data.")
+        if refln_paths:
+            self._add_ts_assets_from_dict(refln_paths, "Parquet containing reference line time series data.")
+        else:
+            logger.info("No reference lines found.")
 
         # Reference points
         logger.info("Processing reference point time series data.")
         refpt_paths = save_reference_points(plan_hdf, prefix)
-        self._add_ts_assets_from_dict(refpt_paths, "Parquet containing reference point time series data.")
+        if refpt_paths:
+            self._add_ts_assets_from_dict(refpt_paths, "Parquet containing reference point time series data.")
+        else:
+            logger.info("No reference points found.")
