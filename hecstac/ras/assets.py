@@ -642,6 +642,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             return list(self.file.reference_lines["refln_name"])
 
     def reference_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return reference line names and geometry."""
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             refln_gdf = self.file.reference_lines[["refln_name", "mesh_name", "geometry"]]
             if output_crs:
@@ -651,6 +652,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             return None
 
     def reference_points_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return reference point names and geometry."""
         if self.file.reference_points is not None and not self.file.reference_points.empty:
             refpt_gdf = self.file.reference_points[["refpt_name", "mesh_name", "geometry"]]
             if output_crs:
@@ -660,6 +662,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             return None
 
     def bc_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return boundary condition line names and geometry."""
         if self.file.bc_lines is not None and not self.file.bc_lines.empty:
             bc_line_gdf = self.file.bc_lines[["name", "mesh_name", "geometry"]]
             if output_crs:
@@ -669,6 +672,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             return None
 
     def model_perimeter(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return model perimeter from mesh areas."""
         mesh_areas = self.file.mesh_areas()
         if mesh_areas:
             perimeter_gdf = gpd.GeoDataFrame(geometry=[mesh_areas], crs=self.crs)
@@ -778,7 +782,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+        if not (filepath.startswith("s3://") or filepath.startswith("https://")) and not os.path.exists(filepath):
             raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
 
         asset = GenericAsset(
