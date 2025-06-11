@@ -3,12 +3,12 @@ import io
 import fsspec
 import json
 from rashdf import RasPlanHdf
-from hecstac.common.s3_utils import list_keys_regex, init_s3_resources, save_bytes_s3
+from hecstac.common.s3_utils import list_keys_regex, init_s3_resources, save_bytes_s3, parse_s3_url
 from hecstac.common.logger import initialize_logger
 from hecstac.events.ffrd import FFRDEventItem
 
 
-def extract_plan_info(plan_path):
+def extract_plan_info(plan_path: str):
     """Extract model name and event name from given plan file."""
     plan_hdf = RasPlanHdf.open_uri(plan_path)
 
@@ -18,8 +18,9 @@ def extract_plan_info(plan_path):
     return model_name, event_name
 
 
-def list_plan_hdfs(bucket: str, prefix: str) -> list:
+def list_plan_hdfs(model_prefix: str) -> list:
     """List all plan HDF files in the given S3 prefix."""
+    bucket, prefix = parse_s3_url(model_prefix)
     ras_files = list_keys_regex(s3_client=s3_client, bucket=bucket, prefix_includes=prefix)
     ras_files = [f"s3://{bucket}/{f}" for f in ras_files]
     plan_hdf_files = [f for f in ras_files if re.search(r"\.[p]\d{2}\.hdf$", f)]
@@ -29,42 +30,56 @@ def list_plan_hdfs(bucket: str, prefix: str) -> list:
         raise ValueError(f"No plan hdf files found at bucket: {bucket} and prefix: {prefix} ")
 
 
-def create_event_item(plan_file_path: str, source_model_path: str, output_prefix):
+def create_event_item(plan_file_path: str, source_model_path: str, output_prefix: str, calibration_only: bool = True):
+    """
+    Create and upload a STAC item for a RAS model event.
 
+    Args:
+        plan_file_path (str): Path to the RAS plan file (.pXX).
+        source_model_path (str): Path to the source model used for the event.
+        output_prefix (str): S3 prefix for storing the output item and assets.
+        calibration_only (bool): If True, only process events with 'calibration' in the name.
+    """
     model_name, event_name = extract_plan_info(plan_file_path)
 
-    if "calibration" in event_name:
-        logger.info(f"Creating stac item for event: {event_name}")
+    if calibration_only and "calibration" not in event_name:
+        logger.warning(f"{event_name} does not contain 'calibration', skipping...")
+        return
 
-        short_event_name = event_name.split("_")[1]
+    logger.info(f"Creating stac item for event: {event_name}")
 
-        assets_prefix = f"{output_prefix}/model={model_name}/event={short_event_name}"
-        dest_href = f"{output_prefix}/model={model_name}/event={short_event_name}/item.json"
+    short_event_name = event_name.split("_")[1] if "calibration" in event_name else event_name
 
-        event_item = FFRDEventItem(
-            ras_simulation_files=[plan_file_path], source_model_paths=[source_model_path], event_id=short_event_name
-        )
+    assets_prefix = f"{output_prefix}/model={model_name}/event={short_event_name}"
+    dest_href = f"{assets_prefix}/item.json"
 
-        event_item.add_ts_assets(assets_prefix)
-        event_item.validate()
+    event_item = FFRDEventItem(
+        ras_simulation_files=[plan_file_path], source_model_paths=[source_model_path], event_id=short_event_name
+    )
 
-        item_dict = event_item.to_dict()
-        item_bytes = io.BytesIO(json.dumps(item_dict, indent=2).encode("utf-8"))
+    event_item.add_ts_assets(assets_prefix)
+    event_item.validate()
 
-        save_bytes_s3(data=item_bytes, s3_path=dest_href, content_type="application/json")
+    item_dict = event_item.to_dict()
+    item_bytes = io.BytesIO(json.dumps(item_dict, indent=2).encode("utf-8"))
+
+    save_bytes_s3(data=item_bytes, s3_path=dest_href, content_type="application/json")
 
 
 if __name__ == "__main__":
     _, s3_client, _ = init_s3_resources()
     logger = initialize_logger()
+
     config = {
-        "plan_file_path": "s3://trinity-pilot/calibration/hydraulics/blw-elkhart/blw-elkhart.p01.hdf",
-        "source_model_path": "s3://trinity-pilot/stac/prod-support/calibration/model=blw-elkhart/item.json",
+        "model_prefix": "s3://trinity-pilot/calibration/hydraulics/bedias-creek",
+        "source_model_path": "s3://trinity-pilot/stac/prod-support/calibration/model=bedias-creek/item.json",
         "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration",
     }
+    plan_hdfs = list_plan_hdfs(config["model_prefix"])
 
-    create_event_item(
-        plan_file_path=config["plan_file_path"],
-        source_model_path=config["source_model_path"],
-        output_prefix=config["output_prefix"],
-    )
+    for plan_hdf in plan_hdfs:
+        create_event_item(
+            plan_file_path=plan_hdf,
+            source_model_path=config["source_model_path"],
+            output_prefix=config["output_prefix"],
+        )
