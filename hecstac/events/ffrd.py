@@ -102,7 +102,9 @@ class FFRDEventItem(Item):
         for ras_file in self.ras_simulation_files:
             if plan_hdf_pattern.search(ras_file):
                 logger.info(f"Using {ras_file} as main plan hdf file.")
-                return RasPlanHdf.open_uri(ras_file)
+                return RasPlanHdf.open_uri(
+                    ras_file, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
+                )
 
         raise ValueError("No plan HDF file found.")
 
