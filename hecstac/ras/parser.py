@@ -1304,7 +1304,7 @@ class PlanFile(CachedFile):
     @cached_property
     def plan_title(self) -> str:
         """Return plan title."""
-        return search_contents(self.file_lines, "Plan Title")
+        return search_contents(self.file_lines, "Plan Title", require_one=False)
 
     @cached_property
     def plan_version(self) -> str:
