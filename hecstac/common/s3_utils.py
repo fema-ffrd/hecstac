@@ -39,20 +39,28 @@ def init_s3_resources() -> tuple:
     return session, s3_client, s3_resource
 
 
-def list_keys_regex(s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix="") -> list:
-    """List all keys in an S3 bucket with a given prefix and suffix."""
+def list_keys_regex(
+    s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix: str = "", recursive: bool = True
+) -> list:
+    """List all keys in an S3 bucket matching a given prefix pattern and suffix."""
     keys = []
-    kwargs = {"Bucket": bucket, "Prefix": prefix_includes}
+    prefix = prefix_includes.split("*")[0]  # Use the static part of the prefix for listing
+    kwargs = {"Bucket": bucket, "Prefix": prefix}
+    if not recursive:
+        kwargs["Delimiter"] = "/"
+
     prefix_pattern = re.compile(prefix_includes.replace("*", ".*"))
+
     while True:
         resp = s3_client.list_objects_v2(**kwargs)
-        keys += [
-            obj["Key"] for obj in resp["Contents"] if prefix_pattern.match(obj["Key"]) and obj["Key"].endswith(suffix)
-        ]
-        try:
-            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
-        except KeyError:
+        for obj in resp.get("Contents", []):
+            key = obj["Key"]
+            if prefix_pattern.match(key) and key.endswith(suffix):
+                keys.append(key)
+        if not resp.get("IsTruncated"):
             break
+        kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+
     return keys
 
 
@@ -151,8 +159,24 @@ def qc_results_to_excel_s3(results: dict, s3_key: str) -> None:
     save_bytes_s3(buffer, s3_key, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
+def parse_s3_url(s3_url: str):
+    """
+    Extracts the bucket name and path from an S3 URL.
+
+    Args:
+        s3_url (str): The S3 URL (e.g., 's3://my-bucket/path/to/object.txt').
+
+    Returns
+    -------
+        tuple: (bucket_name, path)
+    """
+    parsed = urlparse(s3_url)
+    bucket = parsed.netloc
+    path = parsed.path.lstrip("/")
+    return bucket, path
+
+
 def make_uri_public(uri: str) -> str:
     """Convert from an AWS S3 URI to an https url."""
-    bucket = urlparse(uri).netloc
-    path = urlparse(uri).path
+    bucket, path = parse_s3_url(uri)
     return f"https://{bucket}.s3.amazonaws.com/{path}"

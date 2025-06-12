@@ -2416,3 +2416,13 @@ class GeometryHDFFile(RASHDFFile):
             self.logger.debug("No reference lines found.")
         else:
             return ref_lines
+
+    @cached_property
+    def reference_points(self) -> gpd.GeoDataFrame | None:
+        """Return geometry reference points."""
+        ref_points = self.hdf_object.reference_points()
+
+        if ref_points is None or ref_points.empty:
+            self.logger.debug("No reference points found.")
+        else:
+            return ref_points

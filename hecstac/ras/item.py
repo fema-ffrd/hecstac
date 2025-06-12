@@ -467,3 +467,58 @@ class RASModelItem(Item):
         if self.crs is None and isinstance(subclass, GeometryHdfAsset) and subclass.file.projection is not None:
             self.crs = subclass.file.projection
         return super().add_asset(key, subclass)
+
+    def _process_and_add_pq_asset(self, gdf, path, asset_key, title, description):
+        if gdf is not None and not gdf.empty:
+            gdf.to_parquet(path)
+            self.add_asset(
+                asset_key,
+                Asset(
+                    href=path,
+                    title=title,
+                    description=description,
+                    media_type="application/x-parquet",
+                    roles=["data"],
+                ),
+            )
+        else:
+            logger.warning(f"No data found for {title.lower()}, unable to create asset.")
+
+    def add_geospatial_assets(self, output_prefix: str):
+        """
+        Extracts geospatial data from geometry hdf asset and adds them as Parquet assets.
+
+        Args:
+            output_prefix (str): Path prefix where the Parquet files will be saved.
+        """
+        for i in self.geometry_assets:
+            if isinstance(i, GeometryHdfAsset):
+                self._process_and_add_pq_asset(
+                    i.reference_lines_spatial(),
+                    f"{output_prefix}/ref_lines.pq",
+                    "ref_lines",
+                    "Reference Lines",
+                    "Parquet file containing model reference lines and their geometry.",
+                )
+                self._process_and_add_pq_asset(
+                    i.reference_points_spatial(),
+                    f"{output_prefix}/ref_points.pq",
+                    "ref_points",
+                    "Reference Points",
+                    "Parquet file containing model reference points and their geometry.",
+                )
+                self._process_and_add_pq_asset(
+                    i.bc_lines_spatial(),
+                    f"{output_prefix}/bc_lines.pq",
+                    "bc_lines",
+                    "Boundary Condition Lines",
+                    "Parquet file containing model boundary condition lines and their geometry.",
+                )
+                self._process_and_add_pq_asset(
+                    i.model_perimeter(),
+                    f"{output_prefix}/model_geometry.pq",
+                    "model_geometry",
+                    "Model Geometry",
+                    "Parquet file containing model geometry.",
+                )
+                break

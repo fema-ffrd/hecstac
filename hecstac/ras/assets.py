@@ -632,14 +632,55 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         """Return extra fields with added dynamic keys/values."""
         self._extra_fields[VERSION] = self.file.file_version
         self._extra_fields[UNITS] = self.file.units_system
-        self._extra_fields[REFERENCE_LINES] = self.reference_lines
+        self._extra_fields[REFERENCE_LINES] = self.reference_line_names
         return self._extra_fields
 
     @cached_property
-    def reference_lines(self) -> list[gpd.GeoDataFrame] | None:
+    def reference_line_names(self) -> list[str] | None:
         """Docstring."""  # TODO: fill out
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
+
+    def reference_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return reference line names and geometry."""
+        if self.file.reference_lines is not None and not self.file.reference_lines.empty:
+            refln_gdf = self.file.reference_lines[["refln_name", "mesh_name", "geometry"]]
+            if output_crs:
+                refln_gdf = refln_gdf.to_crs(output_crs)
+            return refln_gdf
+        else:
+            return None
+
+    def reference_points_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return reference point names and geometry."""
+        if self.file.reference_points is not None and not self.file.reference_points.empty:
+            refpt_gdf = self.file.reference_points[["refpt_name", "mesh_name", "geometry"]]
+            if output_crs:
+                refpt_gdf = refpt_gdf.to_crs(output_crs)
+            return refpt_gdf
+        else:
+            return None
+
+    def bc_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return boundary condition line names and geometry."""
+        if self.file.bc_lines is not None and not self.file.bc_lines.empty:
+            bc_line_gdf = self.file.bc_lines[["name", "mesh_name", "geometry"]]
+            if output_crs:
+                bc_line_gdf = bc_line_gdf.to_crs(output_crs)
+            return bc_line_gdf
+        else:
+            return None
+
+    def model_perimeter(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+        """Return model perimeter from mesh areas."""
+        mesh_areas = self.file.mesh_areas()
+        if mesh_areas:
+            perimeter_gdf = gpd.GeoDataFrame(geometry=[mesh_areas], crs=self.crs)
+            if output_crs:
+                perimeter_gdf = perimeter_gdf.to_crs(output_crs)
+            return perimeter_gdf
+        else:
+            return None
 
     @cached_property
     def has_2d(self) -> bool:
@@ -741,7 +782,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-        if not filepath.startswith("s3://") and not os.path.exists(filepath):
+        if not (filepath.startswith("s3://") or filepath.startswith("https://")) and not os.path.exists(filepath):
             raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
 
         asset = GenericAsset(
@@ -749,7 +790,8 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             title=filepath.split("/")[-1],
             description="Thumbnail image for the model",
         )
-        asset.roles = ["thumbnail", "image/png"]
+        asset.roles = ["thumbnail"]
+        asset.media_type = "image/png"
         return asset
 
     def thumbnail(
