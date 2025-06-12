@@ -309,6 +309,8 @@ class RASModelItem(Item):
             Whether to use public-style url for created assets.
         """
         for geom in self.geometry_assets:
+            if (not geom.title.startswith(self.id)) and (not geom.title.lower().startswith("backup")):
+                continue
             # Conditions
             is_hdf = isinstance(geom, GeometryHdfAsset)
             is_text = isinstance(geom, GeometryAsset)
