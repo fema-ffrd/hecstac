@@ -486,7 +486,7 @@ class RASModelItem(Item):
 
     def add_geospatial_assets(self, output_prefix: str):
         """
-        Extracts geospatial data from geometry hdf asset and adds them as Parquet assets.
+        Extract geospatial data from geometry hdf asset and adds them as Parquet assets.
 
         Args:
             output_prefix (str): Path prefix where the Parquet files will be saved.

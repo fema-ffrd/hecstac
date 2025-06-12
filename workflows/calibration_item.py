@@ -1,12 +1,15 @@
-import re
+"""Item representing an FFRD calibration model."""
+
 import io
-from pathlib import Path
 import json
+import re
+from pathlib import Path
 from typing import Tuple
 from urllib.parse import urlparse
-from hecstac.ras.item import RASModelItem
-from hecstac.common.s3_utils import list_keys_regex, init_s3_resources, save_bytes_s3, make_uri_public
+
 from hecstac.common.logger import initialize_logger
+from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, make_uri_public, save_bytes_s3
+from hecstac.ras.item import RASModelItem
 
 
 def list_calibration_model_files(bucket: str, prefix: str) -> list:

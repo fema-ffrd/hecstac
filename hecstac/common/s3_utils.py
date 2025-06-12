@@ -161,7 +161,7 @@ def qc_results_to_excel_s3(results: dict, s3_key: str) -> None:
 
 def parse_s3_url(s3_url: str):
     """
-    Extracts the bucket name and path from an S3 URL.
+    Extract the bucket name and path from an S3 URL.
 
     Args:
         s3_url (str): The S3 URL (e.g., 's3://my-bucket/path/to/object.txt').

@@ -1,5 +1,8 @@
-import pandas as pd
+"""Utilities to extract specific timeseries from HEC-RAS."""
+
 import os
+
+import pandas as pd
 from rashdf import RasPlanHdf
 from rashdf.plan import RasPlanHdfError
 

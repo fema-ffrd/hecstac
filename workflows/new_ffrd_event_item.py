@@ -1,10 +1,14 @@
-import re
+"""Item representing an FFRD item."""
+
 import io
-import fsspec
 import json
+import re
+
+import fsspec
 from rashdf import RasPlanHdf
-from hecstac.common.s3_utils import list_keys_regex, init_s3_resources, save_bytes_s3, parse_s3_url
+
 from hecstac.common.logger import initialize_logger
+from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, parse_s3_url, save_bytes_s3
 from hecstac.events.ffrd import FFRDEventItem
 
 
