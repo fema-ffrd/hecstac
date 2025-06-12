@@ -188,7 +188,7 @@ class PrjAsset(GenericAsset[CachedFile]):
     @classmethod
     def from_dict(cls, data: dict) -> ProjectAsset | ProjectionAsset:
         """Subclass."""
-        if 1 == 1:
+        if is_ras_prj(data["href"]):
             return ProjectAsset.from_dict(data)
         else:
             return ProjectionAsset.from_dict(data)
@@ -821,7 +821,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             # TODO: Add support for river centerline and cross-sections (from .hdf)
         title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
-        filename = f"thumbnail.{hdf_ext}_hdf.png"
+        filename = f"thumbnail.{hdf_ext}.png"
         filepath = os.path.join(thumbnail_dest, filename)
 
         # Export
