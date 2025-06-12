@@ -54,7 +54,7 @@ def create_calibration_item(ras_project_path: str, output_prefix: str):
 
     ras_item = RASModelItem.from_prj(ras_project_path, crs=None, assets=calibration_model_files)
     ras_item.set_self_href(make_uri_public(output_item_path))
-    ras_item.add_model_thumbnails(layers=["mesh_areas", "breaklines", "bc_lines"], s3_thumbnail_dir=output_item_prefix)
+    ras_item.add_model_thumbnails(layers=["mesh_areas", "breaklines", "bc_lines"], thumbnail_dest=output_item_prefix)
     ras_item.add_geospatial_assets(output_assets_prefix)
 
     item_dict = ras_item.to_dict()

@@ -291,9 +291,8 @@ class RASModelItem(Item):
     def add_model_thumbnails(
         self,
         layers: list,
+        thumbnail_dest: str,
         title_prefix: str = "Model_Thumbnail",
-        thumbnail_dir=None,
-        s3_thumbnail_dir=None,
         make_public: bool = True,
     ):
         """Generate model thumbnail asset for each geometry file.
@@ -302,60 +301,62 @@ class RASModelItem(Item):
         ----------
         layers : list
             List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines'
+        thumbnail_dest : str, optional
+            Directory for created thumbnails.
         title_prefix : str, optional
             Thumbnail title prefix, by default "Model_Thumbnail".
-        thumbnail_dir : str, optional
-            Directory for created thumbnails. If None then thumbnails will be exported to same level as the item.
-        s3_thumbnail_dir : str, optional
-            Directory for created thumbnails on AWS S3. If None then thumbnails will be exported to same level as the item.
         make_public : bool, optional
             Whether to use public-style url for created assets.
         """
-        if thumbnail_dir:
-            thumbnail_dest = thumbnail_dir
-        elif s3_thumbnail_dir:
-            thumbnail_dest = s3_thumbnail_dir
-        else:
-            logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
-            thumbnail_dest = os.path.dirname(self.self_href)
-
         for geom in self.geometry_assets:
-            # TODO: right now since hdf thumbs don't have 1D elements, we need to run all 1D through regular geom.
-            if isinstance(geom, GeometryHdfAsset) and not geom.has_1d:
+            # Conditions
+            is_hdf = isinstance(geom, GeometryHdfAsset)
+            is_text = isinstance(geom, GeometryAsset)
+            has_hdf = any([i.href == geom.href + ".hdf" for i in self.geometry_assets])
+            has_text = is_hdf and any([i.href == geom.href.replace(".hdf", "") for i in self.geometry_assets])
+            has_1d = geom.has_1d
+
+            if is_text and has_hdf:
+                # TODO: right now since hdf thumbs don't have 1D elements, we need to run all 1D through regular geom.
+                if has_1d:
+                    make = True
+                else:
+                    make = False
+            elif is_text and not has_hdf:
+                make = True
+            elif is_hdf:
+                if has_1d and has_text:
+                    make = False
+                else:
+                    make = True
+
+            if is_hdf and make:
                 logger.info(f"Writing: {thumbnail_dest}")
-                self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
+                if not any([i in layers for i in ["mesh_areas", "breaklines", "bc_lines"]]):
+                    continue
+                self.assets[f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
                 )
-            elif isinstance(geom, GeometryAsset) and (not os.path.exists(geom.href + ".hdf") or geom.has_1d):
+            elif is_text and make:
                 logger.info(f"Writing: {thumbnail_dest}")
+                if not any([i in layers for i in ["River", "XS", "Structure", "Junction"]]):
+                    continue
                 self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
                     layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
                 )
 
-    def add_model_geopackages(
-        self, local_dst: str = None, s3_dst: str = None, geometries: list = None, make_public: bool = True
-    ):
+    def add_model_geopackages(self, dst: str, geometries: list = None, make_public: bool = True):
         """Generate model geopackage asset for each geometry file.
 
         Parameters
         ----------
-        local_dst : str, optional
-            Directory for created geopackages. If None then geopackages will be exported to same level as the item.
-        s3_dst : str, optional
-            S3 prefix for created geopackages. If None then geopackages will be exported to same level as the item.
+        dst : str, optional
+            Directory for created geopackages.
         geometries : list, optional
             A list of geometry file names to make the gpkg for.
         make_public : bool, optional
             Whether to use public-style url for created assets.
         """
-        if local_dst:
-            dst = local_dst
-        elif s3_dst:
-            dst = s3_dst
-        else:
-            logger.warning(f"No thumbnail directory provided.  Using item directory {self.self_href}")
-            dst = os.path.dirname(self.self_href)
-
         for geom in self.geometry_assets:
             if geometries is not None and geom.name not in geometries:
                 continue
