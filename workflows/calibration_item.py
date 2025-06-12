@@ -11,6 +11,9 @@ from hecstac.common.logger import initialize_logger
 from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, make_uri_public, save_bytes_s3
 from hecstac.ras.item import RASModelItem
 
+_, s3_client, _ = init_s3_resources()
+initialize_logger()
+
 
 def list_calibration_model_files(bucket: str, prefix: str) -> list:
     """List all model files in a given prefix, excluding uNN.hdf and pNN.hdf files."""
@@ -64,8 +67,6 @@ def create_calibration_item(ras_project_path: str, output_prefix: str):
 
 
 if __name__ == "__main__":
-    _, s3_client, _ = init_s3_resources()
-    initialize_logger()
 
     config = {
         "ras_project_path": f"s3://trinity-pilot/calibration/hydraulics/bedias-creek/bedias-creek.prj",

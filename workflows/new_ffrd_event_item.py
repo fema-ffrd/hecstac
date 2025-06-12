@@ -12,6 +12,10 @@ from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, parse_s3
 from hecstac.events.ffrd import FFRDEventItem
 
 
+_, s3_client, _ = init_s3_resources()
+logger = initialize_logger()
+
+
 def extract_plan_info(plan_path: str):
     """Extract model name and event name from given plan file."""
     plan_hdf = RasPlanHdf.open_uri(plan_path)
@@ -34,7 +38,7 @@ def list_plan_hdfs(model_prefix: str) -> list:
         raise ValueError(f"No plan hdf files found at bucket: {bucket} and prefix: {prefix} ")
 
 
-def create_event_item(plan_file_path: str, source_model_path: str, output_prefix: str, calibration_only: bool = True):
+def create_event_item(plan_file_path: str, source_model_path: str, output_prefix: str, calibration_only: bool = False):
     """
     Create and upload a STAC item for a RAS model event.
 
@@ -52,7 +56,7 @@ def create_event_item(plan_file_path: str, source_model_path: str, output_prefix
 
     logger.info(f"Creating stac item for event: {event_name}")
 
-    short_event_name = event_name.split("_")[1] if "calibration" in event_name else event_name
+    short_event_name = event_name.split("_")[1] if calibration_only else event_name
 
     assets_prefix = f"{output_prefix}/model={model_name}/event={short_event_name}"
     dest_href = f"{assets_prefix}/item.json"
@@ -71,8 +75,6 @@ def create_event_item(plan_file_path: str, source_model_path: str, output_prefix
 
 
 if __name__ == "__main__":
-    _, s3_client, _ = init_s3_resources()
-    logger = initialize_logger()
 
     config = {
         "model_prefix": "s3://trinity-pilot/calibration/hydraulics/bedias-creek",
