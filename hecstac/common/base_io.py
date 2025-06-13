@@ -4,8 +4,14 @@ import os
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
-from hecstac.common.logger import get_logger
+
 import obstore
+from dotenv import load_dotenv
+
+from hecstac.common.logger import get_logger
+
+logger = get_logger(__name__)
+load_dotenv()
 
 
 class ModelFileReaderError(Exception):
@@ -33,7 +39,11 @@ class ModelFileReader:
             self.local = True
             self.store = None
             self.path = Path(path)
-            self.content = open(self.path, "r").read()
+            try:
+                self.content = open(self.path, "r").read()
+            except UnicodeDecodeError as e:
+                logger.warning(f"File contains invalid utf-8 characters at byte {e.start}.")
+                self.content = open(self.path, "r", errors="ignore").read()
 
         else:
             self.local = False
@@ -42,22 +52,29 @@ class ModelFileReader:
                 raise ValueError(f"Expected S3 path, got: {path}")
             bucket = parsed.netloc
             key = parsed.path.lstrip("/")
+
             self.store = store or obstore.store.S3Store(
                 bucket=bucket,
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                skip_signature=(os.getenv("AWS_ACCESS_KEY_ID") is None and os.getenv("AWS_SECRET_ACCESS_KEY") is None),
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID") or "",
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY") or "",
+                session_token=os.getenv("AWS_SESSION_TOKEN") or "",
             )
             self.path = key
             try:
-                self.content = (
-                    obstore.open_reader(self.store, self.path)
-                    .readall()
-                    .to_bytes()
-                    .decode("utf-8")
-                    .replace("\r\n", "\n")
-                )
-            except UnicodeDecodeError as e:
-                error_msg = f"Error parsing {self.path}: {e}"
-                raise ModelFileReaderError(error_msg)
+                for i in ["utf-8", "latin_1", "iso8859_15"]:
+                    try:
+                        self.content = (
+                            obstore.open_reader(self.store, self.path)
+                            .readall()
+                            .to_bytes()
+                            .decode(i)
+                            .replace("\r\n", "\n")
+                        )
+                        break
+                    except UnicodeDecodeError as e:
+                        error_msg = f"Error parsing {self.path} with {i}: {e}"
+                else:
+                    raise ModelFileReaderError(error_msg)
             except Exception as e:
                 raise ModelFileReaderError(f"An unexpected error occurred: {e}")

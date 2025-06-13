@@ -2,20 +2,75 @@
 
 import logging
 import os
+import re
 from functools import wraps
+from io import BytesIO
 from pathlib import Path
+from typing import Callable
 
+import contextily as ctx
 import geopandas as gpd
+import matplotlib.pyplot as plt
 import numpy as np
+from pyproj import CRS
 from shapely import lib
 from shapely.errors import UnsupportedGEOSVersionError
 from shapely.geometry import LineString, MultiPoint, Point
 
+from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
+from hecstac.common.s3_utils import save_bytes_s3
+
+logger = get_logger(__name__)
+
+
+def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str):
+    """Generate a thumbnail and save it."""
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    # Add data
+    legend_handles = []
+    for layer in layers:
+        try:
+            legend_handles += layer(ax)
+        except Exception as e:
+            logger.warning(f"Warning: Failed to process layer '{layer}' for thumbnail at {filepath}: {e}")
+
+    # Add OpenStreetMap basemap
+    try:
+        ctx.add_basemap(
+            ax,
+            crs=crs,
+            source=ctx.providers.OpenStreetMap.Mapnik,
+            alpha=0.4,
+        )
+    except Exception as e:
+        logger.warning(f"Warning: Failed to add basemap for {filepath}: {e}")
+
+    # Formatting
+    ax.set_title(title)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.legend(handles=legend_handles, loc="center left", bbox_to_anchor=(1, 0.5))
+    fig.tight_layout()
+
+    # Save
+    if filepath.startswith("s3://"):
+        img_data = BytesIO()
+        fig.savefig(img_data, format="png", bbox_inches="tight")
+        img_data.seek(0)
+        save_bytes_s3(img_data, filepath)
+    else:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        fig.savefig(filepath, dpi=80, bbox_inches="tight")
+
+    # Close fig
+    plt.close(fig)
 
 
 def find_model_files(ras_prj: str) -> list[str]:
     # TODO: Add option to recursively iterate through all subdirectories in a model folder.
+    # TODO: Add option to search for files on S3.
     """Find all files with the same base name and return absolute paths."""
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
@@ -25,8 +80,7 @@ def find_model_files(ras_prj: str) -> list[str]:
 
 def is_ras_prj(url: str) -> bool:
     """Check if a file is a HEC-RAS project file."""
-    with open(url) as f:
-        file_str = f.read()
+    file_str = ModelFileReader(url).content
     if "Proj Title" in file_str.split("\n")[0]:
         return True
     else:
@@ -34,15 +88,27 @@ def is_ras_prj(url: str) -> bool:
 
 
 def search_contents(
-    lines: list[str], search_string: str, token: str = "=", expect_one: bool = True, require_one: bool = True
+    lines: list[str],
+    search_string: str,
+    token: str = "=",
+    expect_one: bool = True,
+    require_one: bool = True,
+    regex: bool = False,
 ) -> list[str] | str:
-    """Split a line by a token and returns the second half of the line if the search_string is found in the first half."""
-    logger = get_logger(__name__)
+    """Split a line by a token and returns the second half of the line if the search_string is found in the first half.
+
+    The regex option assumes that the token is included in the regex.
+    """
+    if regex:
+        matches = lambda x: re.match(search_string, x)
+    else:
+        matches = lambda x: f"{search_string}{token}" in x
     results = []
-    # logger.debug(lines)
     for line in lines:
-        if f"{search_string}{token}" in line:
-            results.append(line.split(token)[1])
+        if matches(line):
+            val = line.split(token)[1]
+            if val != "":
+                results.append(val)
 
     if expect_one and len(results) > 1:
         raise ValueError(f"expected 1 result for {search_string}, got {len(results)} results")
@@ -135,6 +201,8 @@ def data_pairs_from_text_block(lines: list[str], width: int) -> list[tuple[float
     """Split lines at given width to get paired data string. Split the string in half and convert to tuple of floats."""
     pairs = []
     for line in lines:
+        if line == "               .               .":
+            continue
         for i in range(0, len(line), width):
             x = line[i : int(i + width / 2)]
             y = line[int(i + width / 2) : int(i + width)]
@@ -155,6 +223,19 @@ def delimited_pairs_to_lists(lines: list[str]) -> tuple[list[float], list[float]
             stations.append(station)
             mannings.append(n)
     return (stations, mannings)
+
+
+def data_triplets_from_text_block(lines: list[str], width: int) -> list[tuple[float]]:
+    """Split lines at given width to get paired data string. Split the string in half and convert to tuple of floats."""
+    pairs = []
+    for line in lines:
+        for i in range(0, len(line), width):
+            x = line[i : int(i + width / 3)]
+            y = line[int(i + width / 3) : int(i + (width * 2 / 3))]
+            z = line[int(i + (width * 2 / 3)) : int(i + (width))]
+            pairs.append((float(x), float(y), float(z)))
+
+    return pairs
 
 
 def check_xs_direction(cross_sections: gpd.GeoDataFrame, reach: LineString):

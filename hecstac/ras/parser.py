@@ -3,9 +3,11 @@
 import datetime
 import logging
 import math
-from collections import defaultdict
+import os
+from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Iterator
 
@@ -26,21 +28,24 @@ from shapely.ops import unary_union
 
 from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
+from hecstac.ras.errors import InvalidStructureDataError
 from hecstac.ras.utils import (
     check_xs_direction,
     data_pairs_from_text_block,
+    data_triplets_from_text_block,
     delimited_pairs_to_lists,
     reverse,
     search_contents,
     text_block_from_start_end_str,
     text_block_from_start_str_length,
     text_block_from_start_str_to_empty_line,
+    validate_point,
 )
 
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
-    return f"{Path(fpath).stem}.{suffix}"
+    return f"{Path(fpath).stem}.{suffix.strip(' ')}"
 
 
 class CachedFile:
@@ -79,13 +84,26 @@ class River:
 class XS:
     """HEC-RAS Cross Section."""
 
-    def __init__(self, ras_data: list[str], river_reach: str, river: str, reach: str):
+    def __init__(
+        self,
+        ras_data: list[str],
+        river_reach: str,
+        river: str,
+        reach: str,
+        reach_geom: LineString = None,  # TODO: Does adding this to every section create a massive memory footprint?
+    ):
         self.ras_data = ras_data
         self.river = river
         self.reach = reach
         self.river_reach = river_reach
         self.river_reach_rs = f"{river} {reach} {self.river_station}"
+        self.river_reach_rs_str = f"{river} {reach} {self.river_station_str}"
         self._is_interpolated: bool | None = None
+        self.reach_geom: LineString = reach_geom
+        self.has_lateral_structures = False
+        self.computed_channel_reach_length = None
+        self.computed_channel_reach_length_ratio = None
+        self.thalweg_drop = None
 
     def split_xs_header(self, position: int):
         """
@@ -94,30 +112,38 @@ class XS:
         Example: Type RM Length L Ch R = 1 ,83554.  ,237.02,192.39,113.07.
         """
         header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
+        val = header.split(",")[position]
+        if val == "":
+            return "0"
+        else:
+            return val
 
-        return header.split(",")[position]
-
-    @property
+    @cached_property
     def river_station(self) -> float:
         """Cross section river station."""
         return float(self.split_xs_header(1).replace("*", ""))
 
-    @property
+    @cached_property
+    def river_station_str(self) -> str:
+        """Return the river station with * for interpolated sections."""
+        return self.split_xs_header(1).rstrip()
+
+    @cached_property
     def left_reach_length(self) -> float:
         """Cross section left reach length."""
         return float(self.split_xs_header(2))
 
-    @property
+    @cached_property
     def channel_reach_length(self) -> float:
         """Cross section channel reach length."""
         return float(self.split_xs_header(3))
 
-    @property
+    @cached_property
     def right_reach_length(self) -> float:
         """Cross section right reach length."""
         return float(self.split_xs_header(4))
 
-    @property
+    @cached_property
     def number_of_coords(self) -> int:
         """Number of coordinates in cross section."""
         try:
@@ -126,21 +152,61 @@ class XS:
             return 0
             # raise NotGeoreferencedError(f"No coordinates found for cross section: {self.river_reach_rs} ")
 
-    @property
-    def thalweg(self) -> float | None:
-        """Cross section thalweg elevation."""
+    @cached_property
+    def min_elevation(self) -> float:
+        """The min elevaiton in the cross section."""
         if self.station_elevation_points:
             _, y = list(zip(*self.station_elevation_points))
             return min(y)
 
-    @property
+    @cached_property
     def xs_max_elevation(self) -> float | None:
         """Cross section maximum elevation."""
         if self.station_elevation_points:
             _, y = list(zip(*self.station_elevation_points))
             return max(y)
 
-    @property
+    @cached_property
+    def min_elevation_in_channel(self):
+        """A boolean indicating if the minimum elevation is in the channel."""
+        if self.min_elevation == self.thalweg:
+            return True
+        else:
+            return False
+
+    @cached_property
+    def thalweg(self):
+        """The min elevation of the channel (between bank points)."""
+        return self.station_elevation_df.loc[
+            (self.station_elevation_df["Station"] <= self.right_bank_station)
+            & (self.station_elevation_df["Station"] >= self.left_bank_station),
+            "Elevation",
+        ].min()
+
+    @cached_property
+    def station_length(self):
+        """Length of cross section based on station-elevation data."""
+        return self.last_station - self.first_station
+
+    @cached_property
+    def first_station(self):
+        """First station of the cross section."""
+        return float(self.station_elevation_points[0][0])
+
+    @cached_property
+    def last_station(self):
+        """Last station of the cross section."""
+        return float(self.station_elevation_points[-1][0])
+
+    @cached_property
+    def xs_length_ratio(self):
+        """Ratio of the cutline length to the station length."""
+        if self.skew:
+            return self.cutline_length / (self.station_length / math.cos(math.radians(self.skew)))
+        else:
+            return self.cutline_length / self.station_length
+
+    @cached_property
     def coords(self) -> list[tuple[float, float]] | None:
         """Cross section coordinates."""
         lines = text_block_from_start_str_length(
@@ -151,12 +217,17 @@ class XS:
         if lines:
             return data_pairs_from_text_block(lines, 32)
 
-    @property
+    @cached_property
+    def geom(self):
+        """Geometry of the cross section according to its coords."""
+        return LineString(self.coords)
+
+    @cached_property
     def number_of_station_elevation_points(self) -> int:
         """Number of station elevation points."""
         return int(search_contents(self.ras_data, "#Sta/Elev", expect_one=True))
 
-    @property
+    @cached_property
     def station_elevation_points(self) -> list[tuple[float, float]] | None:
         """Station elevation points."""
         try:
@@ -169,43 +240,418 @@ class XS:
         except ValueError:
             return None
 
-    @property
+    @cached_property
     def bank_stations(self) -> list[str]:
         """Bank stations."""
-        return search_contents(self.ras_data, "Bank Sta", expect_one=True).split(",")
+        return search_contents(self.ras_data, "Bank Sta", expect_one=True, require_one=False).split(",")
 
-    @property
-    def gdf(self) -> gpd.GeoDataFrame:
+    @cached_property
+    def banks_encompass_channel(self):
+        """A boolean; True if the channel centerlien intersects the cross section between the bank stations."""
+        if self.cross_section_intersects_reach:
+            if (self.centerline_intersection_station + self.first_station) < self.right_bank_station and (
+                self.centerline_intersection_station + self.first_station
+            ) > self.left_bank_station:
+                return True
+            else:
+                return False
+
+    def set_computed_reach_length(self, computed_river_station: float):
+        """Set the channel reach length computed from the reach/xs/ds_xs geometry."""
+        self.computed_channel_reach_length = self.computed_river_station - computed_river_station
+
+    def set_computed_reach_length_ratio(self):
+        """Set the ratio of the computed channel reach length to the model channel reach length."""
+        self.computed_channel_reach_length_ratio = self.computed_channel_reach_length / self.channel_reach_length
+
+    @cached_property
+    def computed_river_station(self):
+        """The computed river stationing according to the reach geometry."""
+        return reverse(self.reach_geom).project(self.centerline_intersection_point)
+
+    @cached_property
+    def centerline_intersection_point(self):
+        """A point located where the cross section and reach centerline intersect."""
+        if self.cross_section_intersects_reach:
+            intersection = self.reach_geom.intersection(self.geom)
+            if intersection.geom_type == "Point":
+                return intersection
+            if intersection.geom_type == "MultiPoint":
+                return intersection.geoms[0]
+
+    @cached_property
+    def cross_section_intersects_reach(self):
+        """Detemine if the cross section intersects the reach, if not return False, otherwise return True."""
+        return self.reach_geom.intersects(self.geom)
+
+    @cached_property
+    def left_reach_length_ratio(self):
+        """The ratio of the left reach length to the channel reach length."""
+        if self.reach_lengths_populated:
+            return self.left_reach_length / self.channel_reach_length
+
+    @cached_property
+    def right_reach_length_ratio(self):
+        """The ratio of the right reach length to the channel reach length."""
+        if self.reach_lengths_populated:
+            return self.right_reach_length / self.channel_reach_length
+
+    @cached_property
+    def reach_lengths_populated(self):
+        """A boolean indicating if all the reach lengths are poputed."""
+        if np.isnan(self.reach_lengths).any():
+            return False
+        elif len([i for i in self.reach_lengths if i == 0]) > 0:
+            return False
+        else:
+            return True
+
+    @cached_property
+    def reach_lengths(self):
+        """The reach lengths of the cross section."""
+        return [self.right_reach_length, self.left_reach_length, self.channel_reach_length]
+
+    @cached_property
+    def left_bank_station(self):
+        """The cross sections left bank station."""
+        return float(self.bank_stations[0])
+
+    @cached_property
+    def right_bank_station(self):
+        """The cross sections right bank station."""
+        return float(self.bank_stations[1])
+
+    @cached_property
+    def left_bank_elevation(self):
+        """Elevation of the left bank station."""
+        return self.station_elevation_df.loc[
+            self.station_elevation_df["Station"] == self.left_bank_station, "Elevation"
+        ].iloc[0]
+
+    @cached_property
+    def right_bank_elevation(self):
+        """Elevation of the right bank station."""
+        return self.station_elevation_df.loc[
+            self.station_elevation_df["Station"] == self.right_bank_station, "Elevation"
+        ].iloc[0]
+
+    @cached_property
+    def station_elevation_df(self):
+        """A pandas DataFrame containing the station-elevation data of the cross section."""
+        return pd.DataFrame(self.station_elevation_points, columns=["Station", "Elevation"])
+
+    @cached_property
+    def skew(self):
+        """The skew applied to the cross section."""
+        skew = search_contents(self.ras_data, "Skew Angle", expect_one=False, require_one=False)
+        if len(skew) == 1:
+            return float(skew[0])
+        elif len(skew) > 1:
+            raise ValueError(
+                f"Expected only one skew value for the cross section recieved: {len(skew)}. XS: {self.river_reach_rs}"
+            )
+
+    @cached_property
+    def max_n(self):
+        """The highest manning's n value used in the cross section."""
+        return max(list(zip(*self.mannings))[1])
+
+    @cached_property
+    def min_n(self):
+        """The lowest manning's n value used in the cross section."""
+        return min(list(zip(*self.mannings))[1])
+
+    @cached_property
+    def mannings(self):
+        """The manning's values of the cross section."""
+        try:
+            lines = text_block_from_start_str_length(
+                "#Mann=" + search_contents(self.ras_data, "#Mann", expect_one=True, require_one=False),
+                math.ceil(self.number_of_mannings_points / 4),
+                self.ras_data,
+            )
+            return data_triplets_from_text_block(lines, 24)
+        except ValueError as e:
+            print(e)
+            return None
+
+    @cached_property
+    def number_of_mannings_points(self):
+        """The number of mannings points in the cross section."""
+        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0])
+
+    @cached_property
+    def has_ineffectives(self):
+        """A boolean indicating if the cross section contains ineffective flow areas."""
+        ineff = search_contents(self.ras_data, "#XS Ineff", expect_one=False, require_one=False)
+        if len(ineff) > 0:
+            return True
+        else:
+            return False
+
+    @cached_property
+    def has_levees(self):
+        """A boolean indicating if the cross section contains levees."""
+        levees = search_contents(self.ras_data, "Levee", expect_one=False, require_one=False)
+        if len(levees) > 0:
+            return True
+        else:
+            return False
+
+    @cached_property
+    def has_blocks(self):
+        """A boolean indicating if the cross section contains blocked obstructions."""
+        blocks = search_contents(self.ras_data, "#Block Obstruct", expect_one=False, require_one=False)
+        if len(blocks) > 0:
+            return True
+        else:
+            return False
+
+    @cached_property
+    def channel_obstruction(self):
+        """
+        A boolean indicating if the channel is being blocked.
+
+        A boolean indicating if ineffective flow area, blocked obstructions, or levees are contained
+        in the channel (between bank stations).
+        """
+        return None  # TODO: This feature was never added in ripple1d
+
+    def set_thalweg_drop(self, ds_thalweg):
+        """Set the drop in thalweg elevation between this cross section and the downstream cross section."""
+        self.thalweg_drop = self.thalweg - ds_thalweg
+
+    @cached_property
+    def left_max_elevation(self):
+        """Max Elevation on the left side of the channel."""
+        return self.station_elevation_df.loc[
+            self.station_elevation_df["Station"] <= self.left_bank_station, "Elevation"
+        ].max()
+
+    @cached_property
+    def right_max_elevation(self):
+        """Max Elevation on the right side of the channel."""
+        df = pd.DataFrame(self.station_elevation_points, columns=["Station", "Elevation"])
+        return df.loc[df["Station"] >= self.right_bank_station, "Elevation"].max()
+
+    @cached_property
+    def overtop_elevation(self):
+        """The elevation to at which the cross secition will be overtopped."""
+        return min(self.right_max_elevation, self.left_max_elevation)
+
+    @cached_property
+    def channel_width(self):
+        """The width of the cross section between bank points."""
+        return self.right_bank_station - self.left_bank_station
+
+    @cached_property
+    def channel_depth(self):
+        """The depth of the channel; i.e., the depth at which the first bank station is overtoppped."""
+        return min([self.left_bank_elevation, self.right_bank_elevation]) - self.thalweg
+
+    @cached_property
+    def station_elevation_point_density(self):
+        """The average spacing of the station-elevation points."""
+        return self.cutline_length / self.number_of_station_elevation_points
+
+    @cached_property
+    def cutline_length(self):
+        """Length of the cross section bassed on the geometry (x-y coordinates)."""
+        return self.geom.length
+
+    @cached_property
+    def htab_min_elevation(self):
+        """The starting elevation for the cross section's htab."""
+        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
+        if len(result) == 1:
+            return result[0].split(",")[0]
+
+    @cached_property
+    def htab_min_increment(self):
+        """The increment for the cross section's htab."""
+        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
+        if len(result) == 1:
+            return result[0].split(",")[1]
+
+    @cached_property
+    def htab_points(self):
+        """The number of points on the cross section's htab."""
+        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
+        if len(result) == 1:
+            return result[0].split(",")[2]
+
+    @cached_property
+    def correct_cross_section_direction(self):
+        """A boolean indicating if the cross section is drawn from right to left looking downstream."""
+        if self.cross_section_intersects_reach:
+            offset = self.geom.offset_curve(-1)
+            if self.reach_geom.intersects(offset):  # if the offset line intersects then use this logic
+                point = self.reach_geom.intersection(offset)
+                point = validate_point(point)
+
+                offset_rs = reverse(self.reach_geom).project(point)
+                if self.computed_river_station < offset_rs:
+                    return True
+                else:
+                    return False
+            else:  # if the original offset line did not intersect then try offsetting the other direction and applying
+                # the opposite stationing logic; the orginal line may have gone beyound the other line.
+                offset = self.geom.offset_curve(1)
+                point = self.reach_geom.intersection(offset)
+                point = validate_point(point)
+
+                offset_rs = reverse(self.reach_geom).project(point)
+                if self.computed_river_station > offset_rs:
+                    return True
+                else:
+                    return False
+        else:
+            return False
+
+    @cached_property
+    def horizontal_varying_mannings(self):
+        """A boolean indicating if horizontally varied mannings values are applied."""
+        if self.mannings_code == -1:
+            return True
+        elif self.mannings_code == 0:
+            return False
+        else:
+            return False
+
+    @cached_property
+    def mannings_code(self):
+        """
+        A code indicating what type of manning's values are used.
+
+        0, -1 correspond to 3 value manning's; horizontally varying manning's values, respectively.
+        """
+        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
+
+    @cached_property
+    def expansion_coefficient(self):
+        """The expansion coefficient for the cross section."""
+        return search_contents(self.ras_data, "Exp/Cntr", expect_one=True).split(",")[0]
+
+    @cached_property
+    def contraction_coefficient(self):
+        """The expansion coefficient for the cross section."""
+        return search_contents(self.ras_data, "Exp/Cntr", expect_one=True).split(",")[1]
+
+    @cached_property
+    def centerline_intersection_station(self):
+        """Station along the cross section where the centerline intersects it."""
+        if self.cross_section_intersects_reach:
+            return self.geom.project(self.centerline_intersection_point)
+
+    def set_bridge_xs(self, br: int):
+        """
+        Set the bridge cross section attribute.
+
+        A value of 0 is added for non-bridge cross sections and 4, 3, 2, 1 are
+        set for each of the bridge cross sections from downstream to upstream order.
+        """
+        self.bridge_xs = br
+
+    @cached_property
+    def intersects_reach_once(self):
+        """A boolean indicating if the cross section intersects the reach only once."""
+        if isinstance(self.centerline_intersection_point, LineString):
+            return False
+        elif self.centerline_intersection_point is None:
+            return False
+        elif isinstance(self.centerline_intersection_point, Point):
+            return True
+        else:
+            raise TypeError(
+                f"Unexpected type resulting from intersecting cross section and reach; expected Point or LineString; recieved: {type(self.centerline_intersection_point)}. {self.river_reach_rs}"
+            )
+
+    @cached_property
+    def centerline_intersection_point(self):
+        """A point located where the cross section and reach centerline intersect."""
+        if self.cross_section_intersects_reach:
+            intersection = self.reach_geom.intersection(self.geom)
+            if intersection.geom_type == "Point":
+                return intersection
+            if intersection.geom_type == "MultiPoint":
+                return intersection.geoms[0]
+
+    @cached_property
+    def gdf_data_dict(self):
         """Cross section geodataframe."""
-        return gpd.GeoDataFrame(
-            {
-                "geometry": [LineString(self.coords)],
-                "river": [self.river],
-                "reach": [self.reach],
-                "river_reach": [self.river_reach],
-                "river_station": [self.river_station],
-                "river_reach_rs": [self.river_reach_rs],
-                "thalweg": [self.thalweg],
-                "xs_max_elevation": [self.xs_max_elevation],
-                "left_reach_length": [self.left_reach_length],
-                "right_reach_length": [self.right_reach_length],
-                "channel_reach_length": [self.channel_reach_length],
-                "ras_data": ["\n".join(self.ras_data)],
-                "station_elevation_points": [self.station_elevation_points],
-                "bank_stations": [self.bank_stations],
-                "number_of_station_elevation_points": [self.number_of_station_elevation_points],
-                "number_of_coords": [self.number_of_coords],
-                # "coords": [self.coords],
-            },
-            geometry="geometry",
-        )
+        return {
+            "geometry": self.geom,
+            "river": self.river,
+            "reach": self.reach,
+            "river_reach": self.river_reach,
+            "river_station": self.river_station,
+            "river_reach_rs": self.river_reach_rs,
+            "river_reach_rs_str": self.river_reach_rs_str,
+            "thalweg": self.thalweg,
+            "xs_max_elevation": self.xs_max_elevation,
+            "left_reach_length": self.left_reach_length,
+            "right_reach_length": self.right_reach_length,
+            "channel_reach_length": self.channel_reach_length,
+            "computed_channel_reach_length": self.computed_channel_reach_length,
+            "computed_channel_reach_length_ratio": self.computed_channel_reach_length_ratio,
+            "left_reach_length_ratio": self.left_reach_length_ratio,
+            "right_reach_length_ratio": self.right_reach_length_ratio,
+            "reach_lengths_populated": self.reach_lengths_populated,
+            "ras_data": "\n".join(self.ras_data),
+            "station_elevation_points": self.station_elevation_points,
+            "bank_stations": self.bank_stations,
+            "left_bank_station": self.left_bank_station,
+            "right_bank_station": self.right_bank_station,
+            "left_bank_elevation": self.left_bank_elevation,
+            "right_bank_elevation": self.right_bank_elevation,
+            "number_of_station_elevation_points": self.number_of_station_elevation_points,
+            "number_of_coords": self.number_of_coords,
+            "station_length": self.station_length,
+            "cutline_length": self.geom.length,
+            "xs_length_ratio": self.xs_length_ratio,
+            "banks_encompass_channel": self.banks_encompass_channel,
+            "skew": self.skew,
+            "max_n": self.max_n,
+            "min_n": self.min_n,
+            "has_lateral_structure": self.has_lateral_structures,
+            "has_ineffective": self.has_ineffectives,
+            "has_levees": self.has_levees,
+            "has_blocks": self.has_blocks,
+            "channel_obstruction": self.channel_obstruction,
+            "thalweg_drop": self.thalweg_drop,
+            "left_max_elevation": self.left_max_elevation,
+            "right_max_elevation": self.right_max_elevation,
+            "overtop_elevation": self.overtop_elevation,
+            "min_elevation": self.min_elevation,
+            "channel_width": self.channel_width,
+            "channel_depth": self.channel_depth,
+            "station_elevation_point_density": self.station_elevation_point_density,
+            "htab_min_elevation": self.htab_min_elevation,
+            "htab_min_increment": self.htab_min_increment,
+            "htab points": self.htab_points,
+            "correct_cross_section_direction": self.correct_cross_section_direction,
+            "horizontal_varying_mannings": self.horizontal_varying_mannings,
+            "number_of_mannings_points": self.number_of_mannings_points,
+            "expansion_coefficient": self.expansion_coefficient,
+            "contraction_coefficient": self.contraction_coefficient,
+            "centerline_intersection_station": self.centerline_intersection_station,
+            "bridge_xs": self.bridge_xs,
+            "cross_section_intersects_reach": self.cross_section_intersects_reach,
+            "intersects_reach_once": self.intersects_reach_once,
+            "min_elevation_in_channel": self.min_elevation_in_channel,
+        }
 
-    @property
+    @cached_property
+    def gdf(self):
+        """Cross section geodataframe."""
+        return gpd.GeoDataFrame(self.gdf_data_dict, geometry="geometry")
+
+    @cached_property
     def n_subdivisions(self) -> int:
         """Get the number of subdivisions (defined by manning's n)."""
         return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0])
 
-    @property
+    @cached_property
     def subdivision_type(self) -> int:
         """Get the subdivision type.
 
@@ -213,7 +659,7 @@ class XS:
         """
         return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
 
-    @property
+    @cached_property
     def subdivisions(self) -> tuple[list[float], list[float]]:
         """Get the stations corresponding to subdivision breaks, along with their roughness."""
         try:
@@ -228,7 +674,7 @@ class XS:
         except ValueError:
             return None
 
-    @property
+    @cached_property
     def is_interpolated(self) -> bool:
         """Check if xs is interpolated."""
         if self._is_interpolated == None:
@@ -360,15 +806,20 @@ class Structure:
 
         return header.split(",")[position]
 
-    @property
+    @cached_property
     def river_station(self) -> float:
         """Structure river station."""
         return float(self.split_structure_header(1))
 
-    @property
+    @cached_property
+    def type_int(self) -> int:
+        """Structure type."""
+        return int(self.split_structure_header(0))
+
+    @cached_property
     def type(self) -> StructureType:
         """Structure type."""
-        return StructureType(int(self.split_structure_header(0)))
+        return StructureType(self.type_int)
 
     def structure_data(self, position: int) -> str | int:
         """Structure data."""
@@ -394,18 +845,18 @@ class Structure:
         elif self.type == StructureType.LATERAL_STRUCTURE:  # 6 = Lateral Structure
             return 0
 
-    @property
+    @cached_property
     def distance(self) -> float:
         """Distance to upstream cross section."""
         return float(self.structure_data(0))
 
-    @property
+    @cached_property
     def width(self) -> float:
         """Structure width."""
         # TODO check units of the RAS model
         return float(self.structure_data(1))
 
-    @property
+    @cached_property
     def gdf(self) -> gpd.GeoDataFrame:
         """Structure geodataframe."""
         return gpd.GeoDataFrame(
@@ -416,13 +867,74 @@ class Structure:
                 "river_reach": [self.river_reach],
                 "river_station": [self.river_station],
                 "river_reach_rs": [self.river_reach_rs],
-                "type": [self.type],
+                "type": [self.type_int],
                 "distance": [self.distance],
                 "width": [self.width],
                 "ras_data": ["\n".join(self.ras_data)],
             },
             geometry="geometry",
         )
+
+    @cached_property
+    def distance_to_us_xs(self):
+        """The distance from the upstream cross section to the start of the lateral structure."""
+        try:
+            return float(search_contents(self.ras_data, "Lateral Weir Distance", expect_one=True))
+        except ValueError as e:
+            raise InvalidStructureDataError(
+                f"The weir distance for the lateral structure is not populated for: {self.river},{self.reach},{self.river_station}"
+            )
+
+    @cached_property
+    def weir_length(self):
+        """The length weir."""
+        if self.type == StructureType.LATERAL_STRUCTURE:
+            try:
+                return float(list(zip(*self.station_elevation_points))[0][-1])
+            except IndexError as e:
+                raise InvalidStructureDataError(
+                    f"No station elevation data for: {self.river}, {self.reach}, {self.river_station}"
+                )
+
+    @cached_property
+    def station_elevation_points(self):
+        """Station elevation points."""
+        try:
+            lines = text_block_from_start_str_length(
+                f"Lateral Weir SE= {self.number_of_station_elevation_points} ",
+                math.ceil(self.number_of_station_elevation_points / 5),
+                self.ras_data,
+            )
+            return data_pairs_from_text_block(lines, 16)
+        except ValueError as e:
+            return None
+
+    @cached_property
+    def tail_water_river(self):
+        """The tail water reache's river name."""
+        return search_contents(self.ras_data, "Lateral Weir End", expect_one=True).split(",")[0].rstrip()
+
+    @cached_property
+    def tail_water_reach(self):
+        """The tail water reache's reach name."""
+        return search_contents(self.ras_data, "Lateral Weir End", expect_one=True).split(",")[1].rstrip()
+
+    @cached_property
+    def tail_water_river_station(self):
+        """The tail water reache's river stationing."""
+        return float(search_contents(self.ras_data, "Lateral Weir End", expect_one=True).split(",")[2])
+
+    @cached_property
+    def tw_distance(self):
+        """The distance between the tail water upstream cross section and the lateral weir."""
+        return float(
+            search_contents(self.ras_data, "Lateral Weir Connection Pos and Dist", expect_one=True).split(",")[1]
+        )
+
+    @cached_property
+    def number_of_station_elevation_points(self):
+        """The number of station elevation points."""
+        return int(search_contents(self.ras_data, "Lateral Weir SE", expect_one=True))
 
 
 class Reach:
@@ -435,10 +947,7 @@ class Reach:
         self.river = river_reach.split(",")[0].rstrip()
         self.reach = river_reach.split(",")[1].rstrip()
 
-        us_connection: str = None
-        ds_connection: str = None
-
-    @property
+    @cached_property
     def us_xs(self) -> "XS":
         """Upstream cross section."""
         return self.cross_sections[
@@ -448,7 +957,7 @@ class Reach:
             ][0]
         ]
 
-    @property
+    @cached_property
     def ds_xs(self) -> "XS":
         """Downstream cross section."""
         return self.cross_sections[
@@ -458,17 +967,17 @@ class Reach:
             ][0]
         ]
 
-    @property
+    @cached_property
     def number_of_cross_sections(self) -> int:
         """Number of cross sections."""
         return len(self.cross_sections)
 
-    @property
+    @cached_property
     def number_of_coords(self) -> int:
         """Number of coordinates in reach."""
         return int(search_contents(self.ras_data, "Reach XY"))
 
-    @property
+    @cached_property
     def coords(self) -> list[tuple[float, float]]:
         """Reach coordinates."""
         lines = text_block_from_start_str_length(
@@ -478,30 +987,46 @@ class Reach:
         )
         return data_pairs_from_text_block(lines, 32)
 
-    @property
+    @cached_property
     def reach_nodes(self) -> list[str]:
         """Reach nodes."""
-        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False)
+        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False, require_one=False)
 
-    @property
-    def cross_sections(self) -> dict[str, "XS"]:
+    @cached_property
+    def cross_sections(self):
         """Cross sections."""
-        cross_sections = {}
+        cross_sections = OrderedDict()
+        bridge_xs = []
         for header in self.reach_nodes:
             type, _, _, _, _ = header.split(",")[:5]
+
+            # Identify bridge cross-sections
+            if int(type) in [2, 3, 4]:
+                bridge_xs = bridge_xs[:-2] + [4, 3]  # Update after discovery
             if int(type) != 1:
                 continue
+            if len(bridge_xs) == 0:
+                bridge_xs = [0]  # Initialize list
+            else:
+                bridge_xs.append(max([0, bridge_xs[-1] - 1]))  # Autodecrement XS number until zero
+
+            # Get xs text
             xs_lines = text_block_from_start_end_str(
                 f"Type RM Length L Ch R ={header}",
                 ["Type RM Length L Ch R", "River Reach"],
                 self.ras_data,
             )
-            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach)
+            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.geom)
             cross_sections[cross_section.river_reach_rs] = cross_section
 
-        return cross_sections
+        for i, br in zip(cross_sections, bridge_xs):
+            cross_sections[i].set_bridge_xs(br)
+        if len(cross_sections) > 1:
+            cross_sections = self.compute_multi_xs_variables(cross_sections)
 
-    @property
+        return dict(cross_sections)  # Cast to regular dict
+
+    @cached_property
     def structures(self) -> dict[str, "Structure"]:
         """Structures."""
         structures = {}
@@ -538,7 +1063,7 @@ class Reach:
 
         return structures
 
-    @property
+    @cached_property
     def gdf(self) -> gpd.GeoDataFrame:
         """Reach geodataframe."""
         return gpd.GeoDataFrame(
@@ -554,15 +1079,35 @@ class Reach:
             geometry="geometry",
         )
 
-    @property
+    @cached_property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Cross section geodataframe."""
         return pd.concat([xs.gdf for xs in self.cross_sections.values()])
 
-    @property
+    @cached_property
     def structures_gdf(self) -> gpd.GeoDataFrame:
         """Structures geodataframe."""
         return pd.concat([structure.gdf for structure in self.structures.values()])
+
+    def compute_multi_xs_variables(self, cross_sections: OrderedDict) -> dict:
+        """Compute variables that depend on multiple cross sections.
+
+        Set the thalweg drop, computed channel reach length and computed channel reach length
+        ratio between a cross section and the cross section downstream.
+        """
+        keys = list(cross_sections.keys())
+        last_xs = cross_sections[keys[-1]]
+        for xs in keys[::-1][1:]:
+            cross_sections[xs].set_thalweg_drop(last_xs.thalweg)
+            cross_sections[xs].set_computed_reach_length(last_xs.computed_river_station)
+            cross_sections[xs].set_computed_reach_length_ratio()
+            last_xs = cross_sections[xs]
+        return cross_sections
+
+    @cached_property
+    def geom(self):
+        """Geometry of the reach."""
+        return LineString(self.coords)
 
 
 class Junction:
@@ -579,12 +1124,12 @@ class Junction:
     @property
     def x(self) -> float:
         """Junction x coordinate."""
-        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0))
+        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 0)[0])
 
     @property
     def y(self):
         """Junction y coordinate."""
-        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1))
+        return float(self.split_lines([search_contents(self.ras_data, "Junct X Y & Text X Y")], ",", 1)[0])
 
     @property
     def point(self) -> Point:
@@ -676,34 +1221,29 @@ class Connection:
 class ProjectFile(CachedFile):
     """HEC-RAS Project file."""
 
-    @property
-    @lru_cache
+    @cached_property
     def project_title(self) -> str:
         """Return the project title."""
         return search_contents(self.file_lines, "Proj Title")
 
-    @property
-    @lru_cache
+    @cached_property
     def project_description(self) -> str:
         """Return the model description."""
         return search_contents(self.file_lines, "Model Description", token=":", require_one=False)
 
-    @property
-    @lru_cache
+    @cached_property
     def project_status(self) -> str:
         """Return the model status."""
         return search_contents(self.file_lines, "Status of Model", token=":", require_one=False)
 
-    @property
-    @lru_cache
+    @cached_property
     def project_units(self) -> str | None:
         """Return the project units."""
         for line in self.file_lines:
             if "Units" in line:
                 return " ".join(line.split(" ")[:-1])
 
-    @property
-    @lru_cache
+    @cached_property
     def plan_current(self) -> str | None:
         """Return the current plan."""
         try:
@@ -713,8 +1253,7 @@ class ProjectFile(CachedFile):
             self.logger.warning("Ras model has no current plan")
             return None
 
-    @property
-    @lru_cache
+    @cached_property
     def ras_version(self) -> str | None:
         """Return the ras version."""
         version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
@@ -723,41 +1262,36 @@ class ProjectFile(CachedFile):
                 self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
             )
         if version == []:
-            self.logger.warning("Unable to parse project version")
+            self.logger.debug("Unable to parse project version")
             return "N/A"
         else:
             return version[0]
 
-    @property
-    @lru_cache
+    @cached_property
     def plan_files(self) -> list[str]:
         """Return the plan files."""
         suffixes = search_contents(self.file_lines, "Plan File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
-    @property
-    @lru_cache
+    @cached_property
     def geometry_files(self) -> list[str]:
         """Return the geometry files."""
         suffixes = search_contents(self.file_lines, "Geom File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
-    @property
-    @lru_cache
+    @cached_property
     def steady_flow_files(self) -> list[str]:
         """Return the flow files."""
         suffixes = search_contents(self.file_lines, "Flow File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
-    @property
-    @lru_cache
+    @cached_property
     def quasi_unsteady_flow_files(self) -> list[str]:
         """Return the quasisteady flow files."""
         suffixes = search_contents(self.file_lines, "QuasiSteady File", expect_one=False, require_one=False)
         return [name_from_suffix(self.fpath, i) for i in suffixes]
 
-    @property
-    @lru_cache
+    @cached_property
     def unsteady_flow_files(self) -> list[str]:
         """Return the unsteady flow files."""
         suffixes = search_contents(self.file_lines, "Unsteady File", expect_one=False, require_one=False)
@@ -767,34 +1301,41 @@ class ProjectFile(CachedFile):
 class PlanFile(CachedFile):
     """HEC-RAS Plan file asset."""
 
-    @property
+    @cached_property
     def plan_title(self) -> str:
         """Return plan title."""
-        return search_contents(self.file_lines, "Plan Title")
+        return search_contents(self.file_lines, "Plan Title", require_one=False)
 
-    @property
+    @cached_property
     def plan_version(self) -> str:
         """Return program version."""
-        return search_contents(self.file_lines, "Program Version")
+        return search_contents(self.file_lines, "Program Version", require_one=False)
 
-    @property
+    @cached_property
     def geometry_file(self) -> str:
         """Return geometry file."""
         suffix = search_contents(self.file_lines, "Geom File", expect_one=True)
         return name_from_suffix(self.fpath, suffix)
 
-    @property
+    @cached_property
     def flow_file(self) -> str:
         """Return flow file."""
         suffix = search_contents(self.file_lines, "Flow File", expect_one=True)
         return name_from_suffix(self.fpath, suffix)
 
-    @property
+    @cached_property
     def short_identifier(self) -> str:
         """Return short identifier."""
-        return search_contents(self.file_lines, "Short Identifier", expect_one=True).strip()
+        si = search_contents(self.file_lines, "Short Identifier", expect_one=True, require_one=False)
+        if len(si) == 1:
+            return si.strip()
 
-    @property
+    @cached_property
+    def is_encroached(self) -> bool:
+        """Check if any nodes are encroached."""
+        return any(["Encroach Node" in i for i in self.file_lines])
+
+    @cached_property
     def breach_locations(self) -> dict:
         """
         Return breach locations.
@@ -816,17 +1357,26 @@ class PlanFile(CachedFile):
 class GeometryFile(CachedFile):
     """HEC-RAS Geometry file asset."""
 
-    @property
+    @cached_property
     def geom_title(self) -> str:
         """Return geometry title."""
         return search_contents(self.file_lines, "Geom Title")
 
-    @property
+    @cached_property
     def geom_version(self) -> str:
         """Return program version."""
-        return search_contents(self.file_lines, "Program Version")
+        v = search_contents(self.file_lines, "Program Version", require_one=False)
+        if len(v) == 0:
+            return "N/A"
+        else:
+            return v
 
-    @property
+    @cached_property
+    def file_version(self) -> str:
+        """Provide consistent syntax with RasHDFFile."""
+        return self.geom_version
+
+    @cached_property
     def geometry_time(self) -> list[datetime.datetime]:
         """Get the latest node last updated entry for this geometry."""
         dts = search_contents(self.file_lines, "Node Last Edited Time", expect_one=False, require_one=False)
@@ -838,7 +1388,7 @@ class GeometryFile(CachedFile):
         else:
             return []
 
-    @property
+    @cached_property
     def has_2d(self) -> bool:
         """Check if RAS geometry has any 2D areas."""
         for line in self.file_lines:
@@ -847,12 +1397,12 @@ class GeometryFile(CachedFile):
                 return True
         return False
 
-    @property
+    @cached_property
     def has_1d(self) -> bool:
         """Check if RAS geometry has any 1D components."""
         return len(self.cross_sections) > 0
 
-    @property
+    @cached_property
     def rivers(self) -> dict[str, River]:
         """A dictionary of river_name: River (class) for the rivers contained in the HEC-RAS geometry file."""
         tmp_rivers = defaultdict(list)
@@ -865,19 +1415,20 @@ class GeometryFile(CachedFile):
             tmp_rivers[river] = River(river, reaches)
         return tmp_rivers
 
-    @property
+    @cached_property
     def reaches(self) -> dict[str, Reach]:
         """A dictionary of the reaches contained in the HEC-RAS geometry file."""
-        river_reaches = search_contents(self.file_lines, "River Reach", expect_one=False, require_one=False)
+        reg = r"^\s*River Reach=.*"
+        river_reaches = search_contents(self.file_lines, reg, expect_one=False, require_one=False, regex=True)
         return {river_reach: Reach(self.file_lines, river_reach) for river_reach in river_reaches}
 
-    @property
+    @cached_property
     def junctions(self) -> dict[str, Junction]:
         """A dictionary of the junctions contained in the HEC-RAS geometry file."""
         juncts = search_contents(self.file_lines, "Junct Name", expect_one=False, require_one=False)
         return {junction: Junction(self.file_lines, junction) for junction in juncts}
 
-    @property
+    @cached_property
     def cross_sections(self) -> dict[str, XS]:
         """A dictionary of all the cross sections contained in the HEC-RAS geometry file."""
         cross_sections = {}
@@ -885,7 +1436,7 @@ class GeometryFile(CachedFile):
             cross_sections.update(reach.cross_sections)
         return cross_sections
 
-    @property
+    @cached_property
     def structures(self) -> dict[str, Structure]:
         """A dictionary of the structures contained in the HEC-RAS geometry file."""
         structures = {}
@@ -893,7 +1444,7 @@ class GeometryFile(CachedFile):
             structures.update(reach.structures)
         return structures
 
-    @property
+    @cached_property
     def storage_areas(self) -> dict[str, StorageArea]:
         """A dictionary of the storage areas contained in the HEC-RAS geometry file."""
         matches = search_contents(self.file_lines, "Storage Area", expect_one=False, require_one=False)
@@ -906,25 +1457,25 @@ class GeometryFile(CachedFile):
                 areas.append(line.strip())
         return {a: StorageArea(a) for a in areas}
 
-    @property
+    @cached_property
     def ic_point_names(self) -> list[str]:
         """A list of the initial condition point names contained in the HEC-RAS geometry file."""
         ic_points = search_contents(self.file_lines, "IC Point Name", expect_one=False, require_one=False)
         return [ic_point.strip() for ic_point in ic_points]
 
-    @property
+    @cached_property
     def ref_line_names(self) -> list[str]:
         """A list of reference line names contained in the HEC-RAS geometry file."""
         ref_lines = search_contents(self.file_lines, "Reference Line Name", expect_one=False, require_one=False)
         return [ref_line.strip() for ref_line in ref_lines]
 
-    @property
+    @cached_property
     def ref_point_names(self) -> list[str]:
         """A list of reference point names contained in the HEC-RAS geometry file."""
         ref_points = search_contents(self.file_lines, "Reference Point Name", expect_one=False, require_one=False)
         return [ref_point.strip() for ref_point in ref_points]
 
-    @property
+    @cached_property
     def connections(self) -> dict[str, Connection]:
         """A dictionary of the SA/2D connections contained in the HEC-RAS geometry file."""
         matches = search_contents(self.file_lines, "Connection", expect_one=False, require_one=False)
@@ -937,12 +1488,12 @@ class GeometryFile(CachedFile):
                 connections.append(line)
         return {c: Connection(c) for c in connections}
 
-    @property
+    @cached_property
     def reach_gdf(self):
         """A GeodataFrame of the reaches contained in the HEC-RAS geometry file."""
         return gpd.GeoDataFrame(pd.concat([reach.gdf for reach in self.reaches.values()], ignore_index=True))
 
-    @property
+    @cached_property
     def junction_gdf(self):
         """A GeodataFrame of the junctions contained in the HEC-RAS geometry file."""
         if self.junctions:
@@ -953,10 +1504,10 @@ class GeometryFile(CachedFile):
                 )
             )
 
-    @property
+    @cached_property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all cross sections in the geometry text file."""
-        xs_gdf = pd.concat([xs.gdf for xs in self.cross_sections.values()], ignore_index=True)
+        xs_gdf = pd.DataFrame.from_dict([xs.gdf_data_dict for xs in self.cross_sections.values()])
 
         subsets = []
         for _, reach in self.reach_gdf.iterrows():
@@ -971,15 +1522,25 @@ class GeometryFile(CachedFile):
                 axis=1,
             )
             subsets.append(subset_xs)
-        return gpd.GeoDataFrame(pd.concat(subsets))
+        gdf = gpd.GeoDataFrame(pd.concat(subsets))
+        return self.determine_lateral_structure_xs(gdf)
 
-    @property
+    @cached_property
     def structures_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all structures in the geometry text file."""
-        return gpd.GeoDataFrame(pd.concat([structure.gdf for structure in self.structures.values()], ignore_index=True))
+        if len(self.structures) > 0:
+            return gpd.GeoDataFrame(
+                pd.concat([structure.gdf for structure in self.structures.values()], ignore_index=True)
+            )
+        else:
+            return None
 
-    @property
-    @lru_cache
+    @cached_property
+    def concave_hull_gdf(self) -> gpd.GeoDataFrame:
+        """Convert shapely convave hull to geopandas."""
+        return gpd.GeoDataFrame({"geometry": [self.concave_hull]}, geometry="geometry")
+
+    @cached_property
     def concave_hull(self):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
@@ -1000,7 +1561,7 @@ class GeometryFile(CachedFile):
                 polygons.append(polygon)
         if self.junction_gdf is not None:
             for _, j in self.junction_gdf.iterrows():
-                polygons.append(self.junction_hull(j))
+                polygons.append(self.junction_hull(xs_df, j))
         out_hull = self.clean_polygons(polygons)
         return out_hull
 
@@ -1065,6 +1626,96 @@ class GeometryFile(CachedFile):
             "river_reach_rs",
         ].iloc[0]
 
+    def determine_lateral_structure_xs(self, xs_gdf):
+        """
+        Determine if the cross sections are connected to lateral structure.
+
+        Determine if the cross sections are connected to lateral structures,
+        if they are update 'has_lateral_structures' to True.
+        """
+        for structure in self.structures.values():
+            if structure.type == StructureType.LATERAL_STRUCTURE:
+                try:
+                    us_rs = xs_gdf.loc[
+                        (xs_gdf["river"] == structure.river)
+                        & (xs_gdf["reach"] == structure.reach)
+                        & (xs_gdf["river_station"] > structure.river_station),
+                        "river_station",
+                    ].min()
+
+                    ds_xs = xs_gdf.loc[
+                        (xs_gdf["river"] == structure.river)
+                        & (xs_gdf["reach"] == structure.reach)
+                        & (xs_gdf["river_station"] <= us_rs)
+                    ]
+
+                    reach_len = 0
+                    river_stations = []
+                    for _, row in ds_xs.iterrows():
+                        reach_len += row["channel_reach_length"]
+                        river_stations.append(row.river_station)
+                        if reach_len > structure.distance_to_us_xs + structure.weir_length:
+                            break
+
+                    xs_gdf.loc[
+                        (xs_gdf["river"] == structure.river)
+                        & (xs_gdf["reach"] == structure.reach)
+                        & (xs_gdf["river_station"] <= max(river_stations))
+                        & (xs_gdf["river_station"] >= min(river_stations)),
+                        "has_lateral_structure",
+                    ] = True
+
+                    if structure.tail_water_river in xs_gdf.river:
+                        if structure.multiple_xs:
+                            ds_xs = xs_gdf.loc[
+                                (xs_gdf["river"] == structure.tail_water_river)
+                                & (xs_gdf["reach"] == structure.tail_water_reach)
+                                & (xs_gdf["river_station"] <= structure.tail_water_river_station)
+                            ]
+
+                            reach_len = 0
+                            river_stations = []
+                            for _, row in ds_xs.iterrows():
+                                reach_len += row["channel_reach_length"]
+                                river_stations.append(row.river_station)
+                                if reach_len > structure.tw_distance + structure.weir_length:
+                                    break
+
+                            xs_gdf.loc[
+                                (xs_gdf["river"] == structure.tail_water_river)
+                                & (xs_gdf["reach"] == structure.tail_water_reach)
+                                & (xs_gdf["river_station"] <= max(river_stations))
+                                & (xs_gdf["river_station"] >= min(river_stations)),
+                                "has_lateral_structure",
+                            ] = True
+                        else:
+                            ds_xs = xs_gdf.loc[
+                                (xs_gdf["river"] == structure.tail_water_river)
+                                & (xs_gdf["reach"] == structure.tail_water_reach)
+                                & (xs_gdf["river_station"] <= structure.tail_water_river_station)
+                            ]
+
+                            reach_len = 0
+                            river_stations = []
+                            for _, row in ds_xs.iterrows():
+                                reach_len += row["channel_reach_length"]
+                                river_stations.append(row.river_station)
+                                if len(river_stations) > 1:
+                                    break
+
+                            xs_gdf.loc[
+                                (xs_gdf["river"] == structure.tail_water_river)
+                                & (xs_gdf["reach"] == structure.tail_water_reach)
+                                & (xs_gdf["river_station"] <= max(river_stations))
+                                & (xs_gdf["river_station"] >= min(river_stations)),
+                                "has_lateral_structure",
+                            ] = True
+
+                except InvalidStructureDataError as e:
+                    pass
+
+        return xs_gdf
+
     def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
         """Get a geodataframe of a specific subtype of geometry asset."""
         tmp_objs: dict[str] = getattr(self, subtype)
@@ -1087,26 +1738,88 @@ class GeometryFile(CachedFile):
 class SteadyFlowFile(CachedFile):
     """HEC-RAS Steady Flow file data."""
 
-    @property
+    @cached_property
     def flow_title(self) -> str:
         """Return flow title."""
-        return search_contents(self.file_lines, "Flow Title")
+        return search_contents(self.file_lines, "Flow Title", expect_one=True, require_one=False)
 
-    @property
+    @cached_property
     def n_profiles(self) -> int:
         """Return number of profiles."""
         return int(search_contents(self.file_lines, "Number of Profiles"))
+
+    @cached_property
+    def n_flow_change_locations(self):
+        """Number of flow change locations."""
+        return len(search_contents(self.file_lines, "River Rch & RM", expect_one=False))
+
+    @cached_property
+    def profile_names(self):
+        """Profile names."""
+        return search_contents(self.file_lines, "Profile Names").split(",")
+
+    @cached_property
+    def flow_change_locations(self):
+        """Retrieve flow change locations."""
+        flow_change_locations = []
+        tmp_n_flow_change_locations = self.n_flow_change_locations
+        for ind, location in enumerate(search_contents(self.file_lines, "River Rch & RM", expect_one=False)):
+            # parse river, reach, and river station for the flow change location
+            river, reach, rs = location.split(",")
+            lines = text_block_from_start_end_str(
+                f"River Rch & RM={location}",
+                ["River Rch & RM", "Boundary for River Rch & Prof#"],
+                self.file_lines,
+            )
+            flows = []
+
+            for line in lines[1:]:
+                if "River Rch & RM" in line:
+                    break
+
+                for i in range(0, len(line), 8):
+                    tmp_str = line[i : i + 8].lstrip(" ")
+                    if len(tmp_str) == 0:
+                        tmp_n_flow_change_locations -= 1  # invalid entry
+                        if len(flow_change_locations) == tmp_n_flow_change_locations:
+                            return flow_change_locations
+                        else:
+                            break
+                    flows.append(float(tmp_str))
+                    if len(flows) == self.n_profiles:
+                        flow_change_locations.append(
+                            {
+                                "river": river,
+                                "reach": reach.rstrip(" "),
+                                "rs": float(rs),
+                                "flows": flows,
+                                "profile_names": self.profile_names,
+                            }
+                        )
+                    if len(flow_change_locations) == tmp_n_flow_change_locations:
+                        return flow_change_locations
+
+
+@dataclass
+class FlowChangeLocation:
+    """HEC-RAS Flow Change Locations."""
+
+    river: str = None
+    reach: str = None
+    rs: float = None
+    flows: list[float] = None
+    profile_names: list[str] = None
 
 
 class UnsteadyFlowFile(CachedFile):
     """HEC-RAS Unsteady Flow file data."""
 
-    @property
+    @cached_property
     def flow_title(self) -> str:
         """Return flow title."""
         return search_contents(self.file_lines, "Flow Title")
 
-    @property
+    @cached_property
     def boundary_locations(self) -> list:
         """
         Return boundary locations.
@@ -1126,14 +1839,14 @@ class UnsteadyFlowFile(CachedFile):
         # self.logger.debug(f"boundary_dict:{boundary_dict}")
         return boundary_dict
 
-    @property
+    @cached_property
     def reference_lines(self):
         """Return reference lines."""
         return search_contents(
             self.file_lines, "Observed Rating Curve=Name=Ref Line", token=":", expect_one=False, require_one=False
         )
 
-    @property
+    @cached_property
     def precip_bc(self):
         """Return precipitation boundary condition."""
         return search_contents(
@@ -1170,7 +1883,12 @@ class RASHDFFile(CachedFile):
         self.logger.info(f"Reading: {self.fpath}")
 
         self.hdf_object = hdf_constructor.open_uri(
-            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
+            fpath,
+            fsspec_kwargs={
+                "default_cache_type": "blockcache",
+                "default_block_size": 10**5,
+                "anon": (os.getenv("AWS_ACCESS_KEY_ID") is None and os.getenv("AWS_SECRET_ACCESS_KEY") is None),
+            },
         )
         self._root_attrs: dict | None = None
         self._geom_attrs: dict | None = None
@@ -1182,140 +1900,140 @@ class RASHDFFile(CachedFile):
     #     if hasattr(self, "hdf_object") and self.hdf_object is not None:
     #         self.hdf_object.close()
 
-    @property
+    @cached_property
     def file_version(self) -> str | None:
         """Return File Version."""
         if self._root_attrs == None:
             self._root_attrs = self.hdf_object.get_root_attrs()
         return self._root_attrs.get("File Version")
 
-    @property
+    @cached_property
     def units_system(self) -> str | None:
         """Return Units System."""
         if self._root_attrs == None:
             self._root_attrs = self.hdf_object.get_root_attrs()
         return self._root_attrs.get("Units System")
 
-    @property
+    @cached_property
     def geometry_time(self) -> datetime.datetime | None:
         """Return Geometry Time."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Geometry Time")
 
-    @property
+    @cached_property
     def landcover_date_last_modified(self) -> datetime.datetime | None:
         """Return Land Cover Date Last Modified."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Land Cover Date Last Modified")
 
-    @property
+    @cached_property
     def landcover_filename(self) -> str | None:
         """Return Land Cover Filename."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Land Cover Filename")
 
-    @property
+    @cached_property
     def landcover_layername(self) -> str | None:
         """Return Land Cover Layername."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Land Cover Layername")
 
-    @property
+    @cached_property
     def rasmapperlibdll_date(self) -> datetime.datetime | None:
         """Return RasMapperLib.dll Date."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("RasMapperLib.dll Date").isoformat()
 
-    @property
+    @cached_property
     def si_units(self) -> bool | None:
         """Return SI Units."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("SI Units")
 
-    @property
+    @cached_property
     def terrain_file_date(self) -> datetime.datetime | None:
         """Return Terrain File Date."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Terrain File Date").isoformat()
 
-    @property
+    @cached_property
     def terrain_filename(self) -> str | None:
         """Return Terrain Filename."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Terrain Filename")
 
-    @property
+    @cached_property
     def terrain_layername(self) -> str | None:
         """Return Terrain Layername."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Terrain Layername")
 
-    @property
+    @cached_property
     def geometry_version(self) -> str | None:
         """Return Version."""
         if self._geom_attrs == None:
             self._geom_attrs = self.hdf_object.get_geom_attrs()
         return self._geom_attrs.get("Version")
 
-    @property
+    @cached_property
     def bridges_culverts(self) -> int | None:
         """Return Bridge/Culvert Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Bridge/Culvert Count")
 
-    @property
+    @cached_property
     def connections(self) -> int | None:
         """Return Connection Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Connection Count")
 
-    @property
+    @cached_property
     def inline_structures(self) -> int | None:
         """Return Inline Structure Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Inline Structure Count")
 
-    @property
+    @cached_property
     def lateral_structures(self) -> int | None:
         """Return Lateral Structure Count."""
         if self._structures_attrs == None:
             self._structures_attrs = self.hdf_object.get_geom_structures_attrs()
         return self._structures_attrs.get("Lateral Structure Count")
 
-    @property
+    @cached_property
     def two_d_flow_cell_average_size(self) -> float | None:
         """Return Cell Average Size."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Average Size")))
 
-    @property
+    @cached_property
     def two_d_flow_cell_maximum_index(self) -> int | None:
         """Return Cell Maximum Index."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return self._2d_flow_attrs.get("Cell Maximum Index")
 
-    @property
+    @cached_property
     def two_d_flow_cell_maximum_size(self) -> int | None:
         """Return Cell Maximum Size."""
         if self._2d_flow_attrs == None:
             self._2d_flow_attrs = self.hdf_object.get_geom_2d_flow_area_attrs()
         return int(np.sqrt(self._2d_flow_attrs.get("Cell Maximum Size")))
 
-    @property
+    @cached_property
     def two_d_flow_cell_minimum_size(self) -> int | None:
         """Return Cell Minimum Size."""
         if self._2d_flow_attrs == None:
@@ -1345,7 +2063,7 @@ class RASHDFFile(CachedFile):
             geometries = mesh_areas["geometry"]
             return unary_union(geometries)
 
-    @property
+    @cached_property
     def breaklines(self) -> gpd.GeoDataFrame | None:
         """Return breaklines."""
         breaklines = self.hdf_object.breaklines()
@@ -1355,7 +2073,7 @@ class RASHDFFile(CachedFile):
 
         return breaklines
 
-    @property
+    @cached_property
     def mesh_cells(self) -> gpd.GeoDataFrame | None:
         """Return mesh cell polygons."""
         mesh_cells = self.hdf_object.mesh_cell_polygons()
@@ -1365,7 +2083,7 @@ class RASHDFFile(CachedFile):
 
         return mesh_cells
 
-    @property
+    @cached_property
     def bc_lines(self) -> gpd.GeoDataFrame | None:
         """Return boundary condition lines."""
         bc_lines = self.hdf_object.bc_lines()
@@ -1390,273 +2108,278 @@ class PlanHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasPlanHdf, **kwargs)
 
-        self.hdf_object = RasPlanHdf.open_uri(
-            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
-        )
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
 
-    @property
+    @cached_property
     def plan_information_base_output_interval(self) -> str | None:
         """Return Base Output Interval."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Base Output Interval")
 
-    @property
+    @cached_property
     def plan_information_computation_time_step_base(self):
         """Return Computation Time Step Base."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Computation Time Step Base")
 
-    @property
+    @cached_property
     def plan_information_flow_filename(self):
         """Return Flow Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Flow Filename")
 
-    @property
+    @cached_property
     def plan_information_geometry_filename(self):
         """Return Geometry Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Geometry Filename")
 
-    @property
+    @cached_property
     def plan_information_plan_filename(self):
         """Return Plan Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Plan Filename")
 
-    @property
+    @cached_property
     def plan_information_plan_name(self):
         """Return Plan Name."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Plan Name")
 
-    @property
+    @cached_property
     def plan_information_project_filename(self):
         """Return Project Filename."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Project Filename")
 
-    @property
+    @cached_property
     def plan_information_project_title(self):
         """Return Project Title."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
         return self._plan_info_attrs.get("Project Title")
 
-    @property
+    @cached_property
     def plan_information_simulation_end_time(self):
         """Return Simulation End Time."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("Simulation End Time").isoformat()
+        t = self._plan_info_attrs.get("Simulation End Time")
+        if t is None:
+            return None
+        else:
+            return t.isoformat()
 
-    @property
+    @cached_property
     def plan_information_simulation_start_time(self):
         """Return Simulation Start Time."""
         if self._plan_info_attrs == None:
             self._plan_info_attrs = self.hdf_object.get_plan_info_attrs()
-        return self._plan_info_attrs.get("Simulation Start Time").isoformat()
+        t = self._plan_info_attrs.get("Simulation Start Time")
+        if t is None:
+            return None
+        else:
+            return t.isoformat()
 
-    @property
+    @cached_property
     def plan_parameters_1d_flow_tolerance(self):
         """Return 1D Flow Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Flow Tolerance")
 
-    @property
+    @cached_property
     def plan_parameters_1d_maximum_iterations(self):
         """Return 1D Maximum Iterations."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Maximum Iterations")
 
-    @property
+    @cached_property
     def plan_parameters_1d_maximum_iterations_without_improvement(self):
         """Return 1D Maximum Iterations Without Improvement."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Maximum Iterations Without Improvement")
 
-    @property
+    @cached_property
     def plan_parameters_1d_maximum_water_surface_error_to_abort(self):
         """Return 1D Maximum Water Surface Error To Abort."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Maximum Water Surface Error To Abort")
 
-    @property
+    @cached_property
     def plan_parameters_1d_storage_area_elevation_tolerance(self):
         """Return 1D Storage Area Elevation Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Storage Area Elevation Tolerance")
 
-    @property
+    @cached_property
     def plan_parameters_1d_theta(self):
         """Return 1D Theta."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Theta")
 
-    @property
+    @cached_property
     def plan_parameters_1d_theta_warmup(self):
         """Return 1D Theta Warmup."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Theta Warmup")
 
-    @property
+    @cached_property
     def plan_parameters_1d_water_surface_elevation_tolerance(self):
         """Return 1D Water Surface Elevation Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D Water Surface Elevation Tolerance")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_gate_flow_submergence_decay_exponent(self):
         """Return 1D-2D Gate Flow Submergence Decay Exponent."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Gate Flow Submergence Decay Exponent")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_is_stablity_factor(self):
         """Return 1D-2D IS Stablity Factor."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D IS Stablity Factor")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_ls_stablity_factor(self):
         """Return 1D-2D LS Stablity Factor."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D LS Stablity Factor")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_maximum_number_of_time_slices(self):
         """Return 1D-2D Maximum Number of Time Slices."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Maximum Number of Time Slices")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_minimum_time_step_for_slicinghours(self):
         """Return 1D-2D Minimum Time Step for Slicing(hours)."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Minimum Time Step for Slicing(hours)")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_number_of_warmup_steps(self):
         """Return 1D-2D Number of Warmup Steps."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Number of Warmup Steps")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_warmup_time_step_hours(self):
         """Return 1D-2D Warmup Time Step (hours)."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Warmup Time Step (hours)")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_weir_flow_submergence_decay_exponent(self):
         """Return 1D-2D Weir Flow Submergence Decay Exponent."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D-2D Weir Flow Submergence Decay Exponent")
 
-    @property
+    @cached_property
     def plan_parameters_1d2d_maxiter(self):
         """Return 1D2D MaxIter."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("1D2D MaxIter")
 
-    @property
+    @cached_property
     def plan_parameters_2d_equation_set(self):
         """Return 2D Equation Set."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Equation Set")
 
-    @property
+    @cached_property
     def plan_parameters_2d_names(self):
         """Return 2D Names."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Names")
 
-    @property
+    @cached_property
     def plan_parameters_2d_volume_tolerance(self):
         """Return 2D Volume Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Volume Tolerance")
 
-    @property
+    @cached_property
     def plan_parameters_2d_water_surface_tolerance(self):
         """Return 2D Water Surface Tolerance."""
         if self._plan_parameters_attrs == None:
             self._plan_parameters_attrs = self.hdf_object.get_plan_param_attrs()
         return self._plan_parameters_attrs.get("2D Water Surface Tolerance")
 
-    @property
+    @cached_property
     def meteorology_dss_filename(self):
         """Return meteorology precip DSS Filename."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("DSS Filename")
 
-    @property
+    @cached_property
     def meteorology_dss_pathname(self):
         """Return meteorology precip DSS Pathname."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("DSS Pathname")
 
-    @property
+    @cached_property
     def meteorology_data_type(self):
         """Return meteorology precip Data Type."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Data Type")
 
-    @property
+    @cached_property
     def meteorology_mode(self):
         """Return meteorology precip Mode."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Mode")
 
-    @property
+    @cached_property
     def meteorology_raster_cellsize(self):
         """Return meteorology precip Raster Cellsize."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Raster Cellsize")
 
-    @property
+    @cached_property
     def meteorology_source(self):
         """Return meteorology precip Source."""
         if self._meteorology_attrs == None:
             self._meteorology_attrs = self.hdf_object.get_meteorology_precip_attrs()
         return self._meteorology_attrs.get("Source")
 
-    @property
+    @cached_property
     def meteorology_units(self):
         """Return meteorology precip units."""
         if self._meteorology_attrs == None:
@@ -1670,29 +2393,36 @@ class GeometryHDFFile(RASHDFFile):
     def __init__(self, fpath: str, **kwargs):
         super().__init__(fpath, RasGeomHdf, **kwargs)
 
-        self.hdf_object = RasGeomHdf.open_uri(
-            fpath, fsspec_kwargs={"default_cache_type": "blockcache", "default_block_size": 10**5}
-        )
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
         self._meteorology_attrs = None
 
-    @property
+    @cached_property
     def projection(self):
         """Return geometry projection."""
         return self.hdf_object.projection()
 
-    @property
+    @cached_property
     def cross_sections(self) -> int | None:
         """Return geometry cross sections."""
         return self.hdf_object.cross_sections()
 
-    @property
+    @cached_property
     def reference_lines(self) -> gpd.GeoDataFrame | None:
         """Return geometry reference lines."""
         ref_lines = self.hdf_object.reference_lines()
 
         if ref_lines is None or ref_lines.empty:
-            self.logger.warning("No reference lines found.")
+            self.logger.debug("No reference lines found.")
         else:
             return ref_lines
+
+    @cached_property
+    def reference_points(self) -> gpd.GeoDataFrame | None:
+        """Return geometry reference points."""
+        ref_points = self.hdf_object.reference_points()
+
+        if ref_points is None or ref_points.empty:
+            self.logger.debug("No reference points found.")
+        else:
+            return ref_points
