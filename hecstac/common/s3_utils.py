@@ -1,9 +1,12 @@
 """Utilities for S3."""
 
+from __future__ import annotations
+
 import io
 import json
 import os
 import re
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import boto3
@@ -11,7 +14,9 @@ import pandas as pd
 from botocore.config import Config
 
 from hecstac.common.logger import get_logger
-from hecstac.ras.item import RASModelItem
+
+if TYPE_CHECKING:
+    from hecstac.ras.item import RASModelItem
 
 
 def init_s3_resources() -> tuple:
@@ -34,27 +39,35 @@ def init_s3_resources() -> tuple:
     return session, s3_client, s3_resource
 
 
-def list_keys_regex(s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix="") -> list:
-    """List all keys in an S3 bucket with a given prefix and suffix."""
+def list_keys_regex(
+    s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix: str = "", recursive: bool = True
+) -> list:
+    """List all keys in an S3 bucket matching a given prefix pattern and suffix."""
     keys = []
-    kwargs = {"Bucket": bucket, "Prefix": prefix_includes}
+    prefix = prefix_includes.split("*")[0]  # Use the static part of the prefix for listing
+    kwargs = {"Bucket": bucket, "Prefix": prefix}
+    if not recursive:
+        kwargs["Delimiter"] = "/"
+
     prefix_pattern = re.compile(prefix_includes.replace("*", ".*"))
+
     while True:
         resp = s3_client.list_objects_v2(**kwargs)
-        keys += [
-            obj["Key"] for obj in resp["Contents"] if prefix_pattern.match(obj["Key"]) and obj["Key"].endswith(suffix)
-        ]
-        try:
-            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
-        except KeyError:
+        for obj in resp.get("Contents", []):
+            key = obj["Key"]
+            if prefix_pattern.match(key) and key.endswith(suffix):
+                keys.append(key)
+        if not resp.get("IsTruncated"):
             break
+        kwargs["ContinuationToken"] = resp["NextContinuationToken"]
+
     return keys
 
 
 def save_bytes_s3(
     data: io.BytesIO,
     s3_path: str,
-    content_type: str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    content_type: str = "",
 ):
     """Upload BytesIO to S3."""
     parsed = urlparse(s3_path)
@@ -62,6 +75,18 @@ def save_bytes_s3(
     key = parsed.path.lstrip("/")
     s3 = boto3.client("s3")
     s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType=content_type)
+
+
+def save_file_s3(
+    local_path: str,
+    s3_path: str,
+):
+    """Upload BytesIO to S3."""
+    parsed = urlparse(s3_path)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+    s3 = boto3.client("s3")
+    s3.upload_file(Filename=local_path, Bucket=bucket, Key=key)
 
 
 def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
@@ -131,4 +156,27 @@ def qc_results_to_excel_s3(results: dict, s3_key: str) -> None:
         passed_df.to_excel(writer, sheet_name="passed", index=False)
 
     buffer.seek(0)
-    save_bytes_s3(buffer, s3_key)
+    save_bytes_s3(buffer, s3_key, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+def parse_s3_url(s3_url: str):
+    """
+    Extract the bucket name and path from an S3 URL.
+
+    Args:
+        s3_url (str): The S3 URL (e.g., 's3://my-bucket/path/to/object.txt').
+
+    Returns
+    -------
+        tuple: (bucket_name, path)
+    """
+    parsed = urlparse(s3_url)
+    bucket = parsed.netloc
+    path = parsed.path.lstrip("/")
+    return bucket, path
+
+
+def make_uri_public(uri: str) -> str:
+    """Convert from an AWS S3 URI to an https url."""
+    bucket, path = parse_s3_url(uri)
+    return f"https://{bucket}.s3.amazonaws.com/{path}"

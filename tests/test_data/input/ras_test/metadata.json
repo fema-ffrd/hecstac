@@ -1,0 +1,183 @@
+{
+    "models": [
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/Baxter/Baxter.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/Baxter/Baxter.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/Baxter/Baxter.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/Baxter/Baxter.g02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Baxter/Baxter.p01"
+            ],
+            "crs": "EPSG:2227",
+            "note": "Simple example of 1D HEC-RAS model. Base case."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.color_scales",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.f02",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.g01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.O01",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.p01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.p02",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.p02.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/channel_modifications/SA_2.rasmap"
+            ],
+            "crs": null,
+            "note": "Edge case that uses the channel modifications feature in HEC-RAS 1D."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.f02",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.g01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.g02.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.g03",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.g03.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.g04",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.g04.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.O01",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.O03",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.p01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.p03",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.p03.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.r01",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.r03",
+                "s3://ffrd-pilot/public/hecstac_test_data/hdf_null_sim_time/Deliverable.rasmap"
+            ],
+            "crs": null,
+            "note": "Case where an hdf file is missing a simulation time value."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/MissFldwy/MissFldwy.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/MissFldwy/MissFldwy.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/MissFldwy/MissFldwy.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/MissFldwy/MissFldwy.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/MissFldwy/MissFldwy.p01"
+            ],
+            "crs": "EPSG:32165",
+            "note": "Base case."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.br",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.nt",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.O01",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.O02",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.p02",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.r01",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.r02",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.rep",
+                "s3://ffrd-pilot/public/hecstac_test_data/null_coordinate_centerline/2445_Flood_Study.xs"
+            ],
+            "crs": null,
+            "note": "Edge case of missing centerline geometry."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/PatuxentRiver/PatuxentRiver.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/PatuxentRiver/PatuxentRiver.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/PatuxentRiver/PatuxentRiver.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/PatuxentRiver/PatuxentRiver.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/PatuxentRiver/PatuxentRiver.p06"
+            ],
+            "crs": "EPSG:6488",
+            "note": "Base case."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.f02",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.f03",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.f05",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.f06",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g02",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g02.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g03.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g04.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g05.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g06.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g07.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g08.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g09",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g09.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g10.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g11",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.g11.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.O01",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.O02",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.O03",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.O04",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.O06",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.O07",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p02",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p02.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p03",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p03.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p04.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p06.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p07",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.p07.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.r01",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.r02",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.r03",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.r07",
+                "s3://ffrd-pilot/public/hecstac_test_data/reach_no_xs/Valley31.rasmap"
+            ],
+            "crs": null,
+            "note": "Edge case where a reach existed but had no cross-sections."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.f02",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.g12",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.g12.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.O01",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.O11",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.O12",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.p01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.p12",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.p12.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.r01",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.r12",
+                "s3://ffrd-pilot/public/hecstac_test_data/utf8_error/ELKNB_IN_FP_PQA.rasmap"
+            ],
+            "crs": null,
+            "note": "Edge case where a description block contained the degree symbol in some non-utf8 encoding."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.prj"
+            ],
+            "crs": "EPSG:5646",
+            "note": "Base case."
+        }
+    ]
+}
