@@ -67,9 +67,8 @@ def create_calibration_item(ras_project_path: str, output_prefix: str):
 
 
 if __name__ == "__main__":
-
     config = {
-        "ras_project_path": f"s3://trinity-pilot/calibration/hydraulics/bedias-creek/bedias-creek.prj",
+        "ras_project_path": f"s3://trinity-pilot/calibration/hydraulics/clear-creek/clear-creek.prj",
         "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration",
     }
 

@@ -75,7 +75,6 @@ def create_event_item(plan_file_path: str, source_model_path: str, output_prefix
 
 
 if __name__ == "__main__":
-
     config = {
         "model_prefix": "s3://trinity-pilot/calibration/hydraulics/bedias-creek",
         "source_model_path": "s3://trinity-pilot/stac/prod-support/calibration/model=bedias-creek/item.json",
