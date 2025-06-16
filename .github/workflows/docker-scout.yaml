@@ -19,6 +19,13 @@ jobs:
     name: Docker Scout Scan
     runs-on: ubuntu-latest
     steps:
+      - name: Debug secrets availability
+        run: |
+          echo "DOCKER_USER exists: ${{ secrets.DOCKER_USER != '' }}"
+          echo "DOCKER_PAT exists: ${{ secrets.DOCKER_PAT != '' }}"
+          echo "DOCKER_USER length: ${{ length(secrets.DOCKER_USER) }}"
+          echo "DOCKER_PAT length: ${{ length(secrets.DOCKER_PAT) }}"
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
