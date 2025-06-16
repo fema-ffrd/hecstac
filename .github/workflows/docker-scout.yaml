@@ -19,13 +19,6 @@ jobs:
     name: Docker Scout Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Debug secrets availability
-        run: |
-          echo "DOCKER_USER exists: ${{ secrets.DOCKER_USER != '' }}"
-          echo "DOCKER_PAT exists: ${{ secrets.DOCKER_PAT != '' }}"
-          echo "DOCKER_USER has value: ${{ secrets.DOCKER_USER && 'yes' || 'no' }}"
-          echo "DOCKER_PAT has value: ${{ secrets.DOCKER_PAT && 'yes' || 'no' }}"
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -43,6 +36,6 @@ jobs:
         uses: docker/scout-action@v1
         with:
           command: cves
-          image: ${{ inputs.image_tag || 'ghcr.io/fema-ffrd/hecstac:latest' }}
+          image: ghcr.io/fema-ffrd/hecstac:latest
           only-severities: critical,high
           summary: true
