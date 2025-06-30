@@ -36,7 +36,7 @@ jobs:
         uses: docker/scout-action@v1
         with:
           command: cves
-          image: ghcr.io/fema-ffrd/hecstac:latest
+          image: ${{ inputs.image_tag || 'ghcr.io/fema-ffrd/stormlit:latest' }}
           only-severities: critical,high
           summary: true
           exit-code: true
