@@ -39,3 +39,4 @@ jobs:
           image: ghcr.io/fema-ffrd/hecstac:latest
           only-severities: critical,high
           summary: true
+          exit-code: true

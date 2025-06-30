@@ -4,6 +4,7 @@
 [![Dev CI](https://github.com/fema-ffrd/hecstac/actions/workflows/dev-push.yaml/badge.svg?branch=dev)](https://github.com/fema-ffrd/hecstac/actions/workflows/dev-push.yaml)
 [![Documentation Status](https://readthedocs.org/projects/hecstac/badge/?version=latest)](https://hecstac.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://badge.fury.io/py/hecstac.svg)](https://badge.fury.io/py/hecstac)
+[![Docker Scout](https://github.com/fema-ffrd/hecstac/actions/workflows/docker-scout.yaml/badge.svg)](https://github.com/fema-ffrd/hecstac/actions/workflows/docker-scout.yaml)
 
 Utilities for creating STAC items from HEC models
 

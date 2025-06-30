@@ -17,6 +17,10 @@ on:
         type: string
         default: 'linux/amd64'
         required: false
+    outputs:
+      image_tag:
+        description: 'Docker image tags'
+        value: ${{ jobs.build-docker.outputs.image_tag }}
 
 permissions:
   contents: read
@@ -65,14 +69,3 @@ jobs:
           tags: ${{ steps.set_tags.outputs.TAGS }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  docker-scout:
-    needs: build-docker
-    if: always()
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: ./.github/workflows/docker-scout.yaml
-    with:
-      image_tag: ${{ needs.build-docker.outputs.image_tag || 'ghcr.io/fema-ffrd/hecstac:latest' }}
-    secrets: inherit
