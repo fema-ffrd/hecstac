@@ -1,15 +1,9 @@
-name: Main Branch Push
+name: Tagged Release
 
 on:
   push:
-    branches: [ "main" ]
-    paths:
-      - 'hecstac/**'
-      - 'tests/**'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - '.github/workflows/**'
-      - 'pyproject.toml'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:

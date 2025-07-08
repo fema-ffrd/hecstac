@@ -17,28 +17,43 @@ on:
         type: string
         default: 'linux/amd64'
         required: false
+    outputs:
+      image_tag:
+        description: 'Docker image tags'
+        value: ${{ jobs.build-docker.outputs.image_tag }}
 
 permissions:
   contents: read
   packages: write
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   build-docker:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Docker tags based on branch
-        id: set_tags
-        run: |
-          if [[ "${{ inputs.branch }}" == "main" ]]; then
-            echo "TAGS=ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ inputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branch }}" == "dev" ]]; then
-            echo "TAGS=ghcr.io/${{ github.repository }}:${{ inputs.version }}-dev" >> $GITHUB_OUTPUT
-          else
-            echo "TAGS=ghcr.io/${{ github.repository }}:pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
-          fi
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # tag events
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # branch events - dev branch gets dev tag
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            # main branch gets latest tag
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            # PR builds get a unique tag based on PR number and commit
+            type=ref,event=pr
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -50,7 +65,7 @@ jobs:
         if: inputs.push_to_registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -60,6 +75,7 @@ jobs:
           context: .
           platforms: ${{ inputs.platforms }}
           push: ${{ inputs.push_to_registry }}
-          tags: ${{ steps.set_tags.outputs.TAGS }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

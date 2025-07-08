@@ -14,6 +14,7 @@ on:
 permissions:
   contents: read
   packages: write
+  pull-requests: write
 
 jobs:
   python-build:
@@ -21,6 +22,14 @@ jobs:
     uses: ./.github/workflows/python-build.yaml
     with:
       run_tests: false
+      
+  sonarqube:
+    name: SonarQube Analysis
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/sonarqube.yaml
       
   get-version:
     name: Extract Package Version
@@ -31,7 +40,18 @@ jobs:
     needs: get-version
     uses: ./.github/workflows/docker-build.yaml
     with:
-      push_to_registry: false
+      push_to_registry: true
       version: ${{ needs.get-version.outputs.version }}
       branch: ${{ github.base_ref }}
       platforms: 'linux/amd64'
+    secrets: inherit
+
+  docker-scout:
+    needs: docker-build-test
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/docker-scout.yaml
+    with:
+      image_tag: ${{ needs.docker-build-test.outputs.image_tag }}
+    secrets: inherit
