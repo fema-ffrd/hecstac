@@ -7,7 +7,6 @@
     {
         "bucket": "trinity-pilot",
         "prefix": "calibration/hydraulics/kickapoo",
-        "ras_model_name": "trinity_1203_kickapoo",
         "skip_hdf_files": false
     }
 ]
