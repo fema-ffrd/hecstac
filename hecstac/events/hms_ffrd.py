@@ -161,8 +161,7 @@ class HMSEventItem(Item):
         )
 
     def add_authoritative_model_link(self, item_href: str = None):
-        """Add a link to the authoritative model(s). If item_href is provided, it links to that item;
-        otherwise, it links to the source model paths."""
+        """Add a link to the authoritative model(s). If item_href is provided, it links to that item; otherwise, it links to the source model paths."""
         if item_href:
             self.add_link(Link(rel="derived_from", target=item_href, title="Source Model"))
         else:
