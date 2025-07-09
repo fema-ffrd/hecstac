@@ -30,7 +30,6 @@ class HMSEventItem(Item):
         self.realization = realization
         self.block_index = block_index
         self.event_number = event_number
-        self.storm_fn = storm_fn
         self.event_index_by_block = event_index_by_block
         self.source_model_paths = source_model_paths
         self.source_model_items = []
