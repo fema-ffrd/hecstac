@@ -22,7 +22,6 @@ class HMSEventItem(Item):
         realization: int,
         block_index: int,
         event_number: int,
-        storm_fn: str,
         event_index_by_block: int,
         source_model_paths: list[str],
         proj_str: str,
@@ -45,7 +44,7 @@ class HMSEventItem(Item):
             self._bbox,
             self._datetime,
             self._properties,
-            href=self._href,
+            href=None,
         )
 
     def build_assets(
@@ -124,11 +123,6 @@ class HMSEventItem(Item):
             "data_time_source": "Item creation time",
         }
 
-    @property
-    def _href(self) -> str:
-        """Set item href to None, will be handled externally."""
-        return None
-
     def add_sst_dss_asset(self, full_dss_path: str):
         """Add complete sim SST DSS file as an asset."""
         self.add_asset(
@@ -166,9 +160,14 @@ class HMSEventItem(Item):
             ),
         )
 
-    def add_authoritative_model_link(self, href: str):
-        """Add a link to the authoritative model."""
-        self.add_link(Link(rel="derived_from", target=href, title="Source Model"))
+    def add_authoritative_model_link(self, item_href: str = None):
+        """Add a link to the authoritative model(s). If item_href is provided, it links to that item;
+        otherwise, it links to the source model paths."""
+        if item_href:
+            self.add_link(Link(rel="derived_from", target=item_href, title="Source Model"))
+        else:
+            for href in self.source_model_paths:
+                self.add_link(Link(rel="derived_from", target=href, title="Source Model"))
 
     def add_storm_item_link(self, storm_item_href: str):
         """Add a link to the storm item."""
