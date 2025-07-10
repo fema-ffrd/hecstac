@@ -1,5 +1,7 @@
 """Common utility functions."""
 
+import json
+import os
 from pathlib import Path
 
 from pystac import Item
@@ -22,3 +24,30 @@ def sanitize_catalog_assets(item: Item) -> Item:
             )
 
     return item
+
+
+def load_config(config_input: str):
+    """
+    Load the config from a string or file path.
+
+    Args:
+        config_input (str): JSON string or path to JSON file.
+
+    Returns
+    -------
+        List[dict]: List of config dictionaries.
+    """
+    # add option for reading local file
+    if os.path.isfile(config_input):
+        with open(config_input, "r") as f:
+            config_data = json.load(f)
+    else:
+        config_data = json.loads(config_input)
+
+    # always pass config as a list
+    if isinstance(config_data, dict):
+        return [config_data]
+    elif isinstance(config_data, list):
+        return config_data
+    else:
+        raise ValueError(f"Config must be a JSON object or list of objects not {type(config_data)}: {config_data}")
