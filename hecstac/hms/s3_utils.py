@@ -119,8 +119,11 @@ def get_basic_object_metadata(obj: ObjectSummary) -> dict:
 
 def create_fiona_aws_session():
     """Create fiona s3 session."""
-    session = boto3.Session()
-    return fiona.session.AWSSession(session)
+    return fiona.session.AWSSession(
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", ""),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+        region_name=os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")),
+    )
 
 
 def init_s3_resources2(minio_mode: bool = False):

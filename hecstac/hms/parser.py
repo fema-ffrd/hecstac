@@ -19,7 +19,7 @@ from shapely.geometry import LineString, MultiLineString, Point
 import hecstac.hms.utils as utils
 from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
-from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER, GPD_WRITE_ENGINE
+from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER
 from hecstac.hms.data_model import (
     ET,
     BasinHeader,
@@ -999,12 +999,12 @@ class SqliteDB:
         if self.fiona_aws_session:
             with fiona.Env(self.fiona_aws_session):
                 self.layers = fiona.listlayers(self.path)
-                self.reach_feats = gpd.read_file(self.path, layer="reach2d", engine=GPD_WRITE_ENGINE)
-                self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d", engine=GPD_WRITE_ENGINE)
+                self.reach_feats = gpd.read_file(self.path, layer="reach2d")
+                self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d")
         else:
             self.layers = fiona.listlayers(self.path)
-            self.reach_feats = gpd.read_file(self.path, layer="reach2d", engine=GPD_WRITE_ENGINE)
-            self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d", engine=GPD_WRITE_ENGINE)
+            self.reach_feats = gpd.read_file(self.path, layer="reach2d")
+            self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d")
 
         # check consistent crs and assign crs to sqlite class
         if (
