@@ -5,7 +5,6 @@ import json
 import re
 from pathlib import Path
 from typing import Tuple
-from urllib.parse import urlparse
 import argparse
 from dotenv import load_dotenv
 from openpyxl.utils.exceptions import IllegalCharacterError
