@@ -12,7 +12,7 @@ from openpyxl.utils.exceptions import IllegalCharacterError
 
 from hecstac.common.utils import load_config
 from hecstac.common.logger import initialize_logger
-from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, make_uri_public, save_bytes_s3
+from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, make_uri_public, save_bytes_s3, parse_s3_url
 from hecstac.ras.item import RASModelItem
 
 
@@ -61,9 +61,7 @@ def list_calibration_model_files(s3_client, bucket: str, prefix: str) -> list[st
 
 def parse_ras_project_path(s3_path: str) -> Tuple[str, str, str]:
     """Parse an S3 path to extract the bucket, prefix, and RAS model name."""
-    parsed = urlparse(s3_path)
-    bucket = parsed.netloc
-    key = parsed.path.lstrip("/")
+    bucket, key = parse_s3_url(s3_path)
     path = Path(key)
 
     ras_model_name = path.stem
