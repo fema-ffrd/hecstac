@@ -16,7 +16,7 @@ from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, make_uri
 from hecstac.ras.item import RASModelItem
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
 
@@ -49,7 +49,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def list_calibration_model_files(s3_client, bucket: str, prefix: str) -> list:
+def list_calibration_model_files(s3_client, bucket: str, prefix: str) -> list[str]:
     """List all model files in a given prefix, excluding uNN.hdf and pNN.hdf files."""
     if not prefix.endswith("/"):
         prefix = prefix + "/"
@@ -72,7 +72,7 @@ def parse_ras_project_path(s3_path: str) -> Tuple[str, str, str]:
     return bucket, prefix, ras_model_name
 
 
-def create_calibration_item(s3_client, ras_project_path: str, output_prefix: str):
+def create_calibration_item(s3_client, ras_project_path: str, output_prefix: str) -> tuple[RASModelItem, str]:
     """
     Generate and upload a STAC item for a RAS model calibration run.
 
@@ -98,7 +98,7 @@ def create_calibration_item(s3_client, ras_project_path: str, output_prefix: str
     return ras_item, output_item_path
 
 
-def main(config):
+def main(config) -> None:
     """
     Create STAC Items and geospatial assets for RAS calibration model.
 

@@ -14,7 +14,7 @@ from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, parse_s3
 from hecstac.events.ffrd import FFRDEventItem
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """
     Parse command-line arguments.
 
@@ -50,7 +50,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def extract_plan_info(plan_path: str):
+def extract_plan_info(plan_path: str) -> tuple[str, str]:
     """Extract model name and event name from given plan file."""
     plan_hdf = RasPlanHdf.open_uri(plan_path)
 
@@ -60,7 +60,7 @@ def extract_plan_info(plan_path: str):
     return model_name, event_name
 
 
-def list_plan_hdfs(s3_client, model_prefix: str) -> list:
+def list_plan_hdfs(s3_client, model_prefix: str) -> list[str]:
     """List all plan HDF files in the given S3 prefix."""
     bucket, prefix = parse_s3_url(model_prefix)
     ras_files = list_keys_regex(s3_client=s3_client, bucket=bucket, prefix_includes=prefix)
@@ -72,7 +72,9 @@ def list_plan_hdfs(s3_client, model_prefix: str) -> list:
         raise ValueError(f"No plan hdf files found at bucket: {bucket} and prefix: {prefix} ")
 
 
-def create_event_item(plan_file_path: str, source_model_path: str, output_prefix: str, calibration_only: bool = False):
+def create_event_item(
+    plan_file_path: str, source_model_path: str, output_prefix: str, calibration_only: bool = False
+) -> FFRDEventItem:
     """
     Create and upload a STAC item for a RAS model event.
 
@@ -105,7 +107,7 @@ def create_event_item(plan_file_path: str, source_model_path: str, output_prefix
     return event_item
 
 
-def main(config):
+def main(config) -> None:
     """
     Create STAC Items and time series assets for RAS event model.
 
