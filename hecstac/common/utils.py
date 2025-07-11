@@ -26,16 +26,32 @@ def sanitize_catalog_assets(item: Item) -> Item:
     return item
 
 
-def load_config(config_input: str):
+def load_config(config_input: str) -> list[dict[str, str]]:
     """
-    Load the config from a string or file path.
+    Load a HECSTAC workflow configuration from a JSON string or a file path.
+
+    This function is used to load configurations for HECSTAC workflows, such as creating RAS STAC items.
+    If `config_input` is a path to a local file, the file is read and parsed as JSON.
+    If `config_input` is a JSON string, it is parsed directly.
+    The configuration must be either a dictionary or a list of dictionaries.
 
     Args:
-        config_input (str): JSON string or path to JSON file.
+        config_input (str): Path to a JSON config file or a JSON string.
 
-    Returns
-    -------
-        List[dict]: List of config dictionaries.
+    Returns:
+        list[dict]: List of configuration dictionaries.
+
+    Example:
+        Single config (as string or file):
+            {
+                "ras_project_path": "...",
+                "output_prefix": "..."
+            }
+        Multiple configs:
+            [
+                {"ras_project_path": "...", "output_prefix": "..."},
+                {"ras_project_path": "...", "output_prefix": "..."}
+            ]
     """
     # add option for reading local file
     if os.path.isfile(config_input):
