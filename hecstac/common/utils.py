@@ -38,7 +38,8 @@ def load_config(config_input: str) -> list[dict[str, str]]:
     Args:
         config_input (str): Path to a JSON config file or a JSON string.
 
-    Returns:
+    Returns
+    -------
         list[dict]: List of configuration dictionaries.
 
     Example:
