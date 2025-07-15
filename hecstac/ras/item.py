@@ -189,8 +189,8 @@ class RASModelItem(Item):
             logger.debug(f"Processing geometry from {i.href}")
             try:
                 geometries.append(i.geometry_wgs84)
-            except Exception as e:
-                logger.error(e)
+            except Exception:
+                logger.warning(f"Unable to process geometry from {i.href}, skipping.")
                 continue
 
         unioned_geometry = union_all(geometries)

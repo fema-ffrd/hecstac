@@ -1491,7 +1491,10 @@ class GeometryFile(CachedFile):
     @cached_property
     def reach_gdf(self):
         """A GeodataFrame of the reaches contained in the HEC-RAS geometry file."""
-        return gpd.GeoDataFrame(pd.concat([reach.gdf for reach in self.reaches.values()], ignore_index=True))
+        if self.reaches.values():
+            return gpd.GeoDataFrame(pd.concat([reach.gdf for reach in self.reaches.values()], ignore_index=True))
+        else:
+            self.logger.info(f"Reaches could not be extracted for {self.fpath}.")
 
     @cached_property
     def junction_gdf(self):
@@ -1545,9 +1548,9 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]
