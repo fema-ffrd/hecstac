@@ -1,7 +1,7 @@
 """Create instances of assets."""
 
 from pathlib import Path
-from typing import Dict, Generic, Type, TypeVar
+from typing import Dict, Generic, Optional, Type, TypeVar
 
 from pyproj import CRS
 from pystac import Asset
@@ -18,7 +18,7 @@ class GenericAsset(Asset, Generic[T]):
     regex_parse_str: str = r""
     __roles__: list[str] = []
     __description__: str = ""
-    __media_type__: str = None
+    __media_type__: Optional[str] = None
     __file_class__: T
 
     def __init__(self, *args, **kwargs):

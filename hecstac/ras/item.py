@@ -9,7 +9,7 @@ import os
 import traceback
 from functools import cached_property
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import pystac
 import pystac.errors
@@ -76,6 +76,8 @@ class RASModelItem(Item):
             Coordinate reference system (CRS) to apply to the item. If None, the CRS will be extracted from the geometry .hdf file.
         simplify_geometry : bool, optional
             Whether to simplify geometry. Defaults to True.
+        assets : list, optional
+            List of assets to include in the STAC item. If None, all model files will be included.
 
         Returns
         -------
@@ -379,7 +381,7 @@ class RASModelItem(Item):
                     logging.error(str(traceback.format_exc()))
 
     @cached_property
-    def _primary_plan(self) -> PlanAsset:
+    def _primary_plan(self) -> Optional[PlanAsset]:
         """Primary plan for use in Ripple1D."""  # TODO: develop test for this logic. easily tested
         if len(self.plan_assets) == 0:
             return None
@@ -400,7 +402,7 @@ class RASModelItem(Item):
             return candidate_plans[0]
 
     @cached_property
-    def _primary_flow(self) -> SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset:
+    def _primary_flow(self) -> Union[Union[SteadyFlowAsset, UnsteadyFlowAsset], QuasiUnsteadyFlowAsset]:
         """Flow asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (SteadyFlowAsset, UnsteadyFlowAsset, QuasiUnsteadyFlowAsset)):
@@ -409,7 +411,7 @@ class RASModelItem(Item):
         return None
 
     @cached_property
-    def _primary_geometry(self) -> GeometryAsset | GeometryHdfAsset:
+    def _primary_geometry(self) -> Union[GeometryAsset, GeometryHdfAsset]:
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (GeometryAsset, GeometryHdfAsset)):

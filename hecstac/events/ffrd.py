@@ -41,7 +41,7 @@ class FFRDEventItem(Item):
         event_id: str = None,
         realization: str = None,
         block_group: str = None,
-        hms_simulation_files: list = [],
+        hms_simulation_files: list = None,
     ) -> None:
         self.realization = realization
         self.block_group = block_group
@@ -65,10 +65,10 @@ class FFRDEventItem(Item):
             self._bbox,
             self._datetime,
             self._properties,
-            href=self._href,
+            href=None,
         )
 
-        for fpath in self.hms_simulation_files:
+        for fpath in self.hms_simulation_files or []:
             self.add_hms_asset(fpath, item_type="event")
 
         for fpath in self.ras_simulation_files:
@@ -115,10 +115,6 @@ class FFRDEventItem(Item):
             return f"{self.realization}-{self.block_group}-{self.event_id}"
         else:
             return self.event_id
-
-    @property
-    def _href(self) -> str:
-        return None
 
     @property
     def _properties(self):

@@ -65,7 +65,7 @@ def list_plan_hdfs(s3_client, model_prefix: str) -> list[str]:
     bucket, prefix = parse_s3_url(model_prefix)
     ras_files = list_keys_regex(s3_client=s3_client, bucket=bucket, prefix_includes=prefix)
     ras_files = [f"s3://{bucket}/{f}" for f in ras_files]
-    plan_hdf_files = [f for f in ras_files if re.search(r"\.[p]\d{2}\.hdf$", f)]
+    plan_hdf_files = [f for f in ras_files if re.search(r"\.p\d{2}\.hdf$", f)]
     if plan_hdf_files:
         return plan_hdf_files
     else:
@@ -83,6 +83,10 @@ def create_event_item(
         source_model_path (str): Path to the source model used for the event.
         output_prefix (str): S3 prefix for storing the output item and assets.
         calibration_only (bool): If True, only process events with 'calibration' in the name.
+
+    Returns
+    -------
+        FFRDEventItem: The created FFRD event item.
     """
     model_name, event_name = extract_plan_info(plan_file_path)
 

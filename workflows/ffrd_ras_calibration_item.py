@@ -54,7 +54,7 @@ def list_calibration_model_files(s3_client, bucket: str, prefix: str) -> list[st
         prefix = prefix + "/"
     ras_files = list_keys_regex(s3_client=s3_client, bucket=bucket, prefix_includes=prefix, recursive=False)
     ras_files = [f"s3://{bucket}/{f}" for f in ras_files]
-    pattern = re.compile(r"(u|p)\d{2}\.hdf$")
+    pattern = re.compile(r"[up]\d{2}\.hdf$")
     return [file for file in ras_files if not pattern.search(file)]
 
 

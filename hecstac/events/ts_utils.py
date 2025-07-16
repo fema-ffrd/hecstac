@@ -22,7 +22,7 @@ def save_reference_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     try:
         ref_line_ts = plan_hdf.reference_lines_timeseries_output()
     except RasPlanHdfError:
-        return None
+        return {}
 
     refln_paths = {}
 
@@ -51,7 +51,7 @@ def save_reference_points(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     try:
         ref_point_ts = plan_hdf.reference_points_timeseries_output()
     except RasPlanHdfError:
-        return None
+        return {}
 
     refpt_paths = {}
 
@@ -80,7 +80,8 @@ def save_bc_lines(plan_hdf: RasPlanHdf, output_prefix: str) -> dict:
     try:
         bs_line_ts = plan_hdf.bc_lines_timeseries_output()
     except RasPlanHdfError:
-        return None
+        return {}
+
     bc_ln_paths = {}
 
     for bc_line_id in bs_line_ts.bc_line_id.values:
