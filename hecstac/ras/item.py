@@ -46,17 +46,17 @@ logger = get_logger(__name__)
 class RASModelItem(Item):
     """An object representation of a HEC-RAS model."""
 
-    PROJECT = "HEC-RAS:project"
-    PROJECT_TITLE = "HEC-RAS:project_title"
-    MODEL_UNITS = "HEC-RAS:unit_system"
-    MODEL_GAGES = "HEC-RAS:gages"  # TODO: Is this deprecated?
-    PROJECT_VERSION = "HEC-RAS:version"
-    PROJECT_DESCRIPTION = "HEC-RAS:description"
-    PROJECT_STATUS = "HEC-RAS:status"
-    RAS_HAS_1D = "HEC-RAS:has_1d"
-    RAS_HAS_2D = "HEC-RAS:has_2d"
-    RAS_DATETIME_SOURCE = "HEC-RAS:datetime_source"
-    HECSTAC_VERSION = "HEC-RAS:hecstac_version"
+    PROJECT_KEY = "HEC-RAS:project"
+    PROJECT_TITLE_KEY = "HEC-RAS:project_title"
+    MODEL_UNITS_KEY = "HEC-RAS:unit_system"
+    MODEL_GAGES_KEY = "HEC-RAS:gages"  # TODO: Is this deprecated?
+    PROJECT_VERSION_KEY = "HEC-RAS:version"
+    PROJECT_DESCRIPTION_KEY = "HEC-RAS:description"
+    PROJECT_STATUS_KEY = "HEC-RAS:status"
+    RAS_HAS_1D_KEY = "HEC-RAS:has_1d"
+    RAS_HAS_2D_KEY = "HEC-RAS:has_2d"
+    RAS_DATETIME_SOURCE_KEY = "HEC-RAS:datetime_source"
+    HECSTAC_VERSION_KEY = "HEC-RAS:hecstac_version"
 
     def __init__(self, *args, **kwargs):
         """Add a few default properties to the base class."""
@@ -241,15 +241,15 @@ class RASModelItem(Item):
 
     def update_properties(self) -> dict:
         """Force recalculation of HEC-RAS properties."""
-        self.properties[self.PROJECT] = self.project_asset.name
-        self.properties[self.RAS_HAS_1D] = self.has_1d
-        self.properties[self.RAS_HAS_2D] = self.has_2d
-        self.properties[self.PROJECT_TITLE] = self.pf.project_title
-        self.properties[self.PROJECT_VERSION] = self.project_version
-        self.properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
-        self.properties[self.PROJECT_STATUS] = self.pf.project_status
-        self.properties[self.MODEL_UNITS] = self.pf.project_units
-        self.properties[self.HECSTAC_VERSION] = hecstac.__version__
+        self.properties[self.PROJECT_KEY] = self.project_asset.name
+        self.properties[self.RAS_HAS_1D_KEY] = self.has_1d
+        self.properties[self.RAS_HAS_2D_KEY] = self.has_2d
+        self.properties[self.PROJECT_TITLE_KEY] = self.pf.project_title
+        self.properties[self.PROJECT_VERSION_KEY] = self.project_version
+        self.properties[self.PROJECT_DESCRIPTION_KEY] = self.pf.project_description
+        self.properties[self.PROJECT_STATUS_KEY] = self.pf.project_status
+        self.properties[self.MODEL_UNITS_KEY] = self.pf.project_units
+        self.properties[self.HECSTAC_VERSION_KEY] = hecstac.__version__
 
         datetimes = self.model_datetime
         if len(datetimes) > 1:
