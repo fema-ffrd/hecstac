@@ -86,7 +86,7 @@ def create_calibration_item(s3_client, ras_project_path: str, output_prefix: str
 
     calibration_model_files = list_calibration_model_files(s3_client, bucket, prefix)
 
-    ras_item = RASModelItem.from_prj(ras_project_path, crs=None, assets=calibration_model_files)
+    ras_item = RASModelItem.from_prj(ras_project_path, assets=calibration_model_files)
     ras_item.set_self_href(make_uri_public(output_item_path))
     ras_item.add_model_thumbnails(layers=["mesh_areas", "breaklines", "bc_lines"], thumbnail_dest=output_item_prefix)
     ras_item.add_geospatial_assets(output_assets_prefix)

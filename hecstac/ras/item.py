@@ -93,7 +93,7 @@ class RASModelItem(Item):
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
-            {cls.PROJECT: Path(ras_project_file).name},
+            {cls.PROJECT_KEY: Path(ras_project_file).name},
             href=ras_project_file.replace(".prj", ".json").replace(".PRJ", ".json"),
             assets=assets,
         )
@@ -257,15 +257,15 @@ class RASModelItem(Item):
         if len(datetimes) > 1:
             self.properties["start_datetime"] = datetime_to_str(min(datetimes))
             self.properties["end_datetime"] = datetime_to_str(max(datetimes))
-            self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+            self.properties[self.RAS_DATETIME_SOURCE_KEY] = "model_geometry"
             self.datetime = None
         elif len(datetimes) == 1:
             self.datetime = datetimes[0]
-            self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+            self.properties[self.RAS_DATETIME_SOURCE_KEY] = "model_geometry"
         else:
-            logger.warning(f"Could not extract item datetime from geometry.")
+            logger.warning("Could not extract item datetime from geometry.")
             self.datetime = datetime.datetime.now()
-            self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
+            self.properties[self.RAS_DATETIME_SOURCE_KEY] = "processing_time"
 
     @cached_property
     def project_version(self):
@@ -402,7 +402,7 @@ class RASModelItem(Item):
             return candidate_plans[0]
 
     @cached_property
-    def _primary_flow(self) -> Union[Union[SteadyFlowAsset, UnsteadyFlowAsset], QuasiUnsteadyFlowAsset]:
+    def _primary_flow(self) -> Optional[SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset]:
         """Flow asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (SteadyFlowAsset, UnsteadyFlowAsset, QuasiUnsteadyFlowAsset)):
@@ -411,13 +411,13 @@ class RASModelItem(Item):
         return None
 
     @cached_property
-    def _primary_geometry(self) -> Union[GeometryAsset, GeometryHdfAsset]:
+    def _primary_geometry(self) -> Optional[GeometryAsset | GeometryHdfAsset]:
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (GeometryAsset, GeometryHdfAsset)):
                 if i.name.startswith(self._primary_plan.file.geometry_file):
                     return i
-        return
+        return None
 
     @cached_property
     def gpkg_metadata(self) -> dict:
@@ -431,7 +431,7 @@ class RASModelItem(Item):
         metadata["unsteady_flow_files"] = "\n".join(
             [i.name for i in self.assets.values() if isinstance(i, UnsteadyFlowAsset)]
         )
-        metadata["ras_project_file"] = self.properties[self.PROJECT]
+        metadata["ras_project_file"] = self.properties[self.PROJECT_KEY]
         metadata["ras_project_title"] = self.pf.project_title
         metadata["plans_titles"] = "\n".join([i.title for i in self.assets if isinstance(i, PlanAsset)])
         metadata["geom_titles"] = "\n".join([i.title for i in self.geometry_assets])

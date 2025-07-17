@@ -867,7 +867,7 @@ class Structure:
         """The distance from the upstream cross section to the start of the lateral structure."""
         try:
             return float(search_contents(self.ras_data, "Lateral Weir Distance", expect_one=True))
-        except ValueError as e:
+        except ValueError:
             raise InvalidStructureDataError(
                 f"The weir distance for the lateral structure is not populated for: {self.river},{self.reach},{self.river_station}"
             )
@@ -878,7 +878,7 @@ class Structure:
         if self.type == StructureType.LATERAL_STRUCTURE:
             try:
                 return float(list(zip(*self.station_elevation_points))[0][-1])
-            except IndexError as e:
+            except IndexError:
                 raise InvalidStructureDataError(
                     f"No station elevation data for: {self.river}, {self.reach}, {self.river_station}"
                 )
@@ -893,7 +893,7 @@ class Structure:
                 self.ras_data,
             )
             return data_pairs_from_text_block(lines, 16)
-        except ValueError as e:
+        except ValueError:
             return None
 
     @cached_property
@@ -1497,10 +1497,7 @@ class GeometryFile(CachedFile):
     @cached_property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all cross sections in the geometry text file."""
-        xs_gdf = pd.DataFrame.from_dict(
-            [xs.gdf_data_dict for xs in self.cross_sections.values()]
-        )  # TODO: Investigate this
-
+        xs_gdf = pd.DataFrame([xs.gdf_data_dict for xs in self.cross_sections.values()])
         subsets = []
         for _, reach in self.reach_gdf.iterrows():
             subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
@@ -1537,9 +1534,9 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]
@@ -1703,7 +1700,7 @@ class GeometryFile(CachedFile):
                                 "has_lateral_structure",
                             ] = True
 
-                except InvalidStructureDataError as e:
+                except InvalidStructureDataError:
                     pass
 
         return xs_gdf
