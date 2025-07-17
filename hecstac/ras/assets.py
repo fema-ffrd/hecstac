@@ -25,6 +25,7 @@ from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import make_uri_public, save_bytes_s3, save_file_s3
+from hecstac.common.consts import S3_PREFIX, HTTPS_PREFIX
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
@@ -141,9 +142,6 @@ PLAN_TITLE = "HEC-RAS:plan_title"
 FLOW_TITLE = "HEC-RAS:flow_title"
 
 PRJ_CRS = "authority_code"
-
-S3_PREFIX = "s3://"
-HTTPS_PREFIX = "https://"
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):

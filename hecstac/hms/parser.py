@@ -20,6 +20,7 @@ from shapely.geometry import LineString, MultiLineString, Point
 import hecstac.hms.utils as utils
 from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
+from hecstac.common.consts import S3_PREFIX
 from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER
 from hecstac.hms.data_model import (
     ET,
@@ -48,8 +49,6 @@ from hecstac.hms.data_model import (
 from hecstac.hms.s3_utils import create_fiona_aws_session
 
 logger = get_logger(__name__)
-
-S3_PREFIX = "s3://"
 
 
 class BaseTextFile(ABC):
