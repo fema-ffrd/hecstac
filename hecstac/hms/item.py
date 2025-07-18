@@ -200,7 +200,7 @@ class HMSModelItem(Item):
                 logger.info(f"Thumbnail for basin `{bf.name}` already exists. Skipping creation.")
             else:
                 logger.info(f"{'Overwriting' if overwrite else 'Creating'} thumbnail for basin `{bf.name}`")
-                fig = self.make_thumbnail(self, gdfs=bf.hms_schematic_2_gdfs)
+                fig = self.make_thumbnail(gdfs=bf.hms_schematic_2_gdfs)
                 fig.savefig(thumbnail_path)
                 fig.clf()
             thumbnail_paths.append(thumbnail_path)
@@ -275,15 +275,17 @@ class HMSModelItem(Item):
         fig.tight_layout()
         return fig
 
-    ### Prevent external modification of dynamically generated properties ###
     @geometry.setter
-    def geometry(self, *args, **kwargs):
+    # Prevent external modification of dynamically generated geometry property
+    def geometry(self, value):
         pass
 
     @bbox.setter
-    def bbox(self, *args, **kwargs):
+    # Prevent external modification of dynamically generated bbox property
+    def bbox(self, value):
         pass
 
     @datetime.setter
-    def datetime(self, *args, **kwargs):
+    # Prevent external modification of dynamically generated datetime property
+    def datetime(self, value):
         pass

@@ -9,7 +9,7 @@ import os
 import traceback
 from functools import cached_property
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import pystac
 import pystac.errors
@@ -46,17 +46,17 @@ logger = get_logger(__name__)
 class RASModelItem(Item):
     """An object representation of a HEC-RAS model."""
 
-    PROJECT = "HEC-RAS:project"
-    PROJECT_TITLE = "HEC-RAS:project_title"
-    MODEL_UNITS = "HEC-RAS:unit_system"
-    MODEL_GAGES = "HEC-RAS:gages"  # TODO: Is this deprecated?
-    PROJECT_VERSION = "HEC-RAS:version"
-    PROJECT_DESCRIPTION = "HEC-RAS:description"
-    PROJECT_STATUS = "HEC-RAS:status"
-    RAS_HAS_1D = "HEC-RAS:has_1d"
-    RAS_HAS_2D = "HEC-RAS:has_2d"
-    RAS_DATETIME_SOURCE = "HEC-RAS:datetime_source"
-    HECSTAC_VERSION = "HEC-RAS:hecstac_version"
+    PROJECT_KEY = "HEC-RAS:project"
+    PROJECT_TITLE_KEY = "HEC-RAS:project_title"
+    MODEL_UNITS_KEY = "HEC-RAS:unit_system"
+    MODEL_GAGES_KEY = "HEC-RAS:gages"  # TODO: Is this deprecated?
+    PROJECT_VERSION_KEY = "HEC-RAS:version"
+    PROJECT_DESCRIPTION_KEY = "HEC-RAS:description"
+    PROJECT_STATUS_KEY = "HEC-RAS:status"
+    RAS_HAS_1D_KEY = "HEC-RAS:has_1d"
+    RAS_HAS_2D_KEY = "HEC-RAS:has_2d"
+    RAS_DATETIME_SOURCE_KEY = "HEC-RAS:datetime_source"
+    HECSTAC_VERSION_KEY = "HEC-RAS:hecstac_version"
 
     def __init__(self, *args, **kwargs):
         """Add a few default properties to the base class."""
@@ -76,6 +76,8 @@ class RASModelItem(Item):
             Coordinate reference system (CRS) to apply to the item. If None, the CRS will be extracted from the geometry .hdf file.
         simplify_geometry : bool, optional
             Whether to simplify geometry. Defaults to True.
+        assets : list, optional
+            List of assets to include in the STAC item. If None, all model files will be included.
 
         Returns
         -------
@@ -91,7 +93,7 @@ class RASModelItem(Item):
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
-            {cls.PROJECT: Path(ras_project_file).name},
+            {cls.PROJECT_KEY: Path(ras_project_file).name},
             href=ras_project_file.replace(".prj", ".json").replace(".PRJ", ".json"),
             assets=assets,
         )
@@ -189,8 +191,8 @@ class RASModelItem(Item):
             logger.debug(f"Processing geometry from {i.href}")
             try:
                 geometries.append(i.geometry_wgs84)
-            except Exception as e:
-                logger.error(e)
+            except Exception:
+                logger.warning(f"Unable to process geometry from {i.href}, skipping.")
                 continue
 
         unioned_geometry = union_all(geometries)
@@ -241,29 +243,29 @@ class RASModelItem(Item):
 
     def update_properties(self) -> dict:
         """Force recalculation of HEC-RAS properties."""
-        self.properties[self.PROJECT] = self.project_asset.name
-        self.properties[self.RAS_HAS_1D] = self.has_1d
-        self.properties[self.RAS_HAS_2D] = self.has_2d
-        self.properties[self.PROJECT_TITLE] = self.pf.project_title
-        self.properties[self.PROJECT_VERSION] = self.project_version
-        self.properties[self.PROJECT_DESCRIPTION] = self.pf.project_description
-        self.properties[self.PROJECT_STATUS] = self.pf.project_status
-        self.properties[self.MODEL_UNITS] = self.pf.project_units
-        self.properties[self.HECSTAC_VERSION] = hecstac.__version__
+        self.properties[self.PROJECT_KEY] = self.project_asset.name
+        self.properties[self.RAS_HAS_1D_KEY] = self.has_1d
+        self.properties[self.RAS_HAS_2D_KEY] = self.has_2d
+        self.properties[self.PROJECT_TITLE_KEY] = self.pf.project_title
+        self.properties[self.PROJECT_VERSION_KEY] = self.project_version
+        self.properties[self.PROJECT_DESCRIPTION_KEY] = self.pf.project_description
+        self.properties[self.PROJECT_STATUS_KEY] = self.pf.project_status
+        self.properties[self.MODEL_UNITS_KEY] = self.pf.project_units
+        self.properties[self.HECSTAC_VERSION_KEY] = hecstac.__version__
 
         datetimes = self.model_datetime
         if len(datetimes) > 1:
             self.properties["start_datetime"] = datetime_to_str(min(datetimes))
             self.properties["end_datetime"] = datetime_to_str(max(datetimes))
-            self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+            self.properties[self.RAS_DATETIME_SOURCE_KEY] = "model_geometry"
             self.datetime = None
         elif len(datetimes) == 1:
             self.datetime = datetimes[0]
-            self.properties[self.RAS_DATETIME_SOURCE] = "model_geometry"
+            self.properties[self.RAS_DATETIME_SOURCE_KEY] = "model_geometry"
         else:
-            logger.warning(f"Could not extract item datetime from geometry.")
+            logger.warning("Could not extract item datetime from geometry.")
             self.datetime = datetime.datetime.now()
-            self.properties[self.RAS_DATETIME_SOURCE] = "processing_time"
+            self.properties[self.RAS_DATETIME_SOURCE_KEY] = "processing_time"
 
     @cached_property
     def project_version(self):
@@ -379,7 +381,7 @@ class RASModelItem(Item):
                     logging.error(str(traceback.format_exc()))
 
     @cached_property
-    def _primary_plan(self) -> PlanAsset:
+    def _primary_plan(self) -> Optional[PlanAsset]:
         """Primary plan for use in Ripple1D."""  # TODO: develop test for this logic. easily tested
         if len(self.plan_assets) == 0:
             return None
@@ -400,7 +402,7 @@ class RASModelItem(Item):
             return candidate_plans[0]
 
     @cached_property
-    def _primary_flow(self) -> SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset:
+    def _primary_flow(self) -> Optional[SteadyFlowAsset | UnsteadyFlowAsset | QuasiUnsteadyFlowAsset]:
         """Flow asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (SteadyFlowAsset, UnsteadyFlowAsset, QuasiUnsteadyFlowAsset)):
@@ -409,13 +411,13 @@ class RASModelItem(Item):
         return None
 
     @cached_property
-    def _primary_geometry(self) -> GeometryAsset | GeometryHdfAsset:
+    def _primary_geometry(self) -> Optional[GeometryAsset | GeometryHdfAsset]:
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (GeometryAsset, GeometryHdfAsset)):
                 if i.name.startswith(self._primary_plan.file.geometry_file):
                     return i
-        return
+        return None
 
     @cached_property
     def gpkg_metadata(self) -> dict:
@@ -429,7 +431,7 @@ class RASModelItem(Item):
         metadata["unsteady_flow_files"] = "\n".join(
             [i.name for i in self.assets.values() if isinstance(i, UnsteadyFlowAsset)]
         )
-        metadata["ras_project_file"] = self.properties[self.PROJECT]
+        metadata["ras_project_file"] = self.properties[self.PROJECT_KEY]
         metadata["ras_project_title"] = self.pf.project_title
         metadata["plans_titles"] = "\n".join([i.title for i in self.assets if isinstance(i, PlanAsset)])
         metadata["geom_titles"] = "\n".join([i.title for i in self.geometry_assets])

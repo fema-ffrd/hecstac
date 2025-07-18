@@ -16,6 +16,12 @@ from hecstac.hms.parser import (
     TerrainFile,
 )
 
+HMS_VERSION = "hms:version"
+HMS_TITLE = "hms:title"
+HMS_DESCRIPTION = "hms:description"
+HMS_UNIT_SYSTEM = "hms:unit_system"
+HMS_BASIN_TITLE = "hms:basin_title"
+
 
 class GeojsonAsset(GenericAsset):
     """Geojson asset."""
@@ -70,10 +76,10 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
         """Return extra fields with added dynamic keys/values."""
         return (
             {
-                "hms:basin_title": self.file.name,
-                "hms:version": self.file.header.attrs["Version"],
-                "hms:description": self.file.header.attrs.get("Description"),
-                "hms:unit_system": self.file.header.attrs["Unit System"],
+                HMS_BASIN_TITLE: self.file.name,
+                HMS_VERSION: self.file.header.attrs["Version"],
+                HMS_DESCRIPTION: self.file.header.attrs.get("Description"),
+                HMS_UNIT_SYSTEM: self.file.header.attrs["Unit System"],
                 "hms:gages": self.file.gages,
                 "hms:drainage_area_miles": self.file.drainage_area,
                 "hms:reach_length_miles": self.file.reach_miles,
@@ -97,10 +103,10 @@ class EventBasinAsset(GenericAsset[BasinFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
-            "hms:basin_title": self.file.name,
-            "hms:version": self.file.header.attrs["Version"],
-            "hms:description": self.file.header.attrs.get("Description"),
-            "hms:unit_system": self.file.header.attrs["Unit System"],
+            HMS_BASIN_TITLE: self.file.name,
+            HMS_VERSION: self.file.header.attrs["Version"],
+            HMS_DESCRIPTION: self.file.header.attrs.get("Description"),
+            HMS_UNIT_SYSTEM: self.file.header.attrs["Unit System"],
         }
 
 
@@ -164,7 +170,7 @@ class DSSAsset(GenericAsset):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.name}
+        return {HMS_TITLE: self.name}
 
 
 class SqliteAsset(GenericAsset[SqliteDB]):
@@ -178,7 +184,7 @@ class SqliteAsset(GenericAsset[SqliteDB]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.name, "hms:layers": self.file.layers}
+        return {HMS_TITLE: self.name, "hms:layers": self.file.layers}
 
 
 class GageAsset(GenericAsset[GageFile]):
@@ -192,7 +198,7 @@ class GageAsset(GenericAsset[GageFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.file.name, "hms:version": self.file.attrs["Version"]} | {
+        return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]} | {
             f"hms:{gage.name}".lower(): {key: val for key, val in gage.attrs.items()} for gage in self.file.gages
         }
 
@@ -209,7 +215,7 @@ class GridAsset(GenericAsset[GridFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return (
-            {"hms:title": self.file.name}
+            {HMS_TITLE: self.file.name}
             | {f"hms:{key}".lower(): val for key, val in self.file.attrs.items()}
             | {f"hms:{grid.name}".lower(): {key: val for key, val in grid.attrs.items()} for grid in self.file.grids}
         )
@@ -225,7 +231,7 @@ class LogAsset(GenericAsset):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.name}
+        return {HMS_TITLE: self.name}
 
 
 class OutAsset(GenericAsset):
@@ -238,7 +244,7 @@ class OutAsset(GenericAsset):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.name}
+        return {HMS_TITLE: self.name}
 
 
 class PdataAsset(GenericAsset[PairedDataFile]):
@@ -252,7 +258,7 @@ class PdataAsset(GenericAsset[PairedDataFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.file.name, "hms:version": self.file.attrs["Version"]}
+        return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]}
 
 
 class TerrainAsset(GenericAsset[TerrainFile]):
@@ -266,7 +272,7 @@ class TerrainAsset(GenericAsset[TerrainFile]):
     @GenericAsset.extra_fields.getter
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
-        return {"hms:title": self.file.name, "hms:version": self.file.attrs["Version"]} | {
+        return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]} | {
             f"hms:{layer['name']}".lower(): {key: val for key, val in layer.items()} for layer in self.file.layers
         }
 

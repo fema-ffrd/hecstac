@@ -25,6 +25,7 @@ from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import make_uri_public, save_bytes_s3, save_file_s3
+from hecstac.common.consts import S3_PREFIX, HTTPS_PREFIX, DEFAULT_CRS
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
@@ -334,7 +335,11 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-        if not filepath.startswith("s3://") and not filepath.startswith("https://") and not os.path.exists(filepath):
+        if (
+            not filepath.startswith(S3_PREFIX)
+            and not filepath.startswith(HTTPS_PREFIX)
+            and not os.path.exists(filepath)
+        ):
             raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
 
         asset = GenericAsset(
@@ -347,7 +352,11 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
     def _add_geopackage_asset(self, filepath: str) -> None:
         """Add the geometry geopackage as an asset with a relative href."""
-        if not filepath.startswith("s3://") and not filepath.startswith("https://") and not os.path.exists(filepath):
+        if (
+            not filepath.startswith(S3_PREFIX)
+            and not filepath.startswith(HTTPS_PREFIX)
+            and not os.path.exists(filepath)
+        ):
             raise FileNotFoundError(f"Geopackage file not found: {filepath}")
 
         asset = GenericAsset(
@@ -383,7 +392,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         export_thumbnail(map_layers, title, self.crs, filepath)
 
         # Add asset and return
-        if make_public and filepath.startswith("s3://"):
+        if make_public and filepath.startswith(S3_PREFIX):
             filepath = make_uri_public(filepath)
         return self._add_thumbnail_asset(filepath)
 
@@ -465,12 +474,12 @@ class GeometryAsset(GenericAsset[GeometryFile]):
 
             # Check if dst is on S3.  VSIS3 doesn't seem to allow sqlite writes via geopandas at the moment.
             # Need to make file locally then upload
-            if filepath.lower().startswith("s3://"):
+            if filepath.lower().startswith(S3_PREFIX):
                 save_file_s3(f.name, filepath)
             else:
                 shutil.copy(f.name, filepath)
 
-        if make_public and filepath.startswith("s3://"):
+        if make_public and filepath.startswith(S3_PREFIX):
             filepath = make_uri_public(filepath)
         return self._add_geopackage_asset(filepath)
 
@@ -641,7 +650,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
-    def reference_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+    def reference_lines_spatial(self, output_crs: str = DEFAULT_CRS) -> gpd.GeoDataFrame:
         """Return reference line names and geometry."""
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             refln_gdf = self.file.reference_lines[["refln_name", "mesh_name", "geometry"]]
@@ -651,7 +660,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         else:
             return None
 
-    def reference_points_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+    def reference_points_spatial(self, output_crs: str = DEFAULT_CRS) -> gpd.GeoDataFrame:
         """Return reference point names and geometry."""
         if self.file.reference_points is not None and not self.file.reference_points.empty:
             refpt_gdf = self.file.reference_points[["refpt_name", "mesh_name", "geometry"]]
@@ -661,7 +670,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         else:
             return None
 
-    def bc_lines_spatial(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+    def bc_lines_spatial(self, output_crs: str = DEFAULT_CRS) -> gpd.GeoDataFrame:
         """Return boundary condition line names and geometry."""
         if self.file.bc_lines is not None and not self.file.bc_lines.empty:
             bc_line_gdf = self.file.bc_lines[["name", "mesh_name", "geometry"]]
@@ -671,7 +680,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         else:
             return None
 
-    def model_perimeter(self, output_crs: str = "EPSG:4326") -> gpd.GeoDataFrame:
+    def model_perimeter(self, output_crs: str = DEFAULT_CRS) -> gpd.GeoDataFrame:
         """Return model perimeter from mesh areas."""
         mesh_areas = self.file.mesh_areas()
         if mesh_areas:
@@ -782,7 +791,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
-        if not (filepath.startswith("s3://") or filepath.startswith("https://")) and not os.path.exists(filepath):
+        if not (filepath.startswith(S3_PREFIX) or filepath.startswith(HTTPS_PREFIX)) and not os.path.exists(filepath):
             raise FileNotFoundError(f"Thumbnail file not found: {filepath}")
 
         asset = GenericAsset(
@@ -828,7 +837,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         export_thumbnail(map_layers, title, self.crs, filepath)
 
         # Add asset and return
-        if make_public and filepath.startswith("s3://"):
+        if make_public and filepath.startswith(S3_PREFIX):
             filepath = make_uri_public(filepath)
         return self._add_thumbnail_asset(filepath)
 

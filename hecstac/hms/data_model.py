@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, OrderedDict
 from dataclasses import dataclass
+from typing import Optional
 
 from shapely.geometry import LineString, Point, Polygon
 
@@ -136,7 +137,9 @@ class Reach(Element):
     """Represents a Reach element."""
 
     geom: LineString = None
-    slope: float = None  # assumed units of the coordinate system is the same as what is used for the project.. need to confirm this assumption
+    slope: float = Optional[
+        float
+    ]  # assumed units of the coordinate system is the same as what is used for the project.. need to confirm this assumption
 
 
 @dataclass

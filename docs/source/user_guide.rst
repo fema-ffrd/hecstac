@@ -36,8 +36,9 @@ The following snippets provide examples for creating stac items from HEC model d
       initialize_logger()
       hms_project_file = "/<path-to-file>/model.hms"
       item_id = "hydrologic-model-1"
+      asset_dir = "/<path-to-assets>/assets" # Location to store created assets
 
-      hms_item = HMSModelItem(hms_project_file, item_id)
+      hms_item = HMSModelItem.from_prj(hms_project_file, item_id, asset_dir=asset_dir)
       hms_item.save_object(hms_item.pm.item_path(item_id))
 
 .. code-block:: python
@@ -49,10 +50,16 @@ The following snippets provide examples for creating stac items from HEC model d
 
    if __name__ == "__main__":
       initialize_logger()
-      ras_project_file = "/<path-to-file>/model.prj"
-      item_id = "hydraulic-model-1"
-
-      ras_item = RASModelItem(ras_project_file, item_id)
+      ras_project_file = "/<path-to-file>/ras-model.prj"
+      crs="EPSG:4326"
+      assets_list = [
+         "/<path-to-assets>/ras-model.p01.hdf",
+         "/<path-to-assets>/ras-model.b01",
+         "/<path-to-assets>/rasoutput.log",
+      ]
+      ras_item = RASModelItem.from_prj(ras_project_file, crs=crs, assets=assets_list)
+      # Note: if no assets are passed, .from_prj() will add any files matching the format ras-model.*
+      # ras_item = RASModelItem.from_prj(ras_project_file, crs=crs)
       ras_item.save_object(ras_item.pm.item_path(item_id))
 
 
@@ -99,15 +106,12 @@ The following snippet provides an example of how to create stac items for an eve
       dest_href = f"/<local-file-dr>/{ffrd_event_item_id}.json"
 
       ffrd_event_item = FFRDEventItem(
+         ras_simulation_files=ras_simulation_files,
+         source_model_paths=[ras_source_model_item],
+         event_id=event_id,
          realization=realization,
          block_group=block_group,
-         event_id=event_id,
-         source_model_items=[
-               hms_source_model_item,
-               ras_source_model_item
-         ],
          hms_simulation_files=hms_simulation_files,
-         ras_simulation_files=ras_simulation_files,
       )
 
       ffrd_event_item.save_object(dest_href=dest_href)

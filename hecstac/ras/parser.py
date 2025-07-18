@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property, lru_cache
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 import geopandas as gpd
 import numpy as np
@@ -76,9 +76,9 @@ class CachedFile:
 class River:
     """HEC-RAS River."""
 
-    def __init__(self, river: str, reaches: list[str] = []):
+    def __init__(self, river: str, reaches: list[str] = None):
         self.river = river
-        self.reaches = reaches
+        self.reaches = reaches or []
 
 
 class XS:
@@ -150,7 +150,6 @@ class XS:
             return int(search_contents(self.ras_data, "XS GIS Cut Line", expect_one=True))
         except ValueError:
             return 0
-            # raise NotGeoreferencedError(f"No coordinates found for cross section: {self.river_reach_rs} ")
 
     @cached_property
     def min_elevation(self) -> float:
@@ -567,16 +566,6 @@ class XS:
             )
 
     @cached_property
-    def centerline_intersection_point(self):
-        """A point located where the cross section and reach centerline intersect."""
-        if self.cross_section_intersects_reach:
-            intersection = self.reach_geom.intersection(self.geom)
-            if intersection.geom_type == "Point":
-                return intersection
-            if intersection.geom_type == "MultiPoint":
-                return intersection.geoms[0]
-
-    @cached_property
     def gdf_data_dict(self):
         """Cross section geodataframe."""
         return {
@@ -660,7 +649,7 @@ class XS:
         return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
 
     @cached_property
-    def subdivisions(self) -> tuple[list[float], list[float]]:
+    def subdivisions(self) -> Optional[tuple[list[float], list[float]]]:
         """Get the stations corresponding to subdivision breaks, along with their roughness."""
         try:
             header = [l for l in self.ras_data if l.startswith("#Mann")][0]
@@ -691,9 +680,7 @@ class XS:
             p1 = section_pts[i]
             p2 = section_pts[i + 1]
 
-            if p1[1] > wse and p2[1] > wse:  # No intesection
-                continue
-            elif p1[1] < wse and p2[1] < wse:  # Both below wse
+            if (p1[1] > wse and p2[1] > wse) or (p1[1] < wse and p2[1] < wse):
                 continue
 
             # Define line
@@ -880,7 +867,7 @@ class Structure:
         """The distance from the upstream cross section to the start of the lateral structure."""
         try:
             return float(search_contents(self.ras_data, "Lateral Weir Distance", expect_one=True))
-        except ValueError as e:
+        except ValueError:
             raise InvalidStructureDataError(
                 f"The weir distance for the lateral structure is not populated for: {self.river},{self.reach},{self.river_station}"
             )
@@ -891,7 +878,7 @@ class Structure:
         if self.type == StructureType.LATERAL_STRUCTURE:
             try:
                 return float(list(zip(*self.station_elevation_points))[0][-1])
-            except IndexError as e:
+            except IndexError:
                 raise InvalidStructureDataError(
                     f"No station elevation data for: {self.river}, {self.reach}, {self.river_station}"
                 )
@@ -906,7 +893,7 @@ class Structure:
                 self.ras_data,
             )
             return data_pairs_from_text_block(lines, 16)
-        except ValueError as e:
+        except ValueError:
             return None
 
     @cached_property
@@ -998,12 +985,12 @@ class Reach:
         cross_sections = OrderedDict()
         bridge_xs = []
         for header in self.reach_nodes:
-            type, _, _, _, _ = header.split(",")[:5]
+            xs_type, _, _, _, _ = header.split(",")[:5]
 
             # Identify bridge cross-sections
-            if int(type) in [2, 3, 4]:
+            if int(xs_type) in [2, 3, 4]:
                 bridge_xs = bridge_xs[:-2] + [4, 3]  # Update after discovery
-            if int(type) != 1:
+            if int(xs_type) != 1:
                 continue
             if len(bridge_xs) == 0:
                 bridge_xs = [0]  # Initialize list
@@ -1031,8 +1018,8 @@ class Reach:
         """Structures."""
         structures = {}
         for header in self.reach_nodes:
-            type, _, _, _, _ = header.split(",")[:5]
-            if int(type) == 1:
+            xs_type, _, _, _, _ = header.split(",")[:5]
+            if int(xs_type) == 1:
                 xs_lines = text_block_from_start_end_str(
                     f"Type RM Length L Ch R ={header}",
                     ["Type RM Length L Ch R", "River Reach"],
@@ -1040,7 +1027,7 @@ class Reach:
                 )
                 cross_section = XS(xs_lines, self.river_reach, self.river, self.reach)
                 continue
-            elif int(type) in [2, 3, 4, 5, 6]:  # culvert or bridge or multiple openeing
+            elif int(xs_type) in [2, 3, 4, 5, 6]:  # culvert or bridge or multiple openeing
                 structure_lines = text_block_from_start_end_str(
                     f"Type RM Length L Ch R ={header}",
                     ["Type RM Length L Ch R", "River Reach"],
@@ -1048,7 +1035,7 @@ class Reach:
                 )
             else:
                 raise TypeError(
-                    f"Unsupported structure type: {int(type)}. Supported structure types are 2, 3, 4, 5, and 6 corresponding to culvert, \
+                    f"Unsupported structure type: {int(xs_type)}. Supported structure types are 2, 3, 4, 5, and 6 corresponding to culvert, \
                         bridge, multiple openeing, inline structure, lateral structure, respectively"
                 )
 
@@ -1119,7 +1106,7 @@ class Junction:
 
     def split_lines(self, lines: list[str], token: str, idx: int) -> list[str]:
         """Split lines."""
-        return list(map(lambda line: line.split(token)[idx].rstrip(), lines))
+        return [line.split(token)[idx].rstrip() for line in lines]
 
     @property
     def x(self) -> float:
@@ -1491,7 +1478,10 @@ class GeometryFile(CachedFile):
     @cached_property
     def reach_gdf(self):
         """A GeodataFrame of the reaches contained in the HEC-RAS geometry file."""
-        return gpd.GeoDataFrame(pd.concat([reach.gdf for reach in self.reaches.values()], ignore_index=True))
+        if self.reaches.values():
+            return gpd.GeoDataFrame(pd.concat([reach.gdf for reach in self.reaches.values()], ignore_index=True))
+        else:
+            self.logger.info(f"Reaches could not be extracted for {self.fpath}.")
 
     @cached_property
     def junction_gdf(self):
@@ -1507,8 +1497,7 @@ class GeometryFile(CachedFile):
     @cached_property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all cross sections in the geometry text file."""
-        xs_gdf = pd.DataFrame.from_dict([xs.gdf_data_dict for xs in self.cross_sections.values()])
-
+        xs_gdf = pd.DataFrame([xs.gdf_data_dict for xs in self.cross_sections.values()])
         subsets = []
         for _, reach in self.reach_gdf.iterrows():
             subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
@@ -1711,7 +1700,7 @@ class GeometryFile(CachedFile):
                                 "has_lateral_structure",
                             ] = True
 
-                except InvalidStructureDataError as e:
+                except InvalidStructureDataError:
                     pass
 
         return xs_gdf
@@ -1804,11 +1793,11 @@ class SteadyFlowFile(CachedFile):
 class FlowChangeLocation:
     """HEC-RAS Flow Change Locations."""
 
-    river: str = None
-    reach: str = None
-    rs: float = None
-    flows: list[float] = None
-    profile_names: list[str] = None
+    river: Optional[str] = None
+    reach: Optional[str] = None
+    rs: Optional[str] = None
+    flows: Optional[list[float]] = None
+    profile_names: Optional[list[str]] = None
 
 
 class UnsteadyFlowFile(CachedFile):
@@ -1863,11 +1852,6 @@ class QuasiUnsteadyFlowFile(CachedFile):
 
     # TODO: implement this class
     pass
-    # @property
-    # def flow_title(self) -> str:
-    #     tree = ET.parse(self.href)
-    #     file_info = tree.find("FileInfo")
-    #     return file_info.attrib.get("Title")
 
 
 class RASHDFFile(CachedFile):
@@ -1894,11 +1878,6 @@ class RASHDFFile(CachedFile):
         self._geom_attrs: dict | None = None
         self._structures_attrs: dict | None = None
         self._2d_flow_attrs: dict | None = None
-
-    # def close(self):
-    #     """Close the HDF object if needed."""
-    #     if hasattr(self, "hdf_object") and self.hdf_object is not None:
-    #         self.hdf_object.close()
 
     @cached_property
     def file_version(self) -> str | None:

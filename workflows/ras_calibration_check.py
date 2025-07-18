@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from openpyxl.utils.exceptions import IllegalCharacterError
 
 from hecstac.common.logger import get_logger, initialize_logger
+from hecstac.common.utils import load_config
 from hecstac.common.s3_utils import init_s3_resources
 from hecstac.ras.ffrd_calibration_check import (
     RASModelCalibrationChecker,
@@ -40,33 +41,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Create STAC Item(s) and Run QC for HEC-RAS model .prj file(s) on S3.")
     parser.add_argument("--config", required=True, help="JSON string or path to JSON config file.")
     return parser.parse_args()
-
-
-def load_config(config_input: str):
-    """
-    Load the config from a string or file path.
-
-    Args:
-        config_input (str): JSON string or path to JSON file.
-
-    Returns
-    -------
-        List[dict]: List of config dictionaries.
-    """
-    # add option for reading local file
-    if os.path.isfile(config_input):
-        with open(config_input, "r") as f:
-            config_data = json.load(f)
-    else:
-        config_data = json.loads(config_input)
-
-    # always pass config as a list
-    if isinstance(config_data, dict):
-        return [config_data]
-    elif isinstance(config_data, list):
-        return config_data
-    else:
-        raise ValueError(f"Config must be a JSON object or list of objects not {type(config_data)}: {config_data}")
 
 
 def main(config: dict):
