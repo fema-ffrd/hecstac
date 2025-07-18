@@ -50,15 +50,16 @@ The following snippets provide examples for creating stac items from HEC model d
 
    if __name__ == "__main__":
       initialize_logger()
-      ras_project_file = "/<path-to-file>/model.prj"
-      crs=None
+      ras_project_file = "/<path-to-file>/ras-model.prj"
+      crs="EPSG:4326"
       assets_list = [
          "/<path-to-assets>/ras-model.p01.hdf",
          "/<path-to-assets>/ras-model.b01",
          "/<path-to-assets>/rasoutput.log",
       ]
-
       ras_item = RASModelItem.from_prj(ras_project_file, crs=crs, assets=assets_list)
+      # Note: if no assets are passed, .from_prj() will add any files matching the format ras-model.*
+      # ras_item = RASModelItem.from_prj(ras_project_file, crs=crs)
       ras_item.save_object(ras_item.pm.item_path(item_id))
 
 
