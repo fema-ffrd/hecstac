@@ -36,9 +36,9 @@ from hecstac.ras.parser import (
     PlanHDFFile,
     ProjectFile,
     QuasiUnsteadyFlowFile,
+    RASHDFFile,
     SteadyFlowFile,
     UnsteadyFlowFile,
-    UnsteadyHDFFile,
 )
 from hecstac.ras.utils import export_thumbnail, is_ras_prj
 
@@ -546,7 +546,7 @@ class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
         return self._extra_fields
 
 
-class UnsteadyFlowHdfAsset(GenericAsset[UnsteadyHDFFile]):
+class UnsteadyFlowHdfAsset(GenericAsset[RASHDFFile]):
     """HEC-RAS Unsteady Flow HDF file asset."""
 
     regex_parse_str = r".+\.u\d{2}\.hdf$"

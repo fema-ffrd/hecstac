@@ -14,7 +14,7 @@ from typing import Iterator, Optional
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from rashdf import RasGeomHdf, RasPlanHdf
+from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
 from shapely import (
     GeometryCollection,
     LineString,
@@ -1869,7 +1869,10 @@ class QuasiUnsteadyFlowFile(CachedFile):
 class RASHDFFile(CachedFile):
     """Base class for parsing HDF assets (Plan and Geometry HDF files)."""
 
-    def __init__(self, fpath, hdf_constructor):
+    _hdf_constructor = RasHdf
+    hdf_object: RasHdf
+
+    def __init__(self, fpath):
         # Prevent reinitialization if the instance is already cached
         if hasattr(self, "_initialized") and self._initialized:
             return
@@ -1878,7 +1881,7 @@ class RASHDFFile(CachedFile):
         self.fpath = fpath
         self.logger.info(f"Reading: {self.fpath}")
 
-        self.hdf_object = hdf_constructor.open_uri(
+        self.hdf_object = self._hdf_constructor.open_uri(
             fpath,
             fsspec_kwargs={
                 "default_cache_type": "blockcache",
@@ -1904,6 +1907,10 @@ class RASHDFFile(CachedFile):
         if self._root_attrs == None:
             self._root_attrs = self.hdf_object.get_root_attrs()
         return self._root_attrs.get("Units System")
+
+
+class PlanOrGeomHDFFile(RASHDFFile):
+    """Mostly geometry-accessing functions for data present in both plan and geom files."""
 
     @cached_property
     def geometry_time(self) -> datetime.datetime | None:
@@ -2040,6 +2047,7 @@ class RASHDFFile(CachedFile):
             The coordinate reference system (CRS) to set if the mesh areas do not have one. Defaults to None
         return_gdf : bool, optional
             If True, returns a GeoDataFrame of the mesh areas. If False, returns a unified Polygon or Multipolygon geometry. Defaults to False.
+
         """
         mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
@@ -2085,19 +2093,14 @@ class RASHDFFile(CachedFile):
         return bc_lines
 
 
-class UnsteadyHDFFile(RASHDFFile):
+class PlanHDFFile(PlanOrGeomHDFFile):
     """Class to parse data from Plan HDF files."""
 
-    def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, RASHDFFile, **kwargs)
-        self.hdf_object = RASHDFFile(fpath)
-
-
-class PlanHDFFile(RASHDFFile):
-    """Class to parse data from Plan HDF files."""
+    _hdf_constructor = RasPlanHdf
+    hdf_object: RasPlanHdf
 
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, RasPlanHdf, **kwargs)
+        super().__init__(fpath, **kwargs)
 
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
@@ -2378,11 +2381,14 @@ class PlanHDFFile(RASHDFFile):
         return self._meteorology_attrs.get("Units")
 
 
-class GeometryHDFFile(RASHDFFile):
+class GeometryHDFFile(PlanOrGeomHDFFile):
     """Class to parse data from Geometry HDF files."""
 
+    _hdf_constructor = RasGeomHdf
+    hdf_object: RasGeomHdf
+
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, RasGeomHdf, **kwargs)
+        super().__init__(fpath, **kwargs)
 
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
