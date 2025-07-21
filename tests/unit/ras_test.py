@@ -40,8 +40,8 @@ def test_stac_creation(prj_path: str, crs: str, assets: list):
 
     # To file check
     out_dir = Path(OUTPUT_DIR) / Path(prj_path).parent.name
-    out_dir.parent.mkdir(exist_ok=True, parents=True)
-    out_path = str(out_dir / "stac.json")
+    out_dir.mkdir(exist_ok=True, parents=True)
+    out_path = str(out_dir / f"{Path(prj_path).parent.name}.stac.json")
     with open(out_path, "w") as f:
         json.dump(dict_1, f, indent=4)
     with open(out_path) as f:
