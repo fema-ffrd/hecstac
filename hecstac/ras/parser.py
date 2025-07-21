@@ -1796,8 +1796,8 @@ class SteadyFlowFile(CachedFile):
                     if len(flows) == self.n_profiles:
                         flow_change_locations.append(
                             {
-                                "river": river,
-                                "reach": reach.rstrip(" "),
+                                "river": river.strip(" "),
+                                "reach": reach.strip(" "),
                                 "rs": float(rs),
                                 "flows": flows,
                                 "profile_names": self.profile_names,
