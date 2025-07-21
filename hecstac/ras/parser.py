@@ -1069,12 +1069,20 @@ class Reach:
     @cached_property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Cross section geodataframe."""
-        return pd.concat([xs.gdf for xs in self.cross_sections.values()])
+        gdfs = [xs.gdf for xs in self.cross_sections.values()]
+        if len(gdfs) > 0:
+            return pd.concat(gdfs)
+        else:
+            return gpd.GeoDataFrame()
 
     @cached_property
     def structures_gdf(self) -> gpd.GeoDataFrame:
         """Structures geodataframe."""
-        return pd.concat([structure.gdf for structure in self.structures.values()])
+        gdfs = [structure.gdf for structure in self.structures.values()]
+        if len(gdfs) > 0:
+            return pd.concat(gdfs)
+        else:
+            return gpd.GeoDataFrame()
 
     def compute_multi_xs_variables(self, cross_sections: OrderedDict) -> dict:
         """Compute variables that depend on multiple cross sections.
@@ -1498,6 +1506,8 @@ class GeometryFile(CachedFile):
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all cross sections in the geometry text file."""
         xs_gdf = pd.DataFrame([xs.gdf_data_dict for xs in self.cross_sections.values()])
+        if not len(xs_gdf) > 0:
+            return xs_gdf
         subsets = []
         for _, reach in self.reach_gdf.iterrows():
             subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
@@ -1534,9 +1544,11 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
-        assert not all([i.is_empty for i in xs_df.geometry]), (
-            "No valid cross-sections found.  Possibly non-georeferenced model"
-        )
+        if not len(xs_df) > 0:
+            return None
+        assert not all(
+            [i.is_empty for i in xs_df.geometry]
+        ), "No valid cross-sections found.  Possibly non-georeferenced model"
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
             xs_subset = xs_df[xs_df["river_reach"] == river_reach]

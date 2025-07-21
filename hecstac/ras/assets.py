@@ -270,6 +270,8 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
             return NULL_GEOMETRY
+        elif self.geometry is None:
+            return NULL_GEOMETRY
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
 
