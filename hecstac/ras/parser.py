@@ -1,13 +1,12 @@
 """Contains classes and methods to parse HEC-RAS files."""
 
 import datetime
-import logging
 import math
 import os
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from functools import cached_property, lru_cache
+from functools import cached_property
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -107,8 +106,7 @@ class XS:
         self.thalweg_drop = None
 
     def split_xs_header(self, position: int):
-        """
-        Split cross section header.
+        """Split cross section header.
 
         Example: Type RM Length L Ch R = 1 ,83554.  ,237.02,192.39,113.07.
         """
@@ -409,8 +407,7 @@ class XS:
 
     @cached_property
     def channel_obstruction(self):
-        """
-        A boolean indicating if the channel is being blocked.
+        """A boolean indicating if the channel is being blocked.
 
         A boolean indicating if ineffective flow area, blocked obstructions, or levees are contained
         in the channel (between bank stations).
@@ -520,8 +517,7 @@ class XS:
 
     @cached_property
     def mannings_code(self):
-        """
-        A code indicating what type of manning's values are used.
+        """A code indicating what type of manning's values are used.
 
         0, -1 correspond to 3 value manning's; horizontally varying manning's values, respectively.
         """
@@ -544,8 +540,7 @@ class XS:
             return self.geom.project(self.centerline_intersection_point)
 
     def set_bridge_xs(self, br: int):
-        """
-        Set the bridge cross section attribute.
+        """Set the bridge cross section attribute.
 
         A value of 0 is added for non-bridge cross sections and 4, 3, 2, 1 are
         set for each of the bridge cross sections from downstream to upstream order.
@@ -785,8 +780,7 @@ class Structure:
         self.us_xs = us_xs
 
     def split_structure_header(self, position: int) -> str:
-        """
-        Split Structure header.
+        """Split Structure header.
 
         Example: Type RM Length L Ch R = 3 ,83554.  ,237.02,192.39,113.07.
         """
@@ -1333,8 +1327,7 @@ class PlanFile(CachedFile):
 
     @cached_property
     def breach_locations(self) -> dict:
-        """
-        Return breach locations.
+        """Return breach locations.
 
         Example file line:
         Breach Loc=                ,                ,        ,True,HH_DamEmbankment
@@ -1634,8 +1627,7 @@ class GeometryFile(CachedFile):
         ].iloc[0]
 
     def determine_lateral_structure_xs(self, xs_gdf):
-        """
-        Determine if the cross sections are connected to lateral structure.
+        """Determine if the cross sections are connected to lateral structure.
 
         Determine if the cross sections are connected to lateral structures,
         if they are update 'has_lateral_structures' to True.
@@ -1828,8 +1820,7 @@ class UnsteadyFlowFile(CachedFile):
 
     @cached_property
     def boundary_locations(self) -> list:
-        """
-        Return boundary locations.
+        """Return boundary locations.
 
         Example file line:
         Boundary Location=                ,                ,        ,        ,                ,Perimeter 1     ,                ,PugetSound_Ocean_Boundary       ,

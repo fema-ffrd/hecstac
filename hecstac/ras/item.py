@@ -5,11 +5,10 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-import os
 import traceback
 from functools import cached_property
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import pystac
 import pystac.errors
@@ -35,7 +34,6 @@ from hecstac.ras.assets import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
-    UnsteadyFlowHdfAsset,
 )
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 from hecstac.ras.parser import ProjectFile
@@ -85,6 +83,7 @@ class RASModelItem(Item):
         -------
         stac : RASModelItem
             An instance of the class representing the STAC item.
+
         """
         if not assets:
             assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
@@ -311,6 +310,7 @@ class RASModelItem(Item):
             Thumbnail title prefix, by default "Model_Thumbnail".
         make_public : bool, optional
             Whether to use public-style url for created assets.
+
         """
         for geom in self.geometry_assets:
             if (not geom.title.startswith(self.id)) and (not geom.title.lower().startswith("backup")):
@@ -362,6 +362,7 @@ class RASModelItem(Item):
             A list of geometry file names to make the gpkg for.
         make_public : bool, optional
             Whether to use public-style url for created assets.
+
         """
         for geom in self.geometry_assets:
             if geometries is not None and geom.name not in geometries:
@@ -495,11 +496,11 @@ class RASModelItem(Item):
             logger.warning(f"No data found for {title.lower()}, unable to create asset.")
 
     def add_geospatial_assets(self, output_prefix: str):
-        """
-        Extract geospatial data from geometry hdf asset and adds them as Parquet assets.
+        """Extract geospatial data from geometry hdf asset and adds them as Parquet assets.
 
         Args:
             output_prefix (str): Path prefix where the Parquet files will be saved.
+
         """
         for i in self.geometry_assets:
             if isinstance(i, GeometryHdfAsset):
