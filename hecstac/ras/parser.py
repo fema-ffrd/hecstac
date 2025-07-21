@@ -21,6 +21,7 @@ from shapely import (
     MultiPolygon,
     Point,
     Polygon,
+    buffer,
     make_valid,
     union_all,
 )
@@ -1581,7 +1582,12 @@ class GeometryFile(CachedFile):
                 all_valid.extend(polys)
             else:
                 all_valid.append(valid)
-        return union_all(all_valid)
+        unioned = union_all(all_valid)
+        unioned = buffer(unioned, 0)
+        if unioned.interiors:
+            return Polygon(list(unioned.exterior.coords))
+        else:
+            return unioned
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
