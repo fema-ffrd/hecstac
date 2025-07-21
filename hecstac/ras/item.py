@@ -415,7 +415,10 @@ class RASModelItem(Item):
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (GeometryAsset, GeometryHdfAsset)):
-                if i.name.startswith(self._primary_plan.file.geometry_file):
+                if self._primary_plan is not None:
+                    if i.name.startswith(self._primary_plan.file.geometry_file):
+                        return i
+                else:
                     return i
         return None
 
