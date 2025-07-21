@@ -38,12 +38,7 @@ def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str
 
     # Add OpenStreetMap basemap
     try:
-        ctx.add_basemap(
-            ax,
-            crs=crs,
-            source=ctx.providers.OpenStreetMap.Mapnik,
-            alpha=0.4,
-        )
+        ctx.add_basemap(ax, crs=crs, source=ctx.providers.OpenStreetMap.Mapnik)
     except Exception as e:
         logger.warning(f"Warning: Failed to add basemap for {filepath}: {e}")
 

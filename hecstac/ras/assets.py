@@ -22,10 +22,10 @@ from pystac import MediaType
 from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
+from hecstac.common.consts import DEFAULT_CRS, HTTPS_PREFIX, S3_PREFIX
 from hecstac.common.geometry import reproject_to_wgs84
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import make_uri_public, save_bytes_s3, save_file_s3
-from hecstac.common.consts import S3_PREFIX, HTTPS_PREFIX, DEFAULT_CRS
 from hecstac.ras.consts import NULL_GEOMETRY
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.parser import (
@@ -43,6 +43,8 @@ from hecstac.ras.parser import (
 from hecstac.ras.utils import export_thumbnail, is_ras_prj
 
 logger = get_logger(__name__)
+
+THUMBNAIL_CRS = "EPSG:4326"
 
 CURRENT_PLAN = "HEC-RAS:current_plan"
 PLAN_SHORT_ID = "HEC-RAS:plan_short_id"
@@ -274,7 +276,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     def _plot_river(self, ax: Axes):
         """Add the river centerline to a pyplot."""
         c = "#050dd5"
-        self.file.reach_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="River")
+        self.file.reach_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="River")
         legend_handle = [
             Line2D(
                 [0],
@@ -289,7 +291,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     def _plot_cross_sections(self, ax: Axes):
         """Add cross-sections to a pyplot."""
         c = "#5eeb34"
-        self.file.xs_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="XS")
+        self.file.xs_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="XS")
         legend_handle = [
             Line2D(
                 [0],
@@ -304,7 +306,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     def _plot_junctions(self, ax: Axes):
         """Add junctions to a pyplot."""
         c = "#eb344c"
-        self.file.junction_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="Junction")
+        self.file.junction_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Junction")
         legend_handle = [
             Line2D(
                 [0],
@@ -321,7 +323,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     def _plot_structures(self, ax: Axes):
         """Add structures to a pyplot."""
         c = "k"
-        self.file.structures_gdf.set_crs(self.crs).plot(ax=ax, color=c, label="Structure")
+        self.file.structures_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Structure")
         legend_handle = [
             Line2D(
                 [0],
@@ -389,7 +391,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         filepath = os.path.join(thumbnail_dest, filename)
 
         # Export
-        export_thumbnail(map_layers, title, self.crs, filepath)
+        export_thumbnail(map_layers, title, THUMBNAIL_CRS, filepath)
 
         # Add asset and return
         if make_public and filepath.startswith(S3_PREFIX):
@@ -721,7 +723,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _plot_mesh_areas(self, ax: Axes) -> list[Line2D]:
         """Plot mesh areas on the given axes."""
-        self.file.mesh_cells.set_crs(self.crs).plot(
+        self.file.mesh_cells.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(
             ax=ax,
             edgecolor="silver",
             facecolor="none",
@@ -743,7 +745,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _plot_breaklines(self, ax: Axes) -> list[Line2D]:
         """Plot breaklines on the given axes."""
-        self.file.breaklines.set_crs(self.crs).plot(
+        self.file.breaklines.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(
             ax=ax, edgecolor="black", linestyle="-", alpha=0.3, label="Breaklines"
         )
         legend_handle = [
@@ -761,7 +763,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     def _plot_bc_lines(self, ax: Axes) -> list[Line2D]:
         """Plot boundary condition lines on the given axes."""
-        bc_lines = self.file.bc_lines.set_crs(self.crs)
+        bc_lines = self.file.bc_lines.set_crs(self.crs).to_crs(THUMBNAIL_CRS)
         legend_handles = [
             Line2D([0], [0], color="none", linestyle="None", label="BC Lines"),
         ]

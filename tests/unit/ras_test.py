@@ -90,7 +90,9 @@ def test_thumbnail_creation(prj_path: str, crs: str, assets: list):
     out_dir.mkdir(exist_ok=True, parents=True)
 
     # Create thumbnails
-    item.add_model_thumbnails(layers=["XS", "River", "Structure", "Junction", "mesh_areas"], thumbnail_dir=str(out_dir))
+    item.add_model_thumbnails(
+        layers=["XS", "River", "Structure", "Junction", "mesh_areas"], thumbnail_dest=str(out_dir)
+    )
 
     # Check that they were generated
     for i in [i.href for i in item.assets.values() if i.roles and "thumbnail" in i.roles]:
@@ -109,7 +111,7 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
 
     # Create thumbnails
     try:
-        item.add_model_geopackages(local_dst=str(out_dir))
+        item.add_model_geopackages(dst=str(out_dir))
     except Invalid1DGeometryError:
         return  # Properly handled
 
@@ -120,6 +122,6 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
 
 if __name__ == "__main__":
     for m in ras_models():
-        test_stac_creation(*m)
+        # test_stac_creation(*m)
         test_thumbnail_creation(*m)
-        test_geopackage_creation(*m)
+        # test_geopackage_creation(*m)
