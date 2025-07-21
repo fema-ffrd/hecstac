@@ -19,6 +19,7 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.utils import datetime_to_str
 from shapely import Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
+from typing_extensions import Self
 
 import hecstac
 from hecstac.common.asset_factory import AssetFactory
@@ -64,9 +65,10 @@ class RASModelItem(Item):
         self.simplify_geometry = True
 
     @classmethod
-    def from_prj(cls, ras_project_file: str, crs: str = None, simplify_geometry: bool = True, assets: list = None):
-        """
-        Create a STAC item from a HEC-RAS .prj file.
+    def from_prj(
+        cls, ras_project_file: str, crs: str = None, simplify_geometry: bool = True, assets: list = None
+    ) -> Self:
+        """Create a STAC item from a HEC-RAS .prj file.
 
         Parameters
         ----------
@@ -105,7 +107,7 @@ class RASModelItem(Item):
         return stac
 
     @classmethod
-    def from_dict(cls, stac: dict) -> RASModelItem:
+    def from_dict(cls, stac: dict) -> Self:
         """Load a model from a stac item dictionary."""
         item = super().from_dict(stac)
         item.update_properties()
