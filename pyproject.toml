@@ -9,6 +9,8 @@ description = "Create stac objects and metadata from HEC modeling software."
 readme = "README.md"
 maintainers = [
     { name = "Seth Lawler", email = "slawler@dewberry.com" }
+    { name = "Scott Lawson", email = "klawson@dewberry.com" }
+    { name = "Stevenray Janke", email = "sjanke@Dewberry.com" }
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
