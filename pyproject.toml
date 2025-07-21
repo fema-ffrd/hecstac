@@ -8,8 +8,8 @@ dynamic = ["version"]
 description = "Create stac objects and metadata from HEC modeling software."
 readme = "README.md"
 maintainers = [
-    { name = "Seth Lawler", email = "slawler@dewberry.com" }
-    { name = "Scott Lawson", email = "klawson@dewberry.com" }
+    { name = "Seth Lawler", email = "slawler@dewberry.com" },
+    { name = "Scott Lawson", email = "klawson@dewberry.com" },
     { name = "Stevenray Janke", email = "sjanke@Dewberry.com" }
 ]
 classifiers = [
