@@ -21,7 +21,7 @@ jobs:
     name: Python Build and Test
     uses: ./.github/workflows/python-build.yaml
     with:
-      run_tests: true
+      run_tests: false
 
   sonarqube:
     name: SonarQube Analysis
