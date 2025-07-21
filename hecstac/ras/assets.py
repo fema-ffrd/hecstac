@@ -150,7 +150,8 @@ class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
     regex_parse_str = r".+\.[pP][rR][jJ]$"
-    __roles__ = ["ras-project", MediaType.TEXT]
+    __roles__ = ["ras-project"]
+    __media_type__ = MediaType.TEXT
     __description__ = "The HEC-RAS project file."
     __file_class__ = ProjectFile
 
@@ -170,7 +171,8 @@ class ProjectionAsset(GenericAsset[CachedFile]):
     """.prj projection file."""
 
     regex_parse_str = r".+\.[pP][rR][jJ]$"
-    __roles__ = ["projection", MediaType.TEXT]
+    __roles__ = ["projection"]
+    __media_type__ = MediaType.TEXT
     __description__ = "A coordinate reference system projection file."
     __file_class__ = CachedFile
 
@@ -201,7 +203,8 @@ class PlanAsset(GenericAsset[PlanFile]):
     """HEC-RAS Plan file asset."""
 
     regex_parse_str = r".+\.p\d{2}$"
-    __roles__ = ["ras-plan", MediaType.TEXT]
+    __roles__ = ["ras-plan"]
+    __media_type__ = MediaType.TEXT
     __description__ = "The plan file which contains a list of associated input files and all simulation options."
     __file_class__ = PlanFile
 
@@ -222,7 +225,8 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     """HEC-RAS Geometry file asset."""
 
     regex_parse_str = r".+\.g\d{2}$"
-    __roles__ = ["ras-geometry", MediaType.TEXT]
+    __roles__ = ["ras-geometry"]
+    __media_type__ = MediaType.TEXT
     __description__ = (
         "The geometry file which contains cross-sectional, 2D, hydraulic structures, and other geometric data."
     )
@@ -492,7 +496,8 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     """HEC-RAS Steady Flow file asset."""
 
     regex_parse_str = r".+\.f\d{2}$"
-    __roles__ = ["ras-steady", MediaType.TEXT]
+    __roles__ = ["ras-steady"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Steady Flow file which contains profile information, flow data, and boundary conditions."
     __file_class__ = SteadyFlowFile
 
@@ -510,7 +515,8 @@ class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     # TODO: implement this class
 
     regex_parse_str = r".+\.q\d{2}$"
-    __roles__ = ["ras-quasi-unsteady", MediaType.TEXT]
+    __roles__ = ["ras-quasi-unsteady"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Quasi-Unsteady Flow file."
     __file_class__ = QuasiUnsteadyFlowFile
 
@@ -525,7 +531,8 @@ class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     """HEC-RAS Unsteady Flow file asset."""
 
     regex_parse_str = r".+\.u\d{2}$"
-    __roles__ = ["ras-unsteady", MediaType.TEXT]
+    __roles__ = ["ras-unsteady"]
+    __media_type__ = MediaType.TEXT
     __description__ = "The unsteady file contains hydrographs, initial conditions, and any flow options."
     __file_class__ = UnsteadyFlowFile
 
@@ -544,7 +551,8 @@ class UnsteadyFlowHdfAsset(GenericAsset[UnsteadyHDFFile]):
 
     regex_parse_str = r".+\.u\d{2}\.hdf$"
 
-    __roles__ = ["ras-unsteady", MediaType.HDF]
+    __roles__ = ["ras-unsteady"]
+    __media_type__ = MediaType.HDF
     __description__ = "The HEC-RAS unsteady HDF file."
     __file_class__ = None
 
@@ -558,7 +566,8 @@ class PlanHdfAsset(GenericAsset[PlanHDFFile]):
     """HEC-RAS Plan HDF file asset."""
 
     regex_parse_str = r".+\.p\d{2}\.hdf$"
-    __roles__ = ["ras-plan", MediaType.HDF]
+    __roles__ = ["ras-plan"]
+    __media_type__ = MediaType.HDF
     __description__ = "The HEC-RAS plan HDF file."
     __file_class__ = PlanHDFFile
 
@@ -636,7 +645,8 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     """HEC-RAS Geometry HDF file asset."""
 
     regex_parse_str = r".+\.g\d{2}\.hdf$"
-    __roles__ = ["ras-geometry", MediaType.HDF]
+    __roles__ = ["ras-geometry"]
+    __media_type__ = MediaType.HDF
     __description__ = "The HEC-RAS geometry HDF file."
     __file_class__ = GeometryHDFFile
 
@@ -850,7 +860,8 @@ class RunFileAsset(GenericAsset):
     """Run file asset for steady flow analysis."""
 
     regex_parse_str = r".+\.r\d{2}$"
-    __roles__ = ["ras-run", MediaType.TEXT]
+    __roles__ = ["ras-run"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Run file for steady flow analysis which contains all the necessary input data required for the RAS computational engine."
     __file_class__ = None
 
@@ -859,7 +870,8 @@ class ComputationalLevelOutputAsset(GenericAsset):
     """Computational Level Output asset."""
 
     regex_parse_str = r".+\.hyd\d{2}$"
-    __roles__ = ["ras-computational-level-output", MediaType.TEXT]
+    __roles__ = ["ras-computational-level-output"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Detailed Computational Level output file."
     __file_class__ = None
 
@@ -868,7 +880,8 @@ class GeometricPreprocessorAsset(GenericAsset):
     """Geometric Pre-Processor asset."""
 
     regex_parse_str = r".+\.c\d{2}$"
-    __roles__ = ["ras-geometric-preprocessor", MediaType.TEXT]
+    __roles__ = ["ras-geometric-preprocessor"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more."
     __file_class__ = None  # TODO:  make a generic parent for these.
 
@@ -877,7 +890,8 @@ class BoundaryConditionAsset(GenericAsset):
     """Boundary Condition asset."""
 
     regex_parse_str = r".+\.b\d{2}$"
-    __roles__ = ["ras-boundary-condition", MediaType.TEXT]
+    __roles__ = ["ras-boundary-condition"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Boundary Condition file."
     __file_class__ = None
 
@@ -886,7 +900,8 @@ class UnsteadyFlowLogAsset(GenericAsset):
     """Unsteady Flow Log asset."""
 
     regex_parse_str = r".+\.bco\d{2}$"
-    __roles__ = ["ras-unsteady-log", MediaType.TEXT]
+    __roles__ = ["ras-unsteady-log"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Unsteady Flow Log output file."
     __file_class__ = None
 
@@ -895,7 +910,8 @@ class SedimentDataAsset(GenericAsset):
     """Sediment Data asset."""
 
     regex_parse_str = r".+\.s\d{2}$"
-    __roles__ = ["ras-sediment-data", MediaType.TEXT]
+    __roles__ = ["ras-sediment-data"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Sediment data file containing flow data, boundary conditions, and sediment data."
     __file_class__ = None
 
@@ -904,7 +920,8 @@ class HydraulicDesignAsset(GenericAsset):
     """Hydraulic Design asset."""
 
     regex_parse_str = r".+\.h\d{2}$"
-    __roles__ = ["ras-hydraulic-design", MediaType.TEXT]
+    __roles__ = ["ras-hydraulic-design"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Hydraulic Design data file."
     __file_class__ = None
 
@@ -913,7 +930,8 @@ class WaterQualityAsset(GenericAsset):
     """Water Quality asset."""
 
     regex_parse_str = r".+\.w\d{2}$"
-    __roles__ = ["ras-water-quality", MediaType.TEXT]
+    __roles__ = ["ras-water-quality"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Water Quality file containing temperature boundary conditions and meteorological data."
     __file_class__ = None
 
@@ -922,7 +940,8 @@ class SedimentTransportCapacityAsset(GenericAsset):
     """Sediment Transport Capacity asset."""
 
     regex_parse_str = r".+\.SedCap\d{2}$"
-    __roles__ = ["ras-sediment-transport-capacity", MediaType.TEXT]
+    __roles__ = ["ras-sediment-transport-capacity"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Sediment Transport Capacity data."
     __file_class__ = None
 
@@ -931,7 +950,8 @@ class XSOutputAsset(GenericAsset):
     """Cross Section Output asset."""
 
     regex_parse_str = r".+\.SedXS\d{2}$"
-    __roles__ = ["ras-xs-output", MediaType.TEXT]
+    __roles__ = ["ras-xs-output"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Cross section output file."
     __file_class__ = None
 
@@ -940,7 +960,8 @@ class XSOutputHeaderAsset(GenericAsset):
     """Cross Section Output Header asset."""
 
     regex_parse_str = r".+\.SedHeadXS\d{2}$"
-    __roles__ = ["ras-xs-output-header", MediaType.TEXT]
+    __roles__ = ["ras-xs-output-header"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Header file for the cross section output."
     __file_class__ = None
 
@@ -949,7 +970,8 @@ class WaterQualityRestartAsset(GenericAsset):
     """Water Quality Restart asset."""
 
     regex_parse_str = r".+\.wqrst\d{2}$"
-    __roles__ = ["ras-water-quality-restart", MediaType.TEXT]
+    __roles__ = ["ras-water-quality-restart"]
+    __media_type__ = MediaType.TEXT
     __description__ = "The water quality restart file."
     __file_class__ = None
 
@@ -958,7 +980,8 @@ class SedimentOutputAsset(GenericAsset):
     """Sediment Output asset."""
 
     regex_parse_str = r".+\.sed$"
-    __roles__ = ["ras-sediment-output", MediaType.TEXT]
+    __roles__ = ["ras-sediment-output"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Detailed sediment output file."
     __file_class__ = None
 
@@ -967,7 +990,8 @@ class BinaryLogAsset(GenericAsset):
     """Binary Log asset."""
 
     regex_parse_str = r".+\.blf$"
-    __roles__ = ["ras-binary-log", MediaType.TEXT]
+    __roles__ = ["ras-binary-log"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Binary Log file."
     __file_class__ = None
 
@@ -985,7 +1009,8 @@ class LogAsset(GenericAsset):
     """Log asset."""
 
     regex_parse_str = r".+\.log$"
-    __roles__ = ["ras-log", MediaType.TEXT]
+    __roles__ = ["ras-log"]
+    __media_type__ = MediaType.TEXT
     __description__ = "The log file contains information related to simulation processes."
     __file_class__ = None
 
@@ -994,7 +1019,8 @@ class RestartAsset(GenericAsset):
     """Restart file asset."""
 
     regex_parse_str = r".+\.rst$"
-    __roles__ = ["ras-restart", MediaType.TEXT]
+    __roles__ = ["ras-restart"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Restart file for resuming simulation runs."
     __file_class__ = None
 
@@ -1003,7 +1029,8 @@ class SiamInputAsset(GenericAsset):
     """SIAM Input Data file asset."""
 
     regex_parse_str = r".+\.SiamInput$"
-    __roles__ = ["ras-siam-input", MediaType.TEXT]
+    __roles__ = ["ras-siam-input"]
+    __media_type__ = MediaType.TEXT
     __description__ = "SIAM Input Data file."
     __file_class__ = None
 
@@ -1012,7 +1039,8 @@ class SiamOutputAsset(GenericAsset):
     """SIAM Output Data file asset."""
 
     regex_parse_str = r".+\.SiamOutput$"
-    __roles__ = ["ras-siam-output", MediaType.TEXT]
+    __roles__ = ["ras-siam-output"]
+    __media_type__ = MediaType.TEXT
     __description__ = "SIAM Output Data file."
     __file_class__ = None
 
@@ -1021,7 +1049,8 @@ class WaterQualityLogAsset(GenericAsset):
     """Water Quality Log file asset."""
 
     regex_parse_str = r".+\.bco$"
-    __roles__ = ["ras-water-quality-log", MediaType.TEXT]
+    __roles__ = ["ras-water-quality-log"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Water quality log file."
     __file_class__ = None
 
@@ -1030,7 +1059,8 @@ class ColorScalesAsset(GenericAsset):
     """Color Scales file asset."""
 
     regex_parse_str = r".+\.color-scales$"
-    __roles__ = ["ras-color-scales", MediaType.TEXT]
+    __roles__ = ["ras-color-scales"]
+    __media_type__ = MediaType.TEXT
     __description__ = "File that contains the water quality color scale."
     __file_class__ = None
 
@@ -1039,7 +1069,8 @@ class ComputationalMessageAsset(GenericAsset):
     """Computational Message file asset."""
 
     regex_parse_str = r".+\.comp-msgs.txt$"
-    __roles__ = ["ras-computational-message", MediaType.TEXT]
+    __roles__ = ["ras-computational-message"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Computational Message text file which contains messages from the computation process."
     __file_class__ = None
 
@@ -1048,7 +1079,8 @@ class UnsteadyRunFileAsset(GenericAsset):
     """Run file for Unsteady Flow asset."""
 
     regex_parse_str = r".+\.x\d{2}$"
-    __roles__ = ["ras-run", MediaType.TEXT]
+    __roles__ = ["ras-run"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Run file for Unsteady Flow simulations."
     __file_class__ = None
 
@@ -1057,7 +1089,8 @@ class OutputFileAsset(GenericAsset):
     """Output RAS file asset."""
 
     regex_parse_str = r".+\.o\d{2}$"
-    __roles__ = ["ras-output", MediaType.TEXT]
+    __roles__ = ["ras-output"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Output RAS file which contains all computed results."
     __file_class__ = None
 
@@ -1066,7 +1099,8 @@ class InitialConditionsFileAsset(GenericAsset):
     """Initial Conditions file asset."""
 
     regex_parse_str = r".+\.IC\.O\d{2}$"
-    __roles__ = ["ras-initial-conditions", MediaType.TEXT]
+    __roles__ = ["ras-initial-conditions"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Initial conditions file for unsteady flow plan."
     __file_class__ = None
 
@@ -1075,7 +1109,8 @@ class PlanRestartFileAsset(GenericAsset):
     """Restart file for Unsteady Flow Plan asset."""
 
     regex_parse_str = r".+\.p\d{2}\.rst$"
-    __roles__ = ["ras-restart", MediaType.TEXT]
+    __roles__ = ["ras-restart"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Restart file for unsteady flow plan."
     __file_class__ = None
 
@@ -1084,7 +1119,8 @@ class RasMapperFileAsset(GenericAsset):
     """RAS Mapper file asset."""
 
     regex_parse_str = r".+\.rasmap$"
-    __roles__ = ["ras-ras-mapper", MediaType.TEXT]
+    __roles__ = ["ras-ras-mapper"]
+    __media_type__ = MediaType.TEXT
     __description__ = "RAS Mapper file."
     __file_class__ = None
 
@@ -1093,7 +1129,8 @@ class RasMapperBackupFileAsset(GenericAsset):
     """Backup RAS Mapper file asset."""
 
     regex_parse_str = r".+\.rasmap\.backup$"
-    __roles__ = ["ras-mapper", MediaType.TEXT]
+    __roles__ = ["ras-mapper"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Backup RAS Mapper file."
     __file_class__ = None
 
@@ -1102,7 +1139,8 @@ class RasMapperOriginalFileAsset(GenericAsset):
     """Original RAS Mapper file asset."""
 
     regex_parse_str = r".+\.rasmap\.original$"
-    __roles__ = ["ras-mapper", MediaType.TEXT]
+    __roles__ = ["ras-mapper"]
+    __media_type__ = MediaType.TEXT
     __description__ = "Original RAS Mapper file."
     __file_class__ = None
 
