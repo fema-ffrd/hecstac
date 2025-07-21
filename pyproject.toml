@@ -74,7 +74,7 @@ where = ["."]
 include = ["hecstac*"]
 
 [tool.setuptools.dynamic]
-version = {attr = "hecstac.__version__"}
+version = {attr = "hecstac.version.__version__"}
 
 [tool.sphinx]
 project = "hecstac"
