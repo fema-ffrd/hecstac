@@ -1,10 +1,7 @@
 import json
 import logging
 import os
-import shutil
-from ast import mod
 from pathlib import Path
-from pyexpat import model
 
 import pytest
 
@@ -42,9 +39,9 @@ def test_stac_creation(prj_path: str, crs: str, assets: list):
             raise RuntimeError(f"Serialization failed for {prj_path}. The following fields do not match: {bad_fields}")
 
     # To file check
-    out_dir = Path(prj_path.replace(str(DATA_DIR), str(OUTPUT_DIR)))
+    out_dir = Path(OUTPUT_DIR) / Path(prj_path).parent.name
     out_dir.parent.mkdir(exist_ok=True, parents=True)
-    out_path = str(out_dir).replace(".prj", ".json")
+    out_path = str(out_dir / "stac.json")
     with open(out_path, "w") as f:
         json.dump(dict_1, f, indent=4)
     with open(out_path) as f:
@@ -122,6 +119,6 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
 
 if __name__ == "__main__":
     for m in ras_models():
-        # test_stac_creation(*m)
+        test_stac_creation(*m)
         test_thumbnail_creation(*m)
-        # test_geopackage_creation(*m)
+        test_geopackage_creation(*m)
