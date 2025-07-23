@@ -64,7 +64,12 @@ class RASModelItem(Item):
 
     @classmethod
     def from_prj(
-        cls, ras_project_file: str, crs: str = None, simplify_geometry: bool = True, assets: list = None
+        cls,
+        ras_project_file: str,
+        stac_id: str = None,
+        crs: str = None,
+        simplify_geometry: bool = True,
+        assets: list = None,
     ) -> Self:
         """Create a STAC item from a HEC-RAS .prj file.
 
@@ -72,6 +77,8 @@ class RASModelItem(Item):
         ----------
         ras_project_file : str
             Path to the HEC-RAS project file (.prj).
+        stac_id : str
+            ID for the STAC item. If none, ID is set to the .prj file stem (e.g., Muncie.prj -> Muncie).
         crs : str, optional
             Coordinate reference system (CRS) to apply to the item. If None, the CRS will be extracted from the geometry .hdf file.
         simplify_geometry : bool, optional
@@ -89,8 +96,12 @@ class RASModelItem(Item):
             assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
         else:
             assets = {Path(i).name: Asset(i, Path(i).name) for i in assets}
+
+        if not stac_id:
+            stac_id = Path(ras_project_file).stem
+
         stac = cls(
-            Path(ras_project_file).stem,
+            stac_id,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
