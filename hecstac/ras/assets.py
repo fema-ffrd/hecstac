@@ -273,9 +273,9 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
-            return NULL_GEOMETRY
+            return None
         elif self.geometry is None:
-            return NULL_GEOMETRY
+            return None
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
 
@@ -729,7 +729,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         """Reproject geometry to wgs84."""
         # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
-            return NULL_GEOMETRY
+            return None
         else:
             return reproject_to_wgs84(self.geometry, self.crs)
 
