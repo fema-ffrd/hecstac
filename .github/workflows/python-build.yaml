@@ -56,7 +56,7 @@ jobs:
       if: inputs.run_tests
       uses: conda-incubator/setup-miniconda@v3
       with:
-        miniforge-variant: Mambaforge
+        miniforge-variant: Miniforge3
         activate-environment: anaconda-client-env
         environment-file: tests/environment.yml
         auto-activate-base: false
