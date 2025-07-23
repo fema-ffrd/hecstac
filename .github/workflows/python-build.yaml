@@ -54,5 +54,18 @@ jobs:
 
     - name: Run tests
       if: inputs.run_tests
-      run: |
-        pytest tests/
+      runs-on: "ubuntu-latest"
+      defaults:
+        run:
+          shell: bash -el {0}
+      steps:
+        - uses: actions/checkout@v4
+        - uses: conda-incubator/setup-miniconda@v3
+          with:
+            miniforge-variant: Mambaforge
+            activate-environment: anaconda-client-env
+            environment-file: tests/environment.yml
+            auto-activate-base: false
+        - name: Run pytest
+          run: |
+            pytest tests/
