@@ -58,7 +58,7 @@ jobs:
       with:
         miniforge-variant: Miniforge3
         activate-environment: anaconda-client-env
-        environment-file: tests/environment.yml
+        environment-file: environment.yml
         auto-activate-base: false
 
     - name: Run pytest in Conda env
