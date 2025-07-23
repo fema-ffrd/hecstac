@@ -716,8 +716,8 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     @cached_property
     def has_1d(self) -> bool:
-        """Check if the geometry asset has 2d geometry."""
-        return False  # TODO: implement
+        """Check if the geometry asset has 1d geometry."""
+        return len(self.file.cross_sections) > 0
 
     @cached_property
     def geometry(self) -> Polygon | MultiPolygon:
