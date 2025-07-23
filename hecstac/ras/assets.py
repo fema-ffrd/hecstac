@@ -848,7 +848,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         filepath = os.path.join(thumbnail_dest, filename)
 
         # Export
-        export_thumbnail(map_layers, title, self.crs, filepath)
+        export_thumbnail(map_layers, title, THUMBNAIL_CRS, filepath)
 
         # Add asset and return
         if make_public and filepath.startswith(S3_PREFIX):
