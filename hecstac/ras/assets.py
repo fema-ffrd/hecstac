@@ -1000,7 +1000,8 @@ class DSSAsset(GenericAsset):
     """DSS asset."""
 
     regex_parse_str = r".+\.dss$"
-    __roles__ = ["HEC-DSS", "application/octet-stream"]
+    __roles__ = ["HEC-DSS"]
+    __media_type__ = "x-dss"
     __description__ = "The DSS file contains results and other simulation information."
     __file_class__ = None
 
