@@ -8,7 +8,7 @@ import logging
 import traceback
 from functools import cached_property
 from pathlib import Path
-from typing import Optional
+from typing import List, Literal, Optional
 
 import pystac
 import pystac.errors
@@ -40,6 +40,8 @@ from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files
 
 logger = get_logger(__name__)
+
+ThumbnailLayers = Literal["mesh_areas", "breaklines", "bc_lines", "River", "XS", "Structure", "Junction"]
 
 
 class RASModelItem(Item):
@@ -304,7 +306,7 @@ class RASModelItem(Item):
 
     def add_model_thumbnails(
         self,
-        layers: list,
+        layers: list[ThumbnailLayers],
         thumbnail_dest: str,
         title_prefix: str = "Model_Thumbnail",
         make_public: bool = True,
@@ -314,7 +316,8 @@ class RASModelItem(Item):
         Parameters
         ----------
         layers : list
-            List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines'
+            List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines',
+            'River', 'XS', 'Structure', and 'Junction'
         thumbnail_dest : str, optional
             Directory for created thumbnails.
         title_prefix : str, optional
