@@ -2399,7 +2399,10 @@ class GeometryHDFFile(PlanOrGeomHDFFile):
     @cached_property
     def cross_sections(self) -> int | None:
         """Return geometry cross sections."""
-        return self.hdf_object.cross_sections()
+        try:
+            return self.hdf_object.cross_sections()
+        except KeyError:
+            return gpd.GeoDataFrame()
 
     @cached_property
     def reference_lines(self) -> gpd.GeoDataFrame | None:
