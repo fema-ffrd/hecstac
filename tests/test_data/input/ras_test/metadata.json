@@ -178,6 +178,55 @@
             ],
             "crs": "EPSG:5646",
             "note": "Base case."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.O02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.O03",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.b02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.b03",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.bco02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.bco03",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.c01",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.c02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.c04",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.dss",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.f01",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.g01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.g02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.g02.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.ic.o02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.ic.o03",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.p03",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.p03.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.r02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.r03",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.u01",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.u01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.x02",
+                "s3://ffrd-pilot/public/hecstac_test_data/Muncie_light/Muncie.x03"
+            ],
+            "crs": null,
+            "note": "1D+2D model."
+        }
+        ,
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.prj",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.g01",
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.g01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.p01",
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.p01.hdf",
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.prj",
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.u01",
+                "s3://ffrd-pilot/public/hecstac_test_data/chambers-creek/chambers-creek.u01.hdf"
+            ],
+            "crs": null,
+            "note": "2D model."
         }
     ]
 }
