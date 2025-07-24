@@ -30,7 +30,7 @@ The following snippets provide examples for creating stac items from HEC model d
 
    # HEC-HMS Item
    from hecstac.common.logger import initialize_logger
-   from hecstac.hms.item import HMSModelItem
+   from hecstac import HMSModelItem
 
    if __name__ == "__main__":
       initialize_logger()
@@ -45,7 +45,7 @@ The following snippets provide examples for creating stac items from HEC model d
 
    # HEC-RAS Item
    from hecstac.common.logger import initialize_logger
-   from hecstac.ras.item import RASModelItem
+   from hecstac import RASModelItem
 
 
    if __name__ == "__main__":

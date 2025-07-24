@@ -25,7 +25,7 @@ def test_project_w_no_other_assets():
     directory = DATA_DIR / "metadata.json"
     with open(directory) as f:
         meta = json.load(f)
-    item = RASModelItem.from_prj(meta["prj_path"], crs=meta["crs"], assets=[meta["prj_path"]])
+    item = RASModelItem.from_prj(meta["prj_path"], crs=meta["crs"], assets=meta["assets"])
     item.to_dict()
 
 

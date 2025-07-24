@@ -1,26 +1,26 @@
 """Contains classes and methods to parse HEC-RAS files."""
 
 import datetime
-import logging
 import math
 import os
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from functools import cached_property, lru_cache
+from functools import cached_property
 from pathlib import Path
 from typing import Iterator, Optional
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from rashdf import RasGeomHdf, RasPlanHdf
+from rashdf import RasGeomHdf, RasHdf, RasPlanHdf
 from shapely import (
     GeometryCollection,
     LineString,
     MultiPolygon,
     Point,
     Polygon,
+    buffer,
     make_valid,
     union_all,
 )
@@ -106,8 +106,7 @@ class XS:
         self.thalweg_drop = None
 
     def split_xs_header(self, position: int):
-        """
-        Split cross section header.
+        """Split cross section header.
 
         Example: Type RM Length L Ch R = 1 ,83554.  ,237.02,192.39,113.07.
         """
@@ -408,8 +407,7 @@ class XS:
 
     @cached_property
     def channel_obstruction(self):
-        """
-        A boolean indicating if the channel is being blocked.
+        """A boolean indicating if the channel is being blocked.
 
         A boolean indicating if ineffective flow area, blocked obstructions, or levees are contained
         in the channel (between bank stations).
@@ -519,8 +517,7 @@ class XS:
 
     @cached_property
     def mannings_code(self):
-        """
-        A code indicating what type of manning's values are used.
+        """A code indicating what type of manning's values are used.
 
         0, -1 correspond to 3 value manning's; horizontally varying manning's values, respectively.
         """
@@ -543,8 +540,7 @@ class XS:
             return self.geom.project(self.centerline_intersection_point)
 
     def set_bridge_xs(self, br: int):
-        """
-        Set the bridge cross section attribute.
+        """Set the bridge cross section attribute.
 
         A value of 0 is added for non-bridge cross sections and 4, 3, 2, 1 are
         set for each of the bridge cross sections from downstream to upstream order.
@@ -784,8 +780,7 @@ class Structure:
         self.us_xs = us_xs
 
     def split_structure_header(self, position: int) -> str:
-        """
-        Split Structure header.
+        """Split Structure header.
 
         Example: Type RM Length L Ch R = 3 ,83554.  ,237.02,192.39,113.07.
         """
@@ -1069,12 +1064,20 @@ class Reach:
     @cached_property
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Cross section geodataframe."""
-        return pd.concat([xs.gdf for xs in self.cross_sections.values()])
+        gdfs = [xs.gdf for xs in self.cross_sections.values()]
+        if len(gdfs) > 0:
+            return pd.concat(gdfs)
+        else:
+            return gpd.GeoDataFrame()
 
     @cached_property
     def structures_gdf(self) -> gpd.GeoDataFrame:
         """Structures geodataframe."""
-        return pd.concat([structure.gdf for structure in self.structures.values()])
+        gdfs = [structure.gdf for structure in self.structures.values()]
+        if len(gdfs) > 0:
+            return pd.concat(gdfs)
+        else:
+            return gpd.GeoDataFrame()
 
     def compute_multi_xs_variables(self, cross_sections: OrderedDict) -> dict:
         """Compute variables that depend on multiple cross sections.
@@ -1324,8 +1327,7 @@ class PlanFile(CachedFile):
 
     @cached_property
     def breach_locations(self) -> dict:
-        """
-        Return breach locations.
+        """Return breach locations.
 
         Example file line:
         Breach Loc=                ,                ,        ,True,HH_DamEmbankment
@@ -1498,6 +1500,8 @@ class GeometryFile(CachedFile):
     def xs_gdf(self) -> gpd.GeoDataFrame:
         """Geodataframe of all cross sections in the geometry text file."""
         xs_gdf = pd.DataFrame([xs.gdf_data_dict for xs in self.cross_sections.values()])
+        if len(xs_gdf) <= 0:
+            return xs_gdf
         subsets = []
         for _, reach in self.reach_gdf.iterrows():
             subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
@@ -1534,6 +1538,8 @@ class GeometryFile(CachedFile):
         """Compute and return the concave hull (polygon) for cross sections."""
         polygons = []
         xs_df = self.xs_gdf  # shorthand
+        if len(xs_df) <= 0:
+            return None
         assert not all([i.is_empty for i in xs_df.geometry]), (
             "No valid cross-sections found.  Possibly non-georeferenced model"
         )
@@ -1569,7 +1575,12 @@ class GeometryFile(CachedFile):
                 all_valid.extend(polys)
             else:
                 all_valid.append(valid)
-        return union_all(all_valid)
+        unioned = union_all(all_valid)
+        unioned = buffer(unioned, 0)
+        if unioned.interiors:
+            return Polygon(list(unioned.exterior.coords))
+        else:
+            return unioned
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
@@ -1616,8 +1627,7 @@ class GeometryFile(CachedFile):
         ].iloc[0]
 
     def determine_lateral_structure_xs(self, xs_gdf):
-        """
-        Determine if the cross sections are connected to lateral structure.
+        """Determine if the cross sections are connected to lateral structure.
 
         Determine if the cross sections are connected to lateral structures,
         if they are update 'has_lateral_structures' to True.
@@ -1778,8 +1788,8 @@ class SteadyFlowFile(CachedFile):
                     if len(flows) == self.n_profiles:
                         flow_change_locations.append(
                             {
-                                "river": river,
-                                "reach": reach.rstrip(" "),
+                                "river": river.strip(" "),
+                                "reach": reach.strip(" "),
                                 "rs": float(rs),
                                 "flows": flows,
                                 "profile_names": self.profile_names,
@@ -1810,8 +1820,7 @@ class UnsteadyFlowFile(CachedFile):
 
     @cached_property
     def boundary_locations(self) -> list:
-        """
-        Return boundary locations.
+        """Return boundary locations.
 
         Example file line:
         Boundary Location=                ,                ,        ,        ,                ,Perimeter 1     ,                ,PugetSound_Ocean_Boundary       ,
@@ -1857,7 +1866,10 @@ class QuasiUnsteadyFlowFile(CachedFile):
 class RASHDFFile(CachedFile):
     """Base class for parsing HDF assets (Plan and Geometry HDF files)."""
 
-    def __init__(self, fpath, hdf_constructor):
+    _hdf_constructor = RasHdf
+    hdf_object: RasHdf
+
+    def __init__(self, fpath):
         # Prevent reinitialization if the instance is already cached
         if hasattr(self, "_initialized") and self._initialized:
             return
@@ -1866,7 +1878,7 @@ class RASHDFFile(CachedFile):
         self.fpath = fpath
         self.logger.info(f"Reading: {self.fpath}")
 
-        self.hdf_object = hdf_constructor.open_uri(
+        self.hdf_object = self._hdf_constructor.open_uri(
             fpath,
             fsspec_kwargs={
                 "default_cache_type": "blockcache",
@@ -1892,6 +1904,10 @@ class RASHDFFile(CachedFile):
         if self._root_attrs == None:
             self._root_attrs = self.hdf_object.get_root_attrs()
         return self._root_attrs.get("Units System")
+
+
+class PlanOrGeomHDFFile(RASHDFFile):
+    """Mostly geometry-accessing functions for data present in both plan and geom files."""
 
     @cached_property
     def geometry_time(self) -> datetime.datetime | None:
@@ -2028,6 +2044,7 @@ class RASHDFFile(CachedFile):
             The coordinate reference system (CRS) to set if the mesh areas do not have one. Defaults to None
         return_gdf : bool, optional
             If True, returns a GeoDataFrame of the mesh areas. If False, returns a unified Polygon or Multipolygon geometry. Defaults to False.
+
         """
         mesh_areas = self.hdf_object.mesh_areas()
         if mesh_areas is None or mesh_areas.empty:
@@ -2073,19 +2090,14 @@ class RASHDFFile(CachedFile):
         return bc_lines
 
 
-class UnsteadyHDFFile(RASHDFFile):
+class PlanHDFFile(PlanOrGeomHDFFile):
     """Class to parse data from Plan HDF files."""
 
-    def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, RASHDFFile, **kwargs)
-        self.hdf_object = RASHDFFile(fpath)
-
-
-class PlanHDFFile(RASHDFFile):
-    """Class to parse data from Plan HDF files."""
+    _hdf_constructor = RasPlanHdf
+    hdf_object: RasPlanHdf
 
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, RasPlanHdf, **kwargs)
+        super().__init__(fpath, **kwargs)
 
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
@@ -2366,11 +2378,14 @@ class PlanHDFFile(RASHDFFile):
         return self._meteorology_attrs.get("Units")
 
 
-class GeometryHDFFile(RASHDFFile):
+class GeometryHDFFile(PlanOrGeomHDFFile):
     """Class to parse data from Geometry HDF files."""
 
+    _hdf_constructor = RasGeomHdf
+    hdf_object: RasGeomHdf
+
     def __init__(self, fpath: str, **kwargs):
-        super().__init__(fpath, RasGeomHdf, **kwargs)
+        super().__init__(fpath, **kwargs)
 
         self._plan_info_attrs = None
         self._plan_parameters_attrs = None
@@ -2384,7 +2399,10 @@ class GeometryHDFFile(RASHDFFile):
     @cached_property
     def cross_sections(self) -> int | None:
         """Return geometry cross sections."""
-        return self.hdf_object.cross_sections()
+        try:
+            return self.hdf_object.cross_sections()
+        except KeyError:
+            return gpd.GeoDataFrame()
 
     @cached_property
     def reference_lines(self) -> gpd.GeoDataFrame | None:

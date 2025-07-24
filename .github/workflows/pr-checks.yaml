@@ -21,8 +21,8 @@ jobs:
     name: Python Build and Test
     uses: ./.github/workflows/python-build.yaml
     with:
-      run_tests: false
-      
+      run_tests: true
+
   sonarqube:
     name: SonarQube Analysis
     permissions:
@@ -30,7 +30,7 @@ jobs:
       issues: write
       pull-requests: write
     uses: ./.github/workflows/sonarqube.yaml
-      
+
   get-version:
     name: Extract Package Version
     uses: ./.github/workflows/get-version.yaml

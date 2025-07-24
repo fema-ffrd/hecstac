@@ -5,11 +5,10 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-import os
 import traceback
 from functools import cached_property
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Literal, Optional
 
 import pystac
 import pystac.errors
@@ -19,6 +18,7 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.utils import datetime_to_str
 from shapely import Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
+from typing_extensions import Self
 
 import hecstac
 from hecstac.common.asset_factory import AssetFactory
@@ -34,13 +34,14 @@ from hecstac.ras.assets import (
     QuasiUnsteadyFlowAsset,
     SteadyFlowAsset,
     UnsteadyFlowAsset,
-    UnsteadyFlowHdfAsset,
 )
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files
 
 logger = get_logger(__name__)
+
+ThumbnailLayers = Literal["mesh_areas", "breaklines", "bc_lines", "River", "XS", "Structure", "Junction"]
 
 
 class RASModelItem(Item):
@@ -64,14 +65,22 @@ class RASModelItem(Item):
         self.simplify_geometry = True
 
     @classmethod
-    def from_prj(cls, ras_project_file: str, crs: str = None, simplify_geometry: bool = True, assets: list = None):
-        """
-        Create a STAC item from a HEC-RAS .prj file.
+    def from_prj(
+        cls,
+        ras_project_file: str,
+        stac_id: str = None,
+        crs: str = None,
+        simplify_geometry: bool = True,
+        assets: list = None,
+    ) -> Self:
+        """Create a STAC item from a HEC-RAS .prj file.
 
         Parameters
         ----------
         ras_project_file : str
             Path to the HEC-RAS project file (.prj).
+        stac_id : str
+            ID for the STAC item. If none, ID is set to the .prj file stem (e.g., Muncie.prj -> Muncie).
         crs : str, optional
             Coordinate reference system (CRS) to apply to the item. If None, the CRS will be extracted from the geometry .hdf file.
         simplify_geometry : bool, optional
@@ -83,13 +92,18 @@ class RASModelItem(Item):
         -------
         stac : RASModelItem
             An instance of the class representing the STAC item.
+
         """
         if not assets:
             assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
         else:
             assets = {Path(i).name: Asset(i, Path(i).name) for i in assets}
+
+        if not stac_id:
+            stac_id = Path(ras_project_file).stem
+
         stac = cls(
-            Path(ras_project_file).stem,
+            stac_id,
             NULL_STAC_GEOMETRY,
             NULL_STAC_BBOX,
             NULL_DATETIME,
@@ -105,7 +119,7 @@ class RASModelItem(Item):
         return stac
 
     @classmethod
-    def from_dict(cls, stac: dict) -> RASModelItem:
+    def from_dict(cls, stac: dict) -> Self:
         """Load a model from a stac item dictionary."""
         item = super().from_dict(stac)
         item.update_properties()
@@ -292,7 +306,7 @@ class RASModelItem(Item):
 
     def add_model_thumbnails(
         self,
-        layers: list,
+        layers: list[ThumbnailLayers],
         thumbnail_dest: str,
         title_prefix: str = "Model_Thumbnail",
         make_public: bool = True,
@@ -302,13 +316,15 @@ class RASModelItem(Item):
         Parameters
         ----------
         layers : list
-            List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines'
+            List of geometry layers to be included in the plot. Options include 'mesh_areas', 'breaklines', 'bc_lines',
+            'River', 'XS', 'Structure', and 'Junction'
         thumbnail_dest : str, optional
             Directory for created thumbnails.
         title_prefix : str, optional
             Thumbnail title prefix, by default "Model_Thumbnail".
         make_public : bool, optional
             Whether to use public-style url for created assets.
+
         """
         for geom in self.geometry_assets:
             if (not geom.title.startswith(self.id)) and (not geom.title.lower().startswith("backup")):
@@ -360,6 +376,7 @@ class RASModelItem(Item):
             A list of geometry file names to make the gpkg for.
         make_public : bool, optional
             Whether to use public-style url for created assets.
+
         """
         for geom in self.geometry_assets:
             if geometries is not None and geom.name not in geometries:
@@ -415,7 +432,10 @@ class RASModelItem(Item):
         """Geometry asset listed in the primary plan."""
         for i in self.assets.values():
             if isinstance(i, (GeometryAsset, GeometryHdfAsset)):
-                if i.name.startswith(self._primary_plan.file.geometry_file):
+                if self._primary_plan is not None:
+                    if i.name.startswith(self._primary_plan.file.geometry_file):
+                        return i
+                else:
                     return i
         return None
 
@@ -490,11 +510,11 @@ class RASModelItem(Item):
             logger.warning(f"No data found for {title.lower()}, unable to create asset.")
 
     def add_geospatial_assets(self, output_prefix: str):
-        """
-        Extract geospatial data from geometry hdf asset and adds them as Parquet assets.
+        """Extract geospatial data from geometry hdf asset and adds them as Parquet assets.
 
         Args:
             output_prefix (str): Path prefix where the Parquet files will be saved.
+
         """
         for i in self.geometry_assets:
             if isinstance(i, GeometryHdfAsset):

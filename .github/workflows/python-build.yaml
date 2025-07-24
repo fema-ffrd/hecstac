@@ -52,7 +52,17 @@ jobs:
         ruff check .
         ruff format --check
 
-    - name: Run tests
+    - name: Set up Conda and run tests
       if: inputs.run_tests
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-variant: Miniforge3
+        activate-environment: anaconda-client-env
+        environment-file: environment.yml
+        auto-activate-base: false
+
+    - name: Run pytest in Conda env
+      if: inputs.run_tests
+      shell: bash -el {0}
       run: |
         pytest tests/
