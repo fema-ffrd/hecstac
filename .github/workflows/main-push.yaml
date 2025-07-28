@@ -39,10 +39,3 @@ jobs:
       version: ${{ needs.get-version.outputs.version }}
     secrets:
       PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-
-  github-release:
-    name: Create GitHub Release
-    needs: [python-build, pypi-publish, get-version, check-version-exists]
-    uses: ./.github/workflows/github-release.yaml
-    with:
-      version: ${{ needs.get-version.outputs.version }}
