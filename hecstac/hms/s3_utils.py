@@ -11,15 +11,6 @@ from pystac import Asset
 from pystac.extensions.storage import StorageExtension
 
 
-def ls(directory: str | Path) -> list[Path]:
-    """List files in a directory."""
-    match file_location(directory):
-        case "local":
-            return [f for f in directory.iterdir() if f.is_file()]
-        case "s3":
-            return list_keys(directory)
-
-
 def file_location(file: str | Path) -> str:
     """Return the location of a file."""
     file = Path(file)
@@ -29,20 +20,6 @@ def file_location(file: str | Path) -> str:
         return "s3"
     else:
         return "unknown"
-
-
-def list_keys(s3_client, bucket, prefix, suffix=""):
-    """List s3 keys in a given bucket and prefix."""
-    keys = []
-    kwargs = {"Bucket": bucket, "Prefix": prefix}
-    while True:
-        resp = s3_client.list_objects_v2(**kwargs)
-        keys += [obj["Key"] for obj in resp["Contents"] if obj["Key"].endswith(suffix)]
-        try:
-            kwargs["ContinuationToken"] = resp["NextContinuationToken"]
-        except KeyError:
-            break
-    return keys
 
 
 def check_storage_extension(asset: Asset) -> Asset:
@@ -119,8 +96,11 @@ def get_basic_object_metadata(obj: ObjectSummary) -> dict:
 
 def create_fiona_aws_session():
     """Create fiona s3 session."""
-    session = boto3.Session()
-    return fiona.session.AWSSession(session)
+    return fiona.session.AWSSession(
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", ""),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+        region_name=os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")),
+    )
 
 
 def init_s3_resources2(minio_mode: bool = False):

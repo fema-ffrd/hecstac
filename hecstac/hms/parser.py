@@ -13,13 +13,15 @@ from pathlib import Path
 import fiona
 import geopandas as gpd
 import pandas as pd
+from pyparsing import Optional
 from pyproj import CRS
 from shapely.geometry import LineString, MultiLineString, Point
 
 import hecstac.hms.utils as utils
 from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
-from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER, GPD_WRITE_ENGINE
+from hecstac.common.consts import S3_PREFIX
+from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER
 from hecstac.hms.data_model import (
     ET,
     BasinHeader,
@@ -56,7 +58,7 @@ class BaseTextFile(ABC):
         self.path: str = path
         self.directory: str = os.path.dirname(self.path)
         self.stem: str = os.path.splitext(self.path)[0]
-        self.content: str = None
+        self.content: Optional[str] = None
         self.attrs: dict = {}
         self.read_content()
         self.parse_header()
@@ -175,7 +177,7 @@ class ProjectFile(BaseTextFile):
                 if not nextline.startswith("     Filename: "):
                     raise ValueError(f"unexpected line: {nextline}")
                 basinfile_bn = nextline[len("     Filename: ") :]
-                if self.directory.startswith("s3://"):
+                if self.directory.startswith(S3_PREFIX):
                     basinfile_path = f"{self.directory}/{basinfile_bn}"
                 else:
                     basinfile_path = os.path.join(self.directory, basinfile_bn)
@@ -186,7 +188,7 @@ class ProjectFile(BaseTextFile):
                 if not nextline.startswith("     Filename: "):
                     raise ValueError(f"unexpected line: {nextline}")
                 metfile_bn = nextline[len("     Filename: ") :]
-                if self.directory.startswith("s3://"):
+                if self.directory.startswith(S3_PREFIX):
                     metfile_path = f"{self.directory}/{metfile_bn}"
                 else:
                     metfile_path = os.path.join(self.directory, metfile_bn)
@@ -197,7 +199,7 @@ class ProjectFile(BaseTextFile):
                 if not nextline.startswith("     FileName: "):
                     raise ValueError(f"unexpected line: {nextline}")
                 controlfile_bn = nextline[len("     FileName: ") :]
-                if self.directory.startswith("s3://"):
+                if self.directory.startswith(S3_PREFIX):
                     controlfile_path = f"{self.directory}/{controlfile_bn}"
                 else:
                     controlfile_path = os.path.join(self.directory, controlfile_bn)
@@ -354,11 +356,11 @@ class BasinFile(BaseTextFile):
             raise ValueError(f"invalid extension for Basin file: {path}")
         super().__init__(path)
 
-        self.header: BasinHeader = ""
-        self.layer_properties: BasinLayerProperties = None
-        self.spatial_properties: BasinSpatialProperties = None
-        self.schematic_properties: BasinSchematicProperties = None
-        self.computation_points: ComputationPoints = None
+        self.header: Optional[BasinHeader] = None
+        self.layer_properties: Optional[BasinLayerProperties] = None
+        self.spatial_properties: Optional[BasinSpatialProperties] = None
+        self.schematic_properties: Optional[BasinSchematicProperties] = None
+        self.computation_points: Optional[ComputationPoints] = None
         self.fiona_aws_session = fiona_aws_session
         self.read_geom = read_geom
         self.name = None
@@ -370,7 +372,7 @@ class BasinFile(BaseTextFile):
         if self.read_geom:
             sqlite_basename = self.identify_sqlite()
 
-            if self.path.startswith("s3://"):
+            if self.path.startswith(S3_PREFIX):
                 self.sqlite_path = f"{os.path.dirname(self.path)}/{sqlite_basename}"
                 self.fiona_aws_session = create_fiona_aws_session()
             else:
@@ -441,7 +443,6 @@ class BasinFile(BaseTextFile):
                 fiona_aws_session=self.fiona_aws_session,
             )
 
-        # self.crs = sqlite.crs.to_wkt()
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
             geom = None
@@ -941,13 +942,6 @@ class PairedDataFile(BaseTextFile):
     def __init__(self, path: str, client=None, bucket=None):
         if not path.endswith(".pdata"):
             raise ValueError(f"invalid extension for Paired Data file: {path}")
-        # if not os.path.exists(path):
-        #     try:
-        #         response = client.get_object(Bucket=bucket, Key=path)
-        #         self.content = response["Body"].read().decode()
-        #     except Exception as e:
-        #         logger.info(f" {e}: No Paired Data File found: creating empty Paired Data File")
-        #         self.create_pdata(path)
         super().__init__(path)
         self.elements = ElementSet()
         self.scan_for_tables()
@@ -999,12 +993,12 @@ class SqliteDB:
         if self.fiona_aws_session:
             with fiona.Env(self.fiona_aws_session):
                 self.layers = fiona.listlayers(self.path)
-                self.reach_feats = gpd.read_file(self.path, layer="reach2d", engine=GPD_WRITE_ENGINE)
-                self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d", engine=GPD_WRITE_ENGINE)
+                self.reach_feats = gpd.read_file(self.path, layer="reach2d")
+                self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d")
         else:
             self.layers = fiona.listlayers(self.path)
-            self.reach_feats = gpd.read_file(self.path, layer="reach2d", engine=GPD_WRITE_ENGINE)
-            self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d", engine=GPD_WRITE_ENGINE)
+            self.reach_feats = gpd.read_file(self.path, layer="reach2d")
+            self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d")
 
         # check consistent crs and assign crs to sqlite class
         if (

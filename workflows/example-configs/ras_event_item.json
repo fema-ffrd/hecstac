@@ -1,0 +1,12 @@
+[
+    {
+        "model_prefix": "s3://trinity-pilot/calibration/hydraulics/bedias-creek",
+        "source_model_path": "s3://trinity-pilot/stac/prod-support/calibration/model=bedias-creek/item.json",
+        "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration"
+    },
+    {
+        "model_prefix": "s3://trinity-pilot/calibration/hydraulics/blw-bear",
+        "source_model_path": "s3://trinity-pilot/stac/prod-support/calibration/model=blw-bear/item.json",
+        "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration"
+    }
+]

@@ -20,13 +20,15 @@ from rasqc.utils import summarize_results
 def build_s3_path(
     bucket: str,
     prefix: str,
-    model_name: str,
+    model_name: str = "",
     metadata_part: str = "metadata",
     suffix: str = "",
     extension: str = "",
 ) -> str:
     """Make consistent s3 paths for metadata."""
-    path = f"s3://{bucket}/{prefix}/{metadata_part}/{model_name}"
+    path = f"s3://{bucket}/{prefix}/{metadata_part}"
+    if model_name:
+        path += f"/{model_name}"
     if suffix:
         path += f"_{suffix}"
     if extension:
@@ -81,7 +83,6 @@ class RASModelCalibrationChecker:
         """Create a STAC Item from a RAS model."""
         ras_item = RASModelItem.from_prj(
             build_s3_path(self.bucket, self.prefix, self.ras_model_name),
-            self.item_id,
             crs=self.crs,
             assets=ras_files,
         )
@@ -89,27 +90,12 @@ class RASModelCalibrationChecker:
         thumbnail_dst = build_s3_path(
             self.bucket,
             self.prefix,
-            self.ras_model_name,
-            suffix="thumbnail",
-            extension="png",
         )
 
-        # create thumbnail for each geometry file
-        for r in ras_files:
-            filename = Path(r).name
-            if re.search(r"\.g.+\.hdf$", filename):
-                thumbnail_dst = build_s3_path(
-                    self.bucket,
-                    self.prefix,
-                    Path(r).stem,
-                    suffix="thumbnail",
-                    extension="png",
-                )
-
-                ras_item.add_model_thumbnails(
-                    ["mesh_areas", "breaklines", "bc_lines"],
-                    s3_thumbnail_dst=thumbnail_dst,
-                )
+        ras_item.add_model_thumbnails(
+            ["mesh_areas", "breaklines", "bc_lines"],
+            thumbnail_dest=thumbnail_dst,
+        )
 
         item_json = build_s3_path(
             self.bucket,

@@ -1,0 +1,9 @@
+{
+    "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.prj",
+    "assets": [
+        "s3://ffrd-pilot/public/hecstac_test_data/winooski/winooski.prj"
+    ],
+    "crs": "EPSG:5646",
+    "note": "Base case."
+
+}

@@ -1,0 +1,10 @@
+[
+    {
+        "ras_project_path": "s3://trinity-pilot/calibration/hydraulics/bedias-creek/bedias-creek.prj",
+        "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration"
+    },
+    {
+        "ras_project_path": "s3://trinity-pilot/calibration/hydraulics/blw-bear/blw-bear.prj",
+        "output_prefix": "s3://trinity-pilot/stac/prod-support/calibration"
+    }
+]

@@ -1,10 +1,7 @@
 import json
 import logging
 import os
-import shutil
-from ast import mod
 from pathlib import Path
-from pyexpat import model
 
 import pytest
 
@@ -42,9 +39,9 @@ def test_stac_creation(prj_path: str, crs: str, assets: list):
             raise RuntimeError(f"Serialization failed for {prj_path}. The following fields do not match: {bad_fields}")
 
     # To file check
-    out_dir = Path(prj_path.replace(str(DATA_DIR), str(OUTPUT_DIR)))
-    out_dir.parent.mkdir(exist_ok=True, parents=True)
-    out_path = str(out_dir).replace(".prj", ".json")
+    out_dir = Path(OUTPUT_DIR) / Path(prj_path).parent.name
+    out_dir.mkdir(exist_ok=True, parents=True)
+    out_path = str(out_dir / f"{Path(prj_path).parent.name}.stac.json")
     with open(out_path, "w") as f:
         json.dump(dict_1, f, indent=4)
     with open(out_path) as f:
@@ -90,7 +87,9 @@ def test_thumbnail_creation(prj_path: str, crs: str, assets: list):
     out_dir.mkdir(exist_ok=True, parents=True)
 
     # Create thumbnails
-    item.add_model_thumbnails(layers=["XS", "River", "Structure", "Junction", "mesh_areas"], thumbnail_dir=str(out_dir))
+    item.add_model_thumbnails(
+        layers=["XS", "River", "Structure", "Junction", "mesh_areas"], thumbnail_dest=str(out_dir)
+    )
 
     # Check that they were generated
     for i in [i.href for i in item.assets.values() if i.roles and "thumbnail" in i.roles]:
@@ -109,7 +108,7 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
 
     # Create thumbnails
     try:
-        item.add_model_geopackages(local_dst=str(out_dir))
+        item.add_model_geopackages(dst=str(out_dir))
     except Invalid1DGeometryError:
         return  # Properly handled
 
