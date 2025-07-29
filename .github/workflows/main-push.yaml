@@ -16,14 +16,10 @@ jobs:
     uses: ./.github/workflows/python-build.yaml
     with:
       run_tests: false
-      
-  get-version:
-    name: Extract Package Version
-    uses: ./.github/workflows/get-version.yaml
 
   docker-build-push:
     name: Build and Push Docker Image
-    needs: [python-build, get-version, check-version-exists]
+    needs: [python-build]
     uses: ./.github/workflows/docker-build.yaml
     with:
       push_to_registry: true
@@ -33,7 +29,7 @@ jobs:
 
   pypi-publish:
     name: Publish to PyPI
-    needs: [python-build, get-version, check-version-exists]
+    needs: [python-build]
     uses: ./.github/workflows/pypi-publish.yaml
     with:
       version: ${{ needs.get-version.outputs.version }}
