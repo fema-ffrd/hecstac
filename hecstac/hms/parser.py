@@ -463,33 +463,34 @@ class BasinFile(BaseTextFile):
 
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
+
             if line.startswith(HEADER_SUBBASIN):
                 name = line[len(HEADER_SUBBASIN) :]
-                elements[name] = self._parse_subbasin(lines, line, sqlite, elements, i)
+                elements[name] = self._parse_subbasin(lines, name, sqlite, i)
 
-            if line.startswith("Reach: "):
+            elif line.startswith("Reach: "):
                 name = line[len("Reach: ") :]
-                elements[name] = self._parse_reach(lines, line, sqlite, i)
+                elements[name] = self._parse_reach(lines, name, sqlite, i)
 
-            if line.startswith("Junction: "):
+            elif line.startswith("Junction: "):
                 name = line[len("Junction: ") :]
-                elements[name] = self._parse_junction(lines, line, i)
+                elements[name] = self._parse_junction(lines, name, i)
 
-            if line.startswith("Sink: "):
+            elif line.startswith("Sink: "):
                 name = line[len("Sink: ") :]
-                elements[name] = self._parse_sink(lines, line, i)
+                elements[name] = self._parse_sink(lines, name, i)
 
-            if line.startswith("Reservoir: "):
+            elif line.startswith("Reservoir: "):
                 name = line[len("Reservoir: ") :]
-                elements[name] = self._parse_reservoir(lines, line, i)
+                elements[name] = self._parse_reservoir(lines, name, i)
 
-            if line.startswith("Source: "):
+            elif line.startswith("Source: "):
                 name = line[len("Source: ") :]
-                elements[name] = self._parse_source(lines, line, i)
+                elements[name] = self._parse_source(lines, name, i)
 
-            if line.startswith("Diversion: "):
+            elif line.startswith("Diversion: "):
                 name = line[len("Diversion: ") :]
-                elements[name] = self._parse_diversion(lines, line, i)
+                elements[name] = self._parse_diversion(lines, name, i)
 
         return elements
 
@@ -498,11 +499,12 @@ class BasinFile(BaseTextFile):
         attrs = utils.parse_attrs(lines[i + 1 :])
         if self.read_geom:
             geom = sqlite.subbasin_feats[sqlite.subbasin_feats["name"] == name].geometry.values[0]
-            
+
         return Subbasin(name, attrs, geom)
 
     def _parse_reach(self, lines, name, sqlite, i) -> Reach:
-        geom, slope = None
+        geom = None
+        slope = None
         attrs = utils.parse_attrs(lines[i + 1 :])
         if self.read_geom:
             try:

@@ -329,25 +329,32 @@ class RASModelItem(Item):
         for geom in self.geometry_assets:
             if (not geom.title.startswith(self.id)) and (not geom.title.lower().startswith("backup")):
                 continue
+            
             # Conditions
-            is_hdf = isinstance(geom, GeometryHdfAsset)
-            is_text = isinstance(geom, GeometryAsset)
-            has_hdf = any(i.href == geom.href + ".hdf" for i in self.geometry_assets)
-            has_text = is_hdf and any(i.href == geom.href.replace(".hdf", "") for i in self.geometry_assets)
-
-            if not self._should_make_thumbnail(is_text, has_hdf, geom.has_1d, is_hdf, has_text):
+            thumbnail_key = self._get_thumbnail_config(geom, layers)
+            if not thumbnail_key:
                 continue
             
-            if is_hdf:
-                if not self._has_required_layers(layers, ["mesh_areas", "breaklines", "bc_lines"]):
-                    continue
-                thumbnail_key = f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"
-            else:  # is_text
-                if not self._has_required_layers(layers, ["River", "XS", "Structure", "Junction"]):
-                    continue
-                thumbnail_key = f"{geom.href.rsplit('/')[-1]}_thumbnail"
-
             self._create_thumbnail(thumbnail_key, geom, layers, title_prefix, thumbnail_dest, make_public)
+
+    def _get_thumbnail_config(self, geom, layers: list) -> str | None:
+        """Get thumbnail configuration for a geometry asset."""
+        is_hdf = isinstance(geom, GeometryHdfAsset)
+        is_text = isinstance(geom, GeometryAsset)
+        has_hdf = any(i.href == geom.href + ".hdf" for i in self.geometry_assets)
+        has_text = is_hdf and any(i.href == geom.href.replace(".hdf", "") for i in self.geometry_assets)
+
+        if not self._should_make_thumbnail(is_text, has_hdf, geom.has_1d, is_hdf, has_text):
+            return None
+        
+        if is_hdf:
+            if not self._has_required_layers(layers, ["mesh_areas", "breaklines", "bc_lines"]):
+                return None
+            return f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"
+        else:  # is_text
+            if not self._has_required_layers(layers, ["River", "XS", "Structure", "Junction"]):
+                return None
+            return f"{geom.href.rsplit('/')[-1]}_thumbnail"
 
     def _should_make_thumbnail(self, is_text: bool, has_hdf: bool, has_1d: bool,  is_hdf: bool, has_text: bool) -> bool:
         if is_text and has_hdf:
@@ -394,7 +401,6 @@ class RASModelItem(Item):
             if geometries is not None and geom.name not in geometries:
                 continue
             asset_name = f"{geom.href.rsplit('/')[-1]}_geopackage"
-            # TODO: Implement hdf geopackages.
             if isinstance(geom, GeometryAsset):
                 logger.info(f"Writing: {dst}")
                 try:
@@ -411,7 +417,7 @@ class RASModelItem(Item):
 
     @cached_property
     def _primary_plan(self) -> Optional[PlanAsset]:
-        """Primary plan for use in Ripple1D."""  # TODO: develop test for this logic. easily tested
+        """Primary plan for use in Ripple1D.""" 
         if len(self.plan_assets) == 0:
             return None
         elif len(self.plan_assets) == 1:

@@ -271,7 +271,6 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
-        # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
             return None
         elif self.geometry is None:
@@ -512,8 +511,6 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
 class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     """HEC-RAS Quasi-Unsteady Flow file asset."""
 
-    # TODO: implement this class
-
     regex_parse_str = r".+\.q\d{2}$"
     __roles__ = ["ras-quasi-unsteady"]
     __media_type__ = MediaType.TEXT
@@ -727,7 +724,6 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
-        # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
             return None
         else:
@@ -841,7 +837,6 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
                 map_layers.append(self._plot_breaklines)
             elif layer == "bc_lines":
                 map_layers.append(self._plot_bc_lines)
-            # TODO: Add support for river centerline and cross-sections (from .hdf)
         title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
         filename = f"thumbnail.{hdf_ext}.png"
@@ -883,7 +878,7 @@ class GeometricPreprocessorAsset(GenericAsset):
     __roles__ = ["ras-geometric-preprocessor"]
     __media_type__ = MediaType.TEXT
     __description__ = "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more."
-    __file_class__ = None  # TODO:  make a generic parent for these.
+    __file_class__ = None 
 
 
 class BoundaryConditionAsset(GenericAsset):

@@ -97,7 +97,7 @@ class XS:
         river_reach: str,
         river: str,
         reach: str,
-        reach_geom: LineString = None,  # TODO: Does adding this to every section create a massive memory footprint?
+        reach_geom: LineString = None,
     ):
         self.ras_data = ras_data
         self.river = river
@@ -419,7 +419,7 @@ class XS:
         A boolean indicating if ineffective flow area, blocked obstructions, or levees are contained
         in the channel (between bank stations).
         """
-        return None  # TODO: This feature was never added in ripple1d
+        return None 
 
     def set_thalweg_drop(self, ds_thalweg):
         """Set the drop in thalweg elevation between this cross section and the downstream cross section."""
@@ -736,7 +736,7 @@ class XS:
 
         return df["a"].cumsum().values[0]
 
-    def get_mannings_discharge(self, wse: float, slope: float, units: str) -> float:
+    def get_mannings_discharge(self, wse: float, slope: float) -> float:
         """Calculate the discharge of the cross-section according to manning's equation."""
         q = 0
         stations, mannings = self.subdivisions
@@ -839,7 +839,6 @@ class Structure:
     @cached_property
     def width(self) -> float:
         """Structure width."""
-        # TODO check units of the RAS model
         return float(self.structure_data(1))
 
     @cached_property
@@ -1640,106 +1639,96 @@ class GeometryFile(CachedFile):
                 continue
             
             try:
-                us_rs = xs_gdf.loc[
-                    (xs_gdf["river"] == structure.river)
-                    & (xs_gdf["reach"] == structure.reach)
-                    & (xs_gdf["river_station"] > structure.river_station),
-                    "river_station",
-                ].min()
-
-                river_stations = self._get_reach_river_stations(
-                    xs_gdf, 
-                    structure.river, 
-                    structure.reach, 
-                    us_rs, 
-                    structure.distance_to_us_xs + structure.weir_length
-                    )
+                self._process_main_lateral_structure(xs_gdf, structure)
                 
-                self._mark_lateral_structures_in_reach(
-                    xs_gdf, 
-                    structure.river, 
-                    structure.reach, 
-                    max(river_stations), 
-                    min(river_stations)
-                    )
-
                 if structure.tail_water_river in xs_gdf.river:
-                    if structure.multiple_xs:
-                        river_stations = self._get_reach_river_stations(
-                            xs_gdf,
-                            structure.tail_water_river,
-                            structure.tail_water_reach,
-                            structure.tail_water_river_station,
-                            structure.tw_distance + structure.weir_length,
-                        )
-
-                        self._mark_lateral_structures_in_reach(
-                            xs_gdf,
-                            structure.tail_water_river,
-                            structure.tail_water_reach,
-                            max(river_stations),
-                            min(river_stations),
-                        )
-                    else:
-                        ds_xs = xs_gdf.loc[
-                            (xs_gdf["river"] == structure.tail_water_river)
-                            & (xs_gdf["reach"] == structure.tail_water_reach)
-                            & (xs_gdf["river_station"] <= structure.tail_water_river_station)
-                        ]
-
-                        reach_len = 0
-                        river_stations = []
-                        for _, row in ds_xs.iterrows():
-                            reach_len += row["channel_reach_length"]
-                            river_stations.append(row.river_station)
-                            if len(river_stations) > 1:
-                                break
-                        
-                        self._mark_lateral_structures_in_reach(
-                            xs_gdf,
-                            structure.tail_water_river,
-                            structure.tail_water_reach,
-                            max(river_stations),
-                            min(river_stations),
-                        )
+                    self._process_tail_water_lateral_structure(xs_gdf, structure)
 
             except InvalidStructureDataError:
                 pass
 
         return xs_gdf
     
-    def _get_reach_river_stations(self, xs_gdf, river, reach, max_river_station, max_length) -> list:
+    def _process_main_lateral_structure(self, xs_gdf, structure):
+        """Process main lateral structure."""
+        us_rs = xs_gdf.loc[
+            (xs_gdf["river"] == structure.river)
+            & (xs_gdf["reach"] == structure.reach)
+            & (xs_gdf["river_station"] > structure.river_station),
+            "river_station",
+        ].min()
+
         ds_xs = xs_gdf.loc[
-            (xs_gdf["river"] == river)
-            & (xs_gdf["reach"] == reach)
-            & (xs_gdf["river_station"] <= max_river_station)
+            (xs_gdf["river"] == structure.river)
+            & (xs_gdf["reach"] == structure.reach)
+            & (xs_gdf["river_station"] <= us_rs)
         ]
 
+        river_stations = self._calculate_affected_stations(
+            ds_xs, structure.distance_to_us_xs + structure.weir_length
+        )
+
+        xs_gdf.loc[
+            (xs_gdf["river"] == structure.river)
+            & (xs_gdf["reach"] == structure.reach)
+            & (xs_gdf["river_station"] <= max(river_stations))
+            & (xs_gdf["river_station"] >= min(river_stations)),
+            "has_lateral_structure",
+        ] = True
+
+    def _process_tail_water_lateral_structure(self, xs_gdf, structure):
+        """Process lateral structure on the tail water river."""
+        ds_xs = xs_gdf.loc[
+            (xs_gdf["river"] == structure.tail_water_river)
+            & (xs_gdf["reach"] == structure.tail_water_reach)
+            & (xs_gdf["river_station"] <= structure.tail_water_river_station)
+        ]
+
+        if structure.multiple_xs:
+            river_stations = self._calculate_affected_stations(
+                ds_xs, structure.tw_distance + structure.weir_length
+            )
+        else:
+            river_stations = self._calculate_single_xs_stations(ds_xs)
+
+        xs_gdf.loc[
+            (xs_gdf["river"] == structure.tail_water_river)
+            & (xs_gdf["reach"] == structure.tail_water_reach)
+            & (xs_gdf["river_station"] <= max(river_stations))
+            & (xs_gdf["river_station"] >= min(river_stations)),
+            "has_lateral_structure",
+        ] = True
+
+    def _calculate_affected_stations(self, ds_xs, max_reach_length) -> list:
+        """Calculate affected river stations."""
         reach_len = 0
         river_stations = []
+        
         for _, row in ds_xs.iterrows():
             reach_len += row["channel_reach_length"]
             river_stations.append(row.river_station)
-            if reach_len > max_length:
+            if reach_len > max_reach_length:
                 break
-            
+        
         return river_stations
-    
-    def _mark_lateral_structures_in_reach(self, xs_gdf, river, reach, max_rs, min_rs):
-        xs_gdf.loc[
-            (xs_gdf["river"] == river)
-            & (xs_gdf["reach"] == reach)
-            & (xs_gdf["river_station"] <= max_rs)
-            & (xs_gdf["river_station"] >= min_rs),
-            "has_lateral_structure",
-        ] = True
+
+    def _calculate_single_xs_stations(self, ds_xs) -> list:
+        """Calculate river stations for a single cross-section."""
+        river_stations = []
+        
+        for _, row in ds_xs.iterrows():
+            river_stations.append(row.river_station)
+            if len(river_stations) > 1:
+                break
+        
+        return river_stations
 
     def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
         """Get a geodataframe of a specific subtype of geometry asset."""
         tmp_objs: dict[str] = getattr(self, subtype)
         return gpd.GeoDataFrame(
             pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True)
-        )  # TODO: may need to add some logic here for empty dicts
+        ) 
 
     def iter_labeled_gdfs(self) -> Iterator[tuple[str, gpd.GeoDataFrame]]:
         """Return gdf and associated property."""
@@ -1904,7 +1893,6 @@ class UnsteadyFlowFile(CachedFile):
 class QuasiUnsteadyFlowFile(CachedFile):
     """HEC-RAS Quasi-Unsteady Flow file data."""
 
-    # TODO: implement this class
     pass
 
 

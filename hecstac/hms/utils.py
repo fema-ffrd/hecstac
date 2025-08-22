@@ -64,14 +64,10 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
         if nested_keyval_pairs:
             _process_nested_pair(attrs, nested_keyval_pairs, key, val)
 
-        if "Hamon Coefficient" in line:
-            key, val = _process_hamon_coefficient(attrs, line)
-            keyval_pairs = (key, val) 
+        key, val = _process_hamon_coefficient(attrs, line)
+        keyval_pairs = (key, val) 
 
-        if not (keyval_pairs or nested_keyval_pairs):
-            raise ValueError(f"unexpected line (does not have keyval nor nested keyval pair): {repr(line)}")
-        if keyval_pairs and nested_keyval_pairs:
-            raise RuntimeError(f"regex matched top-level and nested keyval pairs (pattern is bugged): {repr(line)}")
+        _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs)
     else:
         raise ValueError("never found End:")
     return OrderedDict(attrs)
@@ -97,9 +93,17 @@ def _process_nested_pair(attrs: dict, nested_keyval_pairs: list[any], parent_key
     add_no_duplicate(attrs[parent_key][parent_val], nested_key, nested_val)
 
 def _process_hamon_coefficient(attrs: dict, line: str) -> tuple[str, str]:
-    key, val = line.split(":")
-    add_no_duplicate(attrs, key, val)
-    return key, val
+    if "Hamon Coefficient" in line:
+        key, val = line.split(":")
+        add_no_duplicate(attrs, key, val)
+
+    return (key, val)
+
+def _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs): 
+    if not (keyval_pairs or nested_keyval_pairs):
+        raise ValueError(f"unexpected line (does not have keyval nor nested keyval pair): {repr(line)}")
+    if keyval_pairs and nested_keyval_pairs:
+        raise RuntimeError(f"regex matched top-level and nested keyval pairs (pattern is bugged): {repr(line)}")
 
 def remove_holes(geom):
     """Remove holes in the geometry."""

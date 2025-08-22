@@ -53,7 +53,6 @@ class FFRDEventItem(Item):
         self.event_id = event_id or self._event_id_from_plan_hdf()
         self.hms_factory = AssetFactory(HMS_EXTENSION_MAPPING)
         self.ras_factory = AssetFactory(RAS_EXTENSION_MAPPING)
-        # TODO: Add ras_factory
 
         for path in source_model_paths:
             ras_model_dict = json.loads((ModelFileReader(path).content))
@@ -126,9 +125,6 @@ class FFRDEventItem(Item):
             properties[self.FFRD_REALIZATION] = self.realization
         if self.block_group:
             properties[self.FFRD_BLOCK_GROUP] = self.block_group
-        # TODO: Pull this from the items list
-        # properties["proj:code"] = self.pf.basins[0].epsg
-        # properties["proj:wkt"] = self.pf.basins[0].wkt
         return properties
 
     @property
