@@ -62,7 +62,7 @@ def dict_comparer(dict_1, dict_2, tb=""):
             else:
                 tmp_fields = dict_comparer(dict_1[i], dict_2[i], f"{tb}-{i}")
                 bad_fields.extend(tmp_fields)
-        elif not dict_1[i] == dict_2[i]:
+        elif dict_1[i] != dict_2[i]:
             print_mismatch(i, dict_1, dict_2, f"{tb}-{i}")
             bad_fields.append(i)
     return bad_fields

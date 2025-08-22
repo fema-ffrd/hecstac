@@ -33,11 +33,9 @@ class HMSEventItem(Item):
         self.source_model_paths = source_model_paths
         self.source_model_items = []
         self.proj_str = proj_str
-        # TODO: Add ability to read source model data from stac API.
         for path in source_model_paths:
             ras_model_dict = json.loads(ModelFileReader(path).content)
             self.source_model_items.append(Item.from_dict(ras_model_dict))
-        # TODO: refactor __init__ into a classmethod so that parent functions can call an unaltered init function
         super().__init__(
             self._item_id,
             self._geometry,

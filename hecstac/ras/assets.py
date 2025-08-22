@@ -144,12 +144,12 @@ PLAN_TITLE = "HEC-RAS:plan_title"
 FLOW_TITLE = "HEC-RAS:flow_title"
 
 PRJ_CRS = "authority_code"
-
+RAS_PRJ_REGEX = r".+\.[pP][rR][jJ]$"
 
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
-    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    regex_parse_str = RAS_PRJ_REGEX
     __roles__ = ["ras-project"]
     __media_type__ = MediaType.TEXT
     __description__ = "The HEC-RAS project file."
@@ -170,7 +170,7 @@ class ProjectAsset(GenericAsset[ProjectFile]):
 class ProjectionAsset(GenericAsset[CachedFile]):
     """.prj projection file."""
 
-    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    regex_parse_str = RAS_PRJ_REGEX
     __roles__ = ["projection"]
     __media_type__ = MediaType.TEXT
     __description__ = "A coordinate reference system projection file."
@@ -185,7 +185,7 @@ class ProjectionAsset(GenericAsset[CachedFile]):
 class PrjAsset(GenericAsset[CachedFile]):
     """Factory to create HEC-RAS project file assets or projection assets."""
 
-    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    regex_parse_str = RAS_PRJ_REGEX
     __roles__ = []
     __description__ = "N/A"
     __file_class__ = CachedFile
@@ -660,7 +660,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     @cached_property
     def reference_line_names(self) -> list[str] | None:
-        """Docstring."""  # TODO: fill out
+        """Return the list of reference line names from the file."""
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 

@@ -57,27 +57,16 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
 
         keyval_pairs = re.findall(ATTR_KEYVAL_GROUPER, line)
         if keyval_pairs:
-            if len(keyval_pairs) != 1:
-                raise ValueError(f"Expected 0 or 1 pairs, got {len(keyval_pairs)}: {keyval_pairs}")
-            key, val = keyval_pairs[0]
-            key, val = handle_special_cases(key, val)
-            add_no_duplicate(attrs, key, val)
+            key, val = _process_keyval_pairs(attrs, keyval_pairs)
 
         # test if nested (10 spaces to start the line). if so create nested dictionary
         nested_keyval_pairs = re.findall(ATTR_NESTED_KEYVAL_GROUPER, line)
         if nested_keyval_pairs:
-            if len(nested_keyval_pairs) != 1:
-                raise ValueError(f"Expected 0 or 1 pairs, got {len(nested_keyval_pairs)}: {nested_keyval_pairs}")
-            nested_key, nested_val = nested_keyval_pairs[0]
-            # if attrs[key]val is a string then this is the first item in nested dictionary; change to dictionary instead of string.
-            if isinstance(attrs[key], str):
-                attrs[key] = {val: {}}
-            add_no_duplicate(attrs[key][val], nested_key, nested_val)
+            _process_nested_pair(attrs, nested_keyval_pairs, key, val)
 
         if "Hamon Coefficient" in line:
-            key, val = line.split(":")
-            keyval_pairs = (key, val)
-            add_no_duplicate(attrs, key, val)
+            key, val = _process_hamon_coefficient(attrs, line)
+            keyval_pairs = (key, val) 
 
         if not (keyval_pairs or nested_keyval_pairs):
             raise ValueError(f"unexpected line (does not have keyval nor nested keyval pair): {repr(line)}")
@@ -87,6 +76,30 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
         raise ValueError("never found End:")
     return OrderedDict(attrs)
 
+def _process_keyval_pairs(attrs: dict, keyval_pairs: list[any]) -> tuple[str , str]:
+    """Process a standard key: value pair."""
+    if len(keyval_pairs) != 1:
+        raise ValueError(f"Expected 0 or 1 pairs, got {len(keyval_pairs)}: {keyval_pairs}")
+    key, val = keyval_pairs[0]
+    key, val = handle_special_cases(key, val)
+    add_no_duplicate(attrs, key, val)
+    
+    return (key, val)
+
+def _process_nested_pair(attrs: dict, nested_keyval_pairs: list[any], parent_key: str, parent_val: str):
+    """Process a nested key-value pair."""
+    if len(nested_keyval_pairs) != 1:
+        raise ValueError(f"Expected 0 or 1 pairs, got {len(nested_keyval_pairs)}: {nested_keyval_pairs}")
+    nested_key, nested_val = nested_keyval_pairs[0]
+    # if attrs[key]val is a string then this is the first item in nested dictionary; change to dictionary instead of string.
+    if isinstance(attrs[parent_key], str):
+        attrs[parent_key] = {parent_val: {}}
+    add_no_duplicate(attrs[parent_key][parent_val], nested_key, nested_val)
+
+def _process_hamon_coefficient(attrs: dict, line: str) -> tuple[str, str]:
+    key, val = line.split(":")
+    add_no_duplicate(attrs, key, val)
+    return key, val
 
 def remove_holes(geom):
     """Remove holes in the geometry."""
@@ -109,27 +122,45 @@ def attrs2list(attrs: OrderedDict) -> list[str]:
     """Convert dictionary of attributes to a list."""
     content = []
     for key, val in attrs.items():
-        if not isinstance(val, str):
-            if isinstance(val, int) or isinstance(val, float):
-                val = str(val)
-            elif isinstance(val, dict):
-                value = list(val.keys())[0]
-                content += [f"     {key}: {value}"]
-                for k, v in val[value].items():
-                    content += [f"       {k}: {v}"]
-                continue
-            else:
-                raise TypeError(
-                    f"attribute is not of type string. we are currently unable to serialize nested dicts. key, value = {repr(key)}, {repr(val)}"
-                )
-        if key in NL_KEYS:
-            content += [""]
-        if key in ["Latitude Degrees", "Longitude Degrees"] and len(val.split(".")[0]) == 2:
-            val = " " + val
-        key, val = handle_special_cases(key, val)
-        content += [f"     {key}: {val}"]
+        if isinstance(val, str):
+            continue
+
+        if isinstance(val, int) or isinstance(val, float):
+            val = str(val)
+        elif isinstance(val, dict):
+            content += _serialize_dict(key, val)
+            continue
+        else:
+            raise TypeError(
+                f"attribute is not of type string. we are currently unable to serialize nested dicts. key, value = {repr(key)}, {repr(val)}"
+            )
+        
+        content += _format_value(key, val)
+        
     return content
 
+def _serialize_dict(key, val) -> list:
+    content = []
+
+    value = list(val.keys())[0]
+    content += [f"     {key}: {value}"]
+    for k, v in val[value].items():
+        content += [f"       {k}: {v}"]
+
+    return content
+
+def _format_value(key, val) -> list:
+    content = []
+
+    if key in NL_KEYS:
+        content += [""]
+    if key in ["Latitude Degrees", "Longitude Degrees"] and len(val.split(".")[0]) == 2:
+        val = " " + val
+
+    key, val = handle_special_cases(key, val)
+    content += [f"     {key}: {val}"]
+
+    return content
 
 def insert_after_key(dic: dict, insert_key: str, new_key: str, new_val: str) -> OrderedDict:
     """Recreate the dictionary to insert key-val after the occurance of the insert_key if key-val doesn't exist yet in the dictionary."""

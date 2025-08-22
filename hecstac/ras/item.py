@@ -50,7 +50,7 @@ class RASModelItem(Item):
     PROJECT_KEY = "HEC-RAS:project"
     PROJECT_TITLE_KEY = "HEC-RAS:project_title"
     MODEL_UNITS_KEY = "HEC-RAS:unit_system"
-    MODEL_GAGES_KEY = "HEC-RAS:gages"  # TODO: Is this deprecated?
+    MODEL_GAGES_KEY = "HEC-RAS:gages"
     PROJECT_VERSION_KEY = "HEC-RAS:version"
     PROJECT_DESCRIPTION_KEY = "HEC-RAS:description"
     PROJECT_STATUS_KEY = "HEC-RAS:status"
@@ -148,12 +148,12 @@ class RASModelItem(Item):
     @cached_property
     def has_2d(self) -> bool:
         """Whether any geometry file has 2D elements."""
-        return any([a.has_2d for a in self.geometry_assets])
+        return any(a.has_2d for a in self.geometry_assets)
 
     @cached_property
     def has_1d(self) -> bool:
         """Whether any geometry file has 2D elements."""
-        return any([a.has_1d for a in self.geometry_assets])
+        return any(a.has_1d for a in self.geometry_assets)
 
     @cached_property
     def geometry_assets(self) -> list[GeometryHdfAsset | GeometryAsset]:
@@ -332,38 +332,50 @@ class RASModelItem(Item):
             # Conditions
             is_hdf = isinstance(geom, GeometryHdfAsset)
             is_text = isinstance(geom, GeometryAsset)
-            has_hdf = any([i.href == geom.href + ".hdf" for i in self.geometry_assets])
-            has_text = is_hdf and any([i.href == geom.href.replace(".hdf", "") for i in self.geometry_assets])
-            has_1d = geom.has_1d
+            has_hdf = any(i.href == geom.href + ".hdf" for i in self.geometry_assets)
+            has_text = is_hdf and any(i.href == geom.href.replace(".hdf", "") for i in self.geometry_assets)
 
-            if is_text and has_hdf:
-                # TODO: right now since hdf thumbs don't have 1D elements, we need to run all 1D through regular geom.
-                if has_1d:
-                    make = True
-                else:
-                    make = False
-            elif is_text and not has_hdf:
+            if not self._should_make_thumbnail(is_text, has_hdf, geom.has_1d, is_hdf, has_text):
+                continue
+            
+            if is_hdf:
+                if not self._has_required_layers(layers, ["mesh_areas", "breaklines", "bc_lines"]):
+                    continue
+                thumbnail_key = f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"
+            else:  # is_text
+                if not self._has_required_layers(layers, ["River", "XS", "Structure", "Junction"]):
+                    continue
+                thumbnail_key = f"{geom.href.rsplit('/')[-1]}_thumbnail"
+
+            self._create_thumbnail(thumbnail_key, geom, layers, title_prefix, thumbnail_dest, make_public)
+
+    def _should_make_thumbnail(self, is_text: bool, has_hdf: bool, has_1d: bool,  is_hdf: bool, has_text: bool) -> bool:
+        if is_text and has_hdf:
+            if has_1d:
                 make = True
-            elif is_hdf:
-                if has_1d and has_text:
-                    make = False
-                else:
-                    make = True
+            else:
+                make = False
+        elif is_text and not has_hdf:
+            make = True
+        elif is_hdf:
+            if has_1d and has_text:
+                make = False
+            else:
+                make = True
+                
+        return make
+    
+    def _has_required_layers(self, layers: list, required_layers: list) -> bool:
+        return any(layer in layers for layer in required_layers)
 
-            if is_hdf and make:
-                logger.info(f"Writing: {thumbnail_dest}")
-                if not any([i in layers for i in ["mesh_areas", "breaklines", "bc_lines"]]):
-                    continue
-                self.assets[f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"] = geom.thumbnail(
-                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
-                )
-            elif is_text and make:
-                logger.info(f"Writing: {thumbnail_dest}")
-                if not any([i in layers for i in ["River", "XS", "Structure", "Junction"]]):
-                    continue
-                self.assets[f"{geom.href.rsplit('/')[-1]}_thumbnail"] = geom.thumbnail(
-                    layers=layers, title=title_prefix, thumbnail_dest=thumbnail_dest, make_public=make_public
-                )
+    def _create_thumbnail(self, thumbnail_key: str, geom: GeometryAsset, layers: list[ThumbnailLayers], title_prefix: str, thumbnail_dest: str, make_public: bool):
+        logger.info(f"Writing: {thumbnail_dest}")    
+        self.assets[thumbnail_key] = geom.thumbnail(
+            layers=layers,
+            title=title_prefix,
+            thumbnail_dest=thumbnail_dest,
+            make_public=make_public
+        )
 
     def add_model_geopackages(self, dst: str, geometries: list = None, make_public: bool = True):
         """Generate model geopackage asset for each geometry file.

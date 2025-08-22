@@ -63,13 +63,27 @@ class HMSModelItem(Item):
         -------
         stac : HMSModelItem
             An instance of the class representing the STAC item.
-        """
+        """       
         pm = LocalPathManager(Path(hms_project_file).parent)
         pf = ProjectFile(hms_project_file, assert_uniform_version=False)
         # Create GeoJSON and Thumbnails
         # cls._check_files_exists(cls, pf.files + pf.rasters)
-        geojson_paths = cls.write_element_geojsons(cls, pf.basins, pm, pf, asset_dir)
-        thumbnail_paths = cls.make_thumbnails(cls, pf.basins, pm, asset_dir)
+        
+        # To access instance methods 
+        temp_instance = cls(
+            Path(hms_project_file).stem,
+            NULL_STAC_GEOMETRY,
+            NULL_STAC_BBOX,
+            NULL_DATETIME,
+            {"hms_project_file": hms_project_file},
+            href="", 
+            assets={},
+        )
+        temp_instance.pm = pm
+        temp_instance.simplify_geometry = simplify_geometry
+        
+        geojson_paths = temp_instance.write_element_geojsons(pf.basins, pm, pf, asset_dir)
+        thumbnail_paths = temp_instance.make_thumbnails(pf.basins, pm, asset_dir)
 
         # Collect all assets
         if not assets:
