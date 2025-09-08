@@ -60,6 +60,7 @@ CANVAS_X = "Canvas X"
 CANVAS_Y = "Canvas Y"
 DSS_FILE = "DSS File"
 
+
 class BaseTextFile(ABC):
     """Base class for text files."""
 
@@ -463,7 +464,6 @@ class BasinFile(BaseTextFile):
 
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
-
             if line.startswith(HEADER_SUBBASIN):
                 name = line[len(HEADER_SUBBASIN) :]
                 elements[name] = self._parse_subbasin(lines, name, sqlite, i)
@@ -522,7 +522,7 @@ class BasinFile(BaseTextFile):
                 slope = 0
 
         return Reach(name, attrs, geom, slope)
-    
+
     def _parse_junction(self, lines, name, i) -> Junction:
         geom = None
         attrs = utils.parse_attrs(lines[i + 1 :])
@@ -530,7 +530,7 @@ class BasinFile(BaseTextFile):
             geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
 
         return Junction(name, attrs, geom)
-    
+
     def _parse_sink(self, lines, name, i) -> Sink:
         geom = None
         attrs = utils.parse_attrs(lines[i + 1 :])
@@ -538,7 +538,7 @@ class BasinFile(BaseTextFile):
             geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
 
         return Sink(name, attrs, geom)
-    
+
     def _parse_reservoir(self, lines, name, i) -> Reservoir:
         geom = None
         attrs = OrderedDict({"text": lines[i + 1 :]})
@@ -562,7 +562,7 @@ class BasinFile(BaseTextFile):
         attrs = utils.parse_attrs(lines[i + 1 :])
         if self.read_geom:
             geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
-            
+
         return Diversion(name, attrs, geom)
 
     @property

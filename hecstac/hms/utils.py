@@ -65,22 +65,24 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
             _process_nested_pair(attrs, nested_keyval_pairs, key, val)
 
         key, val = _process_hamon_coefficient(attrs, line)
-        keyval_pairs = (key, val) 
+        keyval_pairs = (key, val)
 
         _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs)
     else:
         raise ValueError("never found End:")
     return OrderedDict(attrs)
 
-def _process_keyval_pairs(attrs: dict, keyval_pairs: list[any]) -> tuple[str , str]:
+
+def _process_keyval_pairs(attrs: dict, keyval_pairs: list[any]) -> tuple[str, str]:
     """Process a standard key: value pair."""
     if len(keyval_pairs) != 1:
         raise ValueError(f"Expected 0 or 1 pairs, got {len(keyval_pairs)}: {keyval_pairs}")
     key, val = keyval_pairs[0]
     key, val = handle_special_cases(key, val)
     add_no_duplicate(attrs, key, val)
-    
+
     return (key, val)
+
 
 def _process_nested_pair(attrs: dict, nested_keyval_pairs: list[any], parent_key: str, parent_val: str):
     """Process a nested key-value pair."""
@@ -92,6 +94,7 @@ def _process_nested_pair(attrs: dict, nested_keyval_pairs: list[any], parent_key
         attrs[parent_key] = {parent_val: {}}
     add_no_duplicate(attrs[parent_key][parent_val], nested_key, nested_val)
 
+
 def _process_hamon_coefficient(attrs: dict, line: str) -> tuple[str, str]:
     if "Hamon Coefficient" in line:
         key, val = line.split(":")
@@ -99,11 +102,13 @@ def _process_hamon_coefficient(attrs: dict, line: str) -> tuple[str, str]:
 
     return (key, val)
 
-def _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs): 
+
+def _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs):
     if not (keyval_pairs or nested_keyval_pairs):
         raise ValueError(f"unexpected line (does not have keyval nor nested keyval pair): {repr(line)}")
     if keyval_pairs and nested_keyval_pairs:
         raise RuntimeError(f"regex matched top-level and nested keyval pairs (pattern is bugged): {repr(line)}")
+
 
 def remove_holes(geom):
     """Remove holes in the geometry."""
@@ -138,10 +143,11 @@ def attrs2list(attrs: OrderedDict) -> list[str]:
             raise TypeError(
                 f"attribute is not of type string. we are currently unable to serialize nested dicts. key, value = {repr(key)}, {repr(val)}"
             )
-        
+
         content += _format_value(key, val)
-        
+
     return content
+
 
 def _serialize_dict(key, val) -> list:
     content = []
@@ -152,6 +158,7 @@ def _serialize_dict(key, val) -> list:
         content += [f"       {k}: {v}"]
 
     return content
+
 
 def _format_value(key, val) -> list:
     content = []
@@ -165,6 +172,7 @@ def _format_value(key, val) -> list:
     content += [f"     {key}: {val}"]
 
     return content
+
 
 def insert_after_key(dic: dict, insert_key: str, new_key: str, new_val: str) -> OrderedDict:
     """Recreate the dictionary to insert key-val after the occurance of the insert_key if key-val doesn't exist yet in the dictionary."""

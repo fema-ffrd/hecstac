@@ -202,6 +202,7 @@ class GageAsset(GenericAsset[GageFile]):
             f"hms:{gage.name}".lower(): dict(gage.attrs.items()) for gage in self.file.gages
         }
 
+
 class GridAsset(GenericAsset[GridFile]):
     """Grid asset."""
 
@@ -218,6 +219,7 @@ class GridAsset(GenericAsset[GridFile]):
             | {f"hms:{key}".lower(): val for key, val in self.file.attrs.items()}
             | {f"hms:{grid.name}".lower(): dict(grid.attrs.items()) for grid in self.file.grids}
         )
+
 
 class LogAsset(GenericAsset):
     """Log asset."""

@@ -146,6 +146,7 @@ FLOW_TITLE = "HEC-RAS:flow_title"
 PRJ_CRS = "authority_code"
 RAS_PRJ_REGEX = r".+\.[pP][rR][jJ]$"
 
+
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
@@ -878,7 +879,7 @@ class GeometricPreprocessorAsset(GenericAsset):
     __roles__ = ["ras-geometric-preprocessor"]
     __media_type__ = MediaType.TEXT
     __description__ = "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more."
-    __file_class__ = None 
+    __file_class__ = None
 
 
 class BoundaryConditionAsset(GenericAsset):

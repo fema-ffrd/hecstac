@@ -64,11 +64,7 @@ class ModelFileReader:
             for i in ["utf-8", "latin_1", "iso8859_15"]:
                 try:
                     self.content = (
-                        obstore.open_reader(self.store, self.path)
-                        .readall()
-                        .to_bytes()
-                        .decode(i)
-                        .replace("\r\n", "\n")
+                        obstore.open_reader(self.store, self.path).readall().to_bytes().decode(i).replace("\r\n", "\n")
                     )
                     break
                 except UnicodeDecodeError as e:
@@ -77,7 +73,7 @@ class ModelFileReader:
                 raise ModelFileReaderError(error_msg)
         except Exception as e:
             raise ModelFileReaderError(f"An unexpected error occurred: {e}")
-        
+
     def _create_s3_store(self, bucket: str) -> obstore.store.S3Store:
         return obstore.store.S3Store(
             bucket=bucket,

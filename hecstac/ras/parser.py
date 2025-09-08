@@ -50,6 +50,7 @@ HEADER_LATERAL_WEIR_END = "Lateral Weir End"
 HEADER_RIVER_REACH = "River Reach"
 PROGRAM_VERSION = "Program Version"
 
+
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
     return f"{Path(fpath).stem}.{suffix.strip(' ')}"
@@ -371,7 +372,7 @@ class XS:
         """The manning's values of the cross section."""
         try:
             lines = text_block_from_start_str_length(
-                f"{HEADER_MANN}={search_contents(self.ras_data, HEADER_MANN, expect_one=True, require_one=False)}",     
+                f"{HEADER_MANN}={search_contents(self.ras_data, HEADER_MANN, expect_one=True, require_one=False)}",
                 math.ceil(self.number_of_mannings_points / 4),
                 self.ras_data,
             )
@@ -419,7 +420,7 @@ class XS:
         A boolean indicating if ineffective flow area, blocked obstructions, or levees are contained
         in the channel (between bank stations).
         """
-        return None 
+        return None
 
     def set_thalweg_drop(self, ds_thalweg):
         """Set the drop in thalweg elevation between this cross section and the downstream cross section."""
@@ -926,7 +927,9 @@ class Reach:
     """HEC-RAS River Reach."""
 
     def __init__(self, ras_data: list[str], river_reach: str):
-        reach_lines = text_block_from_start_end_str(f"{HEADER_RIVER_REACH}={river_reach}", [HEADER_RIVER_REACH], ras_data, -1)
+        reach_lines = text_block_from_start_end_str(
+            f"{HEADER_RIVER_REACH}={river_reach}", [HEADER_RIVER_REACH], ras_data, -1
+        )
         self.ras_data = reach_lines
         self.river_reach = river_reach
         self.river = river_reach.split(",")[0].rstrip()
@@ -1508,8 +1511,7 @@ class GeometryFile(CachedFile):
             subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
             not_reversed_xs = check_xs_direction(subset_xs, reach.geometry)
             subset_xs["geometry"] = subset_xs.apply(
-                lambda row, 
-                not_reversed_xs=not_reversed_xs: (
+                lambda row, not_reversed_xs=not_reversed_xs: (
                     row.geometry
                     if row["river_reach_rs"] in list(not_reversed_xs["river_reach_rs"])
                     else reverse(row.geometry)
@@ -1627,7 +1629,7 @@ class GeometryFile(CachedFile):
             candidate_lines["distance"] == candidate_lines["distance"].min(),
             "river_reach_rs",
         ].iloc[0]
-    
+
     def determine_lateral_structure_xs(self, xs_gdf):
         """Determine if the cross sections are connected to lateral structure.
 
@@ -1637,10 +1639,10 @@ class GeometryFile(CachedFile):
         for structure in self.structures.values():
             if structure.type != StructureType.LATERAL_STRUCTURE:
                 continue
-            
+
             try:
                 self._process_main_lateral_structure(xs_gdf, structure)
-                
+
                 if structure.tail_water_river in xs_gdf.river:
                     self._process_tail_water_lateral_structure(xs_gdf, structure)
 
@@ -1648,7 +1650,7 @@ class GeometryFile(CachedFile):
                 pass
 
         return xs_gdf
-    
+
     def _process_main_lateral_structure(self, xs_gdf, structure):
         """Process main lateral structure."""
         us_rs = xs_gdf.loc[
@@ -1664,9 +1666,7 @@ class GeometryFile(CachedFile):
             & (xs_gdf["river_station"] <= us_rs)
         ]
 
-        river_stations = self._calculate_affected_stations(
-            ds_xs, structure.distance_to_us_xs + structure.weir_length
-        )
+        river_stations = self._calculate_affected_stations(ds_xs, structure.distance_to_us_xs + structure.weir_length)
 
         xs_gdf.loc[
             (xs_gdf["river"] == structure.river)
@@ -1685,9 +1685,7 @@ class GeometryFile(CachedFile):
         ]
 
         if structure.multiple_xs:
-            river_stations = self._calculate_affected_stations(
-                ds_xs, structure.tw_distance + structure.weir_length
-            )
+            river_stations = self._calculate_affected_stations(ds_xs, structure.tw_distance + structure.weir_length)
         else:
             river_stations = self._calculate_single_xs_stations(ds_xs)
 
@@ -1703,32 +1701,30 @@ class GeometryFile(CachedFile):
         """Calculate affected river stations."""
         reach_len = 0
         river_stations = []
-        
+
         for _, row in ds_xs.iterrows():
             reach_len += row["channel_reach_length"]
             river_stations.append(row.river_station)
             if reach_len > max_reach_length:
                 break
-        
+
         return river_stations
 
     def _calculate_single_xs_stations(self, ds_xs) -> list:
         """Calculate river stations for a single cross-section."""
         river_stations = []
-        
+
         for _, row in ds_xs.iterrows():
             river_stations.append(row.river_station)
             if len(river_stations) > 1:
                 break
-        
+
         return river_stations
 
     def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
         """Get a geodataframe of a specific subtype of geometry asset."""
         tmp_objs: dict[str] = getattr(self, subtype)
-        return gpd.GeoDataFrame(
-            pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True)
-        ) 
+        return gpd.GeoDataFrame(pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True))
 
     def iter_labeled_gdfs(self) -> Iterator[tuple[str, gpd.GeoDataFrame]]:
         """Return gdf and associated property."""
@@ -1772,14 +1768,12 @@ class SteadyFlowFile(CachedFile):
         tmp_n_flow_change_locations = self.n_flow_change_locations
         locations = enumerate(search_contents(self.file_lines, HEADER_RIVER_RCH_RM, expect_one=False))
         for location in locations:
-            result = self._process_flow_change_location(
-                location, flow_change_locations, tmp_n_flow_change_locations
-            )
+            result = self._process_flow_change_location(location, flow_change_locations, tmp_n_flow_change_locations)
             if result is not None:
                 flow_change_locations, tmp_n_flow_change_locations = result
                 if len(flow_change_locations) == tmp_n_flow_change_locations:
                     return flow_change_locations
-                    
+
     def _process_flow_change_location(self, location, flow_change_locations, tmp_n_flow_change_locations):
         """Process a single flow change location."""
         # parse river, reach, and river station for the flow change location
@@ -1790,33 +1784,33 @@ class SteadyFlowFile(CachedFile):
             self.file_lines,
         )
         flows = []
-        
+
         for line in lines[1:]:
             if HEADER_RIVER_RCH_RM in line:
                 break
-            
+
             result = self._process_flow_line(
                 line, flows, flow_change_locations, tmp_n_flow_change_locations, river, reach, rs
             )
             if result is not None:
                 return result
-        
+
         return None
 
     def _process_flow_line(self, line, flows, flow_change_locations, tmp_n_flow_change_locations, river, reach, rs):
         """Process a single line of flow data."""
         for i in range(0, len(line), 8):
             tmp_str = line[i : i + 8].lstrip(" ")
-            
+
             if len(tmp_str) == 0:
                 tmp_n_flow_change_locations -= 1  # invalid entry
                 if len(flow_change_locations) == tmp_n_flow_change_locations:
                     return flow_change_locations, tmp_n_flow_change_locations
                 else:
                     break
-            
+
             flows.append(float(tmp_str))
-            
+
             if len(flows) == self.n_profiles:
                 flow_change_locations.append(
                     {
@@ -1827,11 +1821,12 @@ class SteadyFlowFile(CachedFile):
                         "profile_names": self.profile_names,
                     }
                 )
-            
+
             if len(flow_change_locations) == tmp_n_flow_change_locations:
                 return flow_change_locations, tmp_n_flow_change_locations
-        
+
         return None
+
 
 @dataclass
 class FlowChangeLocation:
