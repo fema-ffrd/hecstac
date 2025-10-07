@@ -100,7 +100,7 @@ class RASModelItem(Item):
             for file_path in model_files:
                 asset_name = Path(file_path).name
                 asset = Asset(file_path, asset_name)
-                # If asset file path is a UNC (network) path, STAC tries to normalize the href which makes it unreadable  
+                # If asset file path is a UNC (network) path, STAC tries to normalize the href which makes it unreadable
                 # Overwrite the asset href with original filepath if it's a UNC path
                 if is_unc_path(file_path):
                     asset.href = file_path
