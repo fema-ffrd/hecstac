@@ -72,6 +72,13 @@ def find_model_files(ras_prj: str) -> list[str]:
     stem = ras_prj.stem
     return [str(i.resolve()) for i in parent.glob(f"{stem}*")]
 
+def is_unc_path(file_path: str):
+    """Check if a path is a Universal Naming Convention (UNC) network path."""
+    if file_path.startswith("//") or file_path.startswith("\\\\"):
+        return True
+    else:
+        return False
+
 
 def is_ras_prj(url: str) -> bool:
     """Check if a file is a HEC-RAS project file."""

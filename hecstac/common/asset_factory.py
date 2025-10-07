@@ -8,6 +8,7 @@ from pystac import Asset
 
 from hecstac.common.logger import get_logger
 from hecstac.hms.s3_utils import check_storage_extension
+from hecstac.ras.utils import is_unc_path
 
 T = TypeVar("T")  # Generic for asset file accessor classes
 
@@ -140,7 +141,7 @@ class AssetFactory:
                 # logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 created_asset = asset_class.from_dict(asset.to_dict())
                 # Overwrite the asset href with original filepath if it's a UNC path
-                if fpath.startswith("//") or fpath.startswith("\\\\"):
+                if is_unc_path(fpath):
                     created_asset.href = fpath
 
                 # Cache the created asset

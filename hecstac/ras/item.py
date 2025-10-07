@@ -37,7 +37,7 @@ from hecstac.ras.assets import (
 )
 from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
 from hecstac.ras.parser import ProjectFile
-from hecstac.ras.utils import find_model_files
+from hecstac.ras.utils import find_model_files, is_unc_path
 
 logger = get_logger(__name__)
 
@@ -102,7 +102,7 @@ class RASModelItem(Item):
                 asset = Asset(file_path, asset_name)
                 # If asset file path is a UNC (network) path, STAC tries to normalize the href which makes it unreadable  
                 # Overwrite the asset href with original filepath if it's a UNC path
-                if file_path.startswith("//") or file_path.startswith("\\\\"):
+                if is_unc_path(file_path):
                     asset.href = file_path
                     assets[asset_name] = asset
                 else:
