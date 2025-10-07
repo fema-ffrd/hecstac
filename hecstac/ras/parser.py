@@ -1876,7 +1876,7 @@ class RASHDFFile(CachedFile):
         self._initialized = True
         self.logger = get_logger(__name__)
         self.fpath = fpath
-        self.logger.info(f"Reading: {self.fpath}")
+        self.logger.info(f"Reading HDF File: {self.fpath}")
 
         self.hdf_object = self._hdf_constructor.open_uri(
             fpath,
