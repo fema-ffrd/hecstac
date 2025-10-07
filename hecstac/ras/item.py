@@ -95,7 +95,19 @@ class RASModelItem(Item):
 
         """
         if not assets:
-            assets = {Path(i).name: Asset(i, Path(i).name) for i in find_model_files(ras_project_file)}
+            model_files = find_model_files(ras_project_file)
+            assets = {}
+            for file_path in model_files:
+                asset_name = Path(file_path).name
+                asset = Asset(file_path, asset_name)
+                # If asset file path is a UNC (network) path, STAC tries to normalize the href which makes it unreadable  
+                # Overwrite the asset href with original filepath if it's a UNC path
+                if file_path.startswith("//") or file_path.startswith("\\\\"):
+                    asset.href = file_path
+                    assets[asset_name] = asset
+                else:
+                    assets[asset_name] = asset
+
         else:
             assets = {Path(i).name: Asset(i, Path(i).name) for i in assets}
 

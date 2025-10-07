@@ -139,6 +139,9 @@ class AssetFactory:
             if pattern.match(fpath):
                 # logger.debug(f"Matched {pattern} for {Path(fpath).name}: {asset_class}")
                 created_asset = asset_class.from_dict(asset.to_dict())
+                # Overwrite the asset href with original filepath if it's a UNC path
+                if fpath.startswith("//") or fpath.startswith("\\\\"):
+                    created_asset.href = fpath
 
                 # Cache the created asset
                 self._cache[fpath] = created_asset
