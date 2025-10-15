@@ -50,6 +50,16 @@ from hecstac.hms.s3_utils import create_fiona_aws_session
 
 logger = get_logger(__name__)
 
+HEADER_BASIN = "Basin: "
+HEADER_SUBBASIN = "Subbasin: "
+HEADER_FILENAME = "     Filename: "
+HEADER_CONTROL = "Control: "
+HEADER_TERRAIN_DATA = "Terrain Data: "
+OBSERVED_HYDROGRAPH_GAGE = "Observed Hydrograph Gage"
+CANVAS_X = "Canvas X"
+CANVAS_Y = "Canvas Y"
+DSS_FILE = "DSS File"
+
 
 class BaseTextFile(ABC):
     """Base class for text files."""
@@ -172,38 +182,47 @@ class ProjectFile(BaseTextFile):
                 break
             line = lines[i]
 
-            if line.startswith("Basin: "):
-                nextline = lines[i + 1]
-                if not nextline.startswith("     Filename: "):
-                    raise ValueError(f"unexpected line: {nextline}")
-                basinfile_bn = nextline[len("     Filename: ") :]
-                if self.directory.startswith(S3_PREFIX):
-                    basinfile_path = f"{self.directory}/{basinfile_bn}"
-                else:
-                    basinfile_path = os.path.join(self.directory, basinfile_bn)
-                self.basins.append(BasinFile(basinfile_path))
+            if line.startswith(HEADER_BASIN):
+                self._find_basin_file_path(lines, i)
 
             if line.startswith("Precipitation: "):
-                nextline = lines[i + 1]
-                if not nextline.startswith("     Filename: "):
-                    raise ValueError(f"unexpected line: {nextline}")
-                metfile_bn = nextline[len("     Filename: ") :]
-                if self.directory.startswith(S3_PREFIX):
-                    metfile_path = f"{self.directory}/{metfile_bn}"
-                else:
-                    metfile_path = os.path.join(self.directory, metfile_bn)
-                self.mets.append(MetFile(metfile_path))
+                self._find_precipitation_file_path(lines, i)
 
-            if line.startswith("Control: "):
-                nextline = lines[i + 1]
-                if not nextline.startswith("     FileName: "):
-                    raise ValueError(f"unexpected line: {nextline}")
-                controlfile_bn = nextline[len("     FileName: ") :]
-                if self.directory.startswith(S3_PREFIX):
-                    controlfile_path = f"{self.directory}/{controlfile_bn}"
-                else:
-                    controlfile_path = os.path.join(self.directory, controlfile_bn)
-                self.controls.append(ControlFile(controlfile_path))
+            if line.startswith(HEADER_CONTROL):
+                self._find_control_file_path(lines, i)
+
+    def _find_basin_file_path(self, lines, i):
+        nextline = lines[i + 1]
+        if not nextline.startswith(HEADER_FILENAME):
+            raise ValueError(f"unexpected line: {nextline}")
+        basinfile_bn = nextline[len(HEADER_FILENAME) :]
+        if self.directory.startswith(S3_PREFIX):
+            basinfile_path = f"{self.directory}/{basinfile_bn}"
+        else:
+            basinfile_path = os.path.join(self.directory, basinfile_bn)
+        self.basins.append(BasinFile(basinfile_path))
+
+    def _find_precipitation_file_path(self, lines, i):
+        nextline = lines[i + 1]
+        if not nextline.startswith(HEADER_FILENAME):
+            raise ValueError(f"unexpected line: {nextline}")
+        metfile_bn = nextline[len(HEADER_FILENAME) :]
+        if self.directory.startswith(S3_PREFIX):
+            metfile_path = f"{self.directory}/{metfile_bn}"
+        else:
+            metfile_path = os.path.join(self.directory, metfile_bn)
+        self.mets.append(MetFile(metfile_path))
+
+    def _find_control_file_path(self, lines, i):
+        nextline = lines[i + 1]
+        if not nextline.startswith("     FileName: "):
+            raise ValueError(f"unexpected line: {nextline}")
+        controlfile_bn = nextline[len("     FileName: ") :]
+        if self.directory.startswith(S3_PREFIX):
+            controlfile_path = f"{self.directory}/{controlfile_bn}"
+        else:
+            controlfile_path = os.path.join(self.directory, controlfile_bn)
+        self.controls.append(ControlFile(controlfile_path))
 
     @property
     def file_counts(self):
@@ -276,7 +295,7 @@ class ProjectFile(BaseTextFile):
             logger.warning("No gage file to extract gages from.")
 
         if self.pdata:
-            files.update([pdata.attrs["DSS File"] for pdata in self.pdata.elements.elements.values()])
+            files.update([pdata.attrs[DSS_FILE] for pdata in self.pdata.elements.elements.values()])
         else:
             logger.warning("No pdata files found.")
 
@@ -300,8 +319,8 @@ class ProjectFile(BaseTextFile):
         if self.run:
             files = set(
                 [i[1].attrs["Log File"] for i in self.run.elements]
-                + [i[1].attrs["DSS File"] for i in self.run.elements]
-                + [i[1].attrs["DSS File"].replace(".dss", ".out") for i in self.run.elements]
+                + [i[1].attrs[DSS_FILE] for i in self.run.elements]
+                + [i[1].attrs[DSS_FILE].replace(".dss", ".out") for i in self.run.elements]
             )
 
             files = [str(Path(f.replace("\\", "/"))) for f in files]
@@ -402,15 +421,15 @@ class BasinFile(BaseTextFile):
     def parse_name(self):
         """Parse basin name."""
         lines = self.content.splitlines()
-        if not lines[0].startswith("Basin: "):
+        if not lines[0].startswith(HEADER_BASIN):
             raise ValueError(f"unexpected first line: {lines[0]}")
-        self.name = lines[0][len("Basin: ") :]
+        self.name = lines[0][len(HEADER_BASIN) :]
 
     def scan_for_headers_and_footers(self):
         """Scan for basin headers and footers."""
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
-            if line.startswith("Basin: "):
+            if line.startswith(HEADER_BASIN):
                 attrs = utils.parse_attrs(lines[i + 1 :])
                 self.header = BasinHeader(attrs)
             if line.startswith("Basin Schematic Properties:"):
@@ -445,74 +464,106 @@ class BasinFile(BaseTextFile):
 
         lines = self.content.splitlines()
         for i, line in enumerate(lines):
-            geom = None
-            slope = None
+            if line.startswith(HEADER_SUBBASIN):
+                name = line[len(HEADER_SUBBASIN) :]
+                elements[name] = self._parse_subbasin(lines, name, sqlite, i)
 
-            if line.startswith("Subbasin: "):
-                name = line[len("Subbasin: ") :]
-                attrs = utils.parse_attrs(lines[i + 1 :])
-                if self.read_geom:
-                    geom = sqlite.subbasin_feats[sqlite.subbasin_feats["name"] == name].geometry.values[0]
-                elements[name] = Subbasin(name, attrs, geom)
-
-            if line.startswith("Reach: "):
+            elif line.startswith("Reach: "):
                 name = line[len("Reach: ") :]
-                attrs = utils.parse_attrs(lines[i + 1 :])
-                if self.read_geom:
-                    try:
-                        geom = sqlite.reach_feats[sqlite.reach_feats["name"] == name].geometry.values[0]
-                        if "slope" in sqlite.reach_feats.columns:
-                            slope = sqlite.reach_feats[sqlite.reach_feats["name"] == name]["slope"].values[0]
-                        else:
-                            slope = 0
-                    except IndexError:
-                        x1 = utils.search_contents(lines[i + 1 :], "Canvas X", ":", False)[0]
-                        y1 = utils.search_contents(lines[i + 1 :], "Canvas Y", ":", False)[0]
-                        x2 = utils.search_contents(lines[i + 1 :], "From Canvas X", ":", False)[0]
-                        y2 = utils.search_contents(lines[i + 1 :], "From Canvas Y", ":", False)[0]
-                        geom = LineString([[float(x1), float(y1)], [float(x2), float(y2)]])
-                        slope = 0
+                elements[name] = self._parse_reach(lines, name, sqlite, i)
 
-                elements[name] = Reach(name, attrs, geom, slope)
-
-            if line.startswith("Junction: "):
+            elif line.startswith("Junction: "):
                 name = line[len("Junction: ") :]
-                attrs = utils.parse_attrs(lines[i + 1 :])
-                if self.read_geom:
-                    geom = Point((float(attrs["Canvas X"]), float(attrs["Canvas Y"])))
-                elements[name] = Junction(name, attrs, geom)
+                elements[name] = self._parse_junction(lines, name, i)
 
-            if line.startswith("Sink: "):
+            elif line.startswith("Sink: "):
                 name = line[len("Sink: ") :]
-                attrs = utils.parse_attrs(lines[i + 1 :])
-                if self.read_geom:
-                    geom = Point((float(attrs["Canvas X"]), float(attrs["Canvas Y"])))
-                elements[name] = Sink(name, attrs, geom)
+                elements[name] = self._parse_sink(lines, name, i)
 
-            if line.startswith("Reservoir: "):
+            elif line.startswith("Reservoir: "):
                 name = line[len("Reservoir: ") :]
-                attrs = OrderedDict({"text": lines[i + 1 :]})
-                if self.read_geom:
-                    x = utils.search_contents(lines[i + 1 :], "Canvas X", ":", False)[0]
-                    y = utils.search_contents(lines[i + 1 :], "Canvas Y", ":", False)[0]
-                    geom = Point((float(x), float(y)))
-                elements[name] = Reservoir(name, attrs, geom)
+                elements[name] = self._parse_reservoir(lines, name, i)
 
-            if line.startswith("Source: "):
+            elif line.startswith("Source: "):
                 name = line[len("Source: ") :]
-                attrs = utils.parse_attrs(lines[i + 1 :])
-                if self.read_geom:
-                    geom = Point((float(attrs["Canvas X"]), float(attrs["Canvas Y"])))
-                elements[name] = Source(name, attrs, geom)
+                elements[name] = self._parse_source(lines, name, i)
 
-            if line.startswith("Diversion: "):
+            elif line.startswith("Diversion: "):
                 name = line[len("Diversion: ") :]
-                attrs = utils.parse_attrs(lines[i + 1 :])
-                if self.read_geom:
-                    geom = Point((float(attrs["Canvas X"]), float(attrs["Canvas Y"])))
-                elements[name] = Diversion(name, attrs, geom)
+                elements[name] = self._parse_diversion(lines, name, i)
 
         return elements
+
+    def _parse_subbasin(self, lines, name, sqlite, i) -> Subbasin:
+        geom = None
+        attrs = utils.parse_attrs(lines[i + 1 :])
+        if self.read_geom:
+            geom = sqlite.subbasin_feats[sqlite.subbasin_feats["name"] == name].geometry.values[0]
+
+        return Subbasin(name, attrs, geom)
+
+    def _parse_reach(self, lines, name, sqlite, i) -> Reach:
+        geom = None
+        slope = None
+        attrs = utils.parse_attrs(lines[i + 1 :])
+        if self.read_geom:
+            try:
+                geom = sqlite.reach_feats[sqlite.reach_feats["name"] == name].geometry.values[0]
+                if "slope" in sqlite.reach_feats.columns:
+                    slope = sqlite.reach_feats[sqlite.reach_feats["name"] == name]["slope"].values[0]
+                else:
+                    slope = 0
+            except IndexError:
+                x1 = utils.search_contents(lines[i + 1 :], CANVAS_X, ":", False)[0]
+                y1 = utils.search_contents(lines[i + 1 :], CANVAS_Y, ":", False)[0]
+                x2 = utils.search_contents(lines[i + 1 :], f"From {CANVAS_X}", ":", False)[0]
+                y2 = utils.search_contents(lines[i + 1 :], f"From {CANVAS_Y}", ":", False)[0]
+                geom = LineString([[float(x1), float(y1)], [float(x2), float(y2)]])
+                slope = 0
+
+        return Reach(name, attrs, geom, slope)
+
+    def _parse_junction(self, lines, name, i) -> Junction:
+        geom = None
+        attrs = utils.parse_attrs(lines[i + 1 :])
+        if self.read_geom:
+            geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
+
+        return Junction(name, attrs, geom)
+
+    def _parse_sink(self, lines, name, i) -> Sink:
+        geom = None
+        attrs = utils.parse_attrs(lines[i + 1 :])
+        if self.read_geom:
+            geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
+
+        return Sink(name, attrs, geom)
+
+    def _parse_reservoir(self, lines, name, i) -> Reservoir:
+        geom = None
+        attrs = OrderedDict({"text": lines[i + 1 :]})
+        if self.read_geom:
+            x = utils.search_contents(lines[i + 1 :], CANVAS_X, ":", False)[0]
+            y = utils.search_contents(lines[i + 1 :], CANVAS_Y, ":", False)[0]
+            geom = Point((float(x), float(y)))
+
+        return Reservoir(name, attrs, geom)
+
+    def _parse_source(self, lines, name, i) -> Source:
+        geom = None
+        attrs = utils.parse_attrs(lines[i + 1 :])
+        if self.read_geom:
+            geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
+
+        return Source(name, attrs, geom)
+
+    def _parse_diversion(self, lines, name, i) -> Diversion:
+        geom = None
+        attrs = utils.parse_attrs(lines[i + 1 :])
+        if self.read_geom:
+            geom = Point((float(attrs[CANVAS_X]), float(attrs[CANVAS_Y])))
+
+        return Diversion(name, attrs, geom)
 
     @property
     @lru_cache
@@ -604,14 +655,14 @@ class BasinFile(BaseTextFile):
         """Return GeoDataFrame of observation points."""
         gdf_list = []
         for name, element in self.elements:
-            if "Observed Hydrograph Gage" in element.attrs.keys():
+            if OBSERVED_HYDROGRAPH_GAGE in element.attrs.keys():
                 if isinstance(element, Junction) or isinstance(element, Sink):
                     gdf_list.append(
                         gpd.GeoDataFrame(
                             {
                                 "name": name,
                                 "geometry": element.geom,
-                                "gage_name": element.attrs["Observed Hydrograph Gage"],
+                                "gage_name": element.attrs[OBSERVED_HYDROGRAPH_GAGE],
                             },
                             geometry="geometry",
                             crs=self.crs,
@@ -624,7 +675,7 @@ class BasinFile(BaseTextFile):
                             {
                                 "name": name,
                                 "geometry": element.geom.centroid,
-                                "gage_name": element.attrs["Observed Hydrograph Gage"],
+                                "gage_name": element.attrs[OBSERVED_HYDROGRAPH_GAGE],
                             },
                             geometry="geometry",
                             crs=self.crs,
@@ -638,7 +689,7 @@ class BasinFile(BaseTextFile):
                             {
                                 "name": name,
                                 "geometry": start_point,
-                                "gage_name": element.attrs["Observed Hydrograph Gage"],
+                                "gage_name": element.attrs[OBSERVED_HYDROGRAPH_GAGE],
                             },
                             geometry="geometry",
                             crs=self.crs,
@@ -822,8 +873,8 @@ class MetFile(BaseTextFile):
                 attrs = utils.parse_attrs(lines[i + 1 :])
                 elements[name] = ET(name=name, attrs=attrs)
 
-            elif line.startswith("Subbasin: "):
-                name = line[len("Subbasin: ") :]
+            elif line.startswith(HEADER_SUBBASIN):
+                name = line[len(HEADER_SUBBASIN) :]
                 attrs = utils.parse_attrs(lines[i + 1 :])
                 elements[name] = SubbasinET(name=name, attrs=attrs)
         self.elements = elements
@@ -846,9 +897,9 @@ class ControlFile(BaseTextFile):
     def name(self):
         """Return control name."""
         lines = self.content.splitlines()
-        if not lines[0].startswith("Control: "):
+        if not lines[0].startswith(HEADER_CONTROL):
             raise ValueError(f"unexpected first line: {lines[0]}")
-        return lines[0][len("Control: ") :]
+        return lines[0][len(HEADER_CONTROL) :]
 
 
 class TerrainFile(BaseTextFile):
@@ -865,7 +916,7 @@ class TerrainFile(BaseTextFile):
 
         for line in self.content.splitlines():
             if not found_first:
-                if line.startswith("Terrain Data: "):
+                if line.startswith(HEADER_TERRAIN_DATA):
                     found_first = True
                 else:
                     continue
@@ -881,8 +932,8 @@ class TerrainFile(BaseTextFile):
                 )
                 name, raster_path, raster_dir, vert_units = "", "", "", ""
 
-            elif line.startswith("Terrain Data: "):
-                name = line[len("Terrain Data: ") :]
+            elif line.startswith(HEADER_TERRAIN_DATA):
+                name = line[len(HEADER_TERRAIN_DATA) :]
             elif line.startswith("     Elevation File Name: "):
                 raster_path_raw = line[len("     Elevation File Name: ") :]
                 raster_path = os.path.join(os.path.dirname(self.path), raster_path_raw.replace("\\", os.sep))

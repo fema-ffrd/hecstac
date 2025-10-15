@@ -42,6 +42,14 @@ from hecstac.ras.utils import (
     validate_point,
 )
 
+HEADER_TYPE_RM = "Type RM Length L Ch R "
+HEADER_RIVER_RCH_RM = "River Rch & RM"
+HEADER_MANN = "#Mann"
+HEADER_XS_HTAB = "XS HTab Starting El and Incr"
+HEADER_LATERAL_WEIR_END = "Lateral Weir End"
+HEADER_RIVER_REACH = "River Reach"
+PROGRAM_VERSION = "Program Version"
+
 
 def name_from_suffix(fpath: str, suffix: str) -> str:
     """Generate a name by appending a suffix to the file stem."""
@@ -77,7 +85,7 @@ class River:
     """HEC-RAS River."""
 
     def __init__(self, river: str, reaches: list[str] = None):
-        self.river = river
+        self.river_name = river
         self.reaches = reaches or []
 
 
@@ -90,7 +98,7 @@ class XS:
         river_reach: str,
         river: str,
         reach: str,
-        reach_geom: LineString = None,  # TODO: Does adding this to every section create a massive memory footprint?
+        reach_geom: LineString = None,
     ):
         self.ras_data = ras_data
         self.river = river
@@ -110,7 +118,7 @@ class XS:
 
         Example: Type RM Length L Ch R = 1 ,83554.  ,237.02,192.39,113.07.
         """
-        header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
+        header = search_contents(self.ras_data, HEADER_TYPE_RM, expect_one=True)
         val = header.split(",")[position]
         if val == "":
             return "0"
@@ -364,7 +372,7 @@ class XS:
         """The manning's values of the cross section."""
         try:
             lines = text_block_from_start_str_length(
-                "#Mann=" + search_contents(self.ras_data, "#Mann", expect_one=True, require_one=False),
+                f"{HEADER_MANN}={search_contents(self.ras_data, HEADER_MANN, expect_one=True, require_one=False)}",
                 math.ceil(self.number_of_mannings_points / 4),
                 self.ras_data,
             )
@@ -376,7 +384,7 @@ class XS:
     @cached_property
     def number_of_mannings_points(self):
         """The number of mannings points in the cross section."""
-        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0])
+        return int(search_contents(self.ras_data, HEADER_MANN, expect_one=True).split(",")[0])
 
     @cached_property
     def has_ineffectives(self):
@@ -412,7 +420,7 @@ class XS:
         A boolean indicating if ineffective flow area, blocked obstructions, or levees are contained
         in the channel (between bank stations).
         """
-        return None  # TODO: This feature was never added in ripple1d
+        return None
 
     def set_thalweg_drop(self, ds_thalweg):
         """Set the drop in thalweg elevation between this cross section and the downstream cross section."""
@@ -459,21 +467,21 @@ class XS:
     @cached_property
     def htab_min_elevation(self):
         """The starting elevation for the cross section's htab."""
-        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
+        result = search_contents(self.ras_data, HEADER_XS_HTAB, expect_one=False, require_one=False)
         if len(result) == 1:
             return result[0].split(",")[0]
 
     @cached_property
     def htab_min_increment(self):
         """The increment for the cross section's htab."""
-        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
+        result = search_contents(self.ras_data, HEADER_XS_HTAB, expect_one=False, require_one=False)
         if len(result) == 1:
             return result[0].split(",")[1]
 
     @cached_property
     def htab_points(self):
         """The number of points on the cross section's htab."""
-        result = search_contents(self.ras_data, "XS HTab Starting El and Incr", expect_one=False, require_one=False)
+        result = search_contents(self.ras_data, HEADER_XS_HTAB, expect_one=False, require_one=False)
         if len(result) == 1:
             return result[0].split(",")[2]
 
@@ -521,7 +529,7 @@ class XS:
 
         0, -1 correspond to 3 value manning's; horizontally varying manning's values, respectively.
         """
-        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
+        return int(search_contents(self.ras_data, HEADER_MANN, expect_one=True).split(",")[1])
 
     @cached_property
     def expansion_coefficient(self):
@@ -634,7 +642,7 @@ class XS:
     @cached_property
     def n_subdivisions(self) -> int:
         """Get the number of subdivisions (defined by manning's n)."""
-        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[0])
+        return int(search_contents(self.ras_data, HEADER_MANN, expect_one=True).split(",")[0])
 
     @cached_property
     def subdivision_type(self) -> int:
@@ -642,13 +650,13 @@ class XS:
 
         -1 seems to indicate horizontally-varied n.  0 seems to indicate subdivisions by LOB, channel, ROB.
         """
-        return int(search_contents(self.ras_data, "#Mann", expect_one=True).split(",")[1])
+        return int(search_contents(self.ras_data, HEADER_MANN, expect_one=True).split(",")[1])
 
     @cached_property
     def subdivisions(self) -> Optional[tuple[list[float], list[float]]]:
         """Get the stations corresponding to subdivision breaks, along with their roughness."""
         try:
-            header = [l for l in self.ras_data if l.startswith("#Mann")][0]
+            header = [l for l in self.ras_data if l.startswith(HEADER_MANN)][0]
             lines = text_block_from_start_str_length(
                 header,
                 math.ceil(self.n_subdivisions / 3),
@@ -729,7 +737,7 @@ class XS:
 
         return df["a"].cumsum().values[0]
 
-    def get_mannings_discharge(self, wse: float, slope: float, units: str) -> float:
+    def get_mannings_discharge(self, wse: float, slope: float) -> float:
         """Calculate the discharge of the cross-section according to manning's equation."""
         q = 0
         stations, mannings = self.subdivisions
@@ -743,9 +751,6 @@ class XS:
                 continue
             perimeter = self.get_wetted_perimeter(wse, start, stop)
             rh = area / perimeter
-            tmp_q = (1 / n) * area * (rh ** (2 / 3)) * slope
-            if units == "english":
-                tmp_q *= 1.49
             q += (1 / n) * area * (rh ** (2 / 3)) * slope
         return q
 
@@ -784,7 +789,7 @@ class Structure:
 
         Example: Type RM Length L Ch R = 3 ,83554.  ,237.02,192.39,113.07.
         """
-        header = search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=True)
+        header = search_contents(self.ras_data, HEADER_TYPE_RM, expect_one=True)
 
         return header.split(",")[position]
 
@@ -835,7 +840,6 @@ class Structure:
     @cached_property
     def width(self) -> float:
         """Structure width."""
-        # TODO check units of the RAS model
         return float(self.structure_data(1))
 
     @cached_property
@@ -894,17 +898,17 @@ class Structure:
     @cached_property
     def tail_water_river(self):
         """The tail water reache's river name."""
-        return search_contents(self.ras_data, "Lateral Weir End", expect_one=True).split(",")[0].rstrip()
+        return search_contents(self.ras_data, HEADER_LATERAL_WEIR_END, expect_one=True).split(",")[0].rstrip()
 
     @cached_property
     def tail_water_reach(self):
         """The tail water reache's reach name."""
-        return search_contents(self.ras_data, "Lateral Weir End", expect_one=True).split(",")[1].rstrip()
+        return search_contents(self.ras_data, HEADER_LATERAL_WEIR_END, expect_one=True).split(",")[1].rstrip()
 
     @cached_property
     def tail_water_river_station(self):
         """The tail water reache's river stationing."""
-        return float(search_contents(self.ras_data, "Lateral Weir End", expect_one=True).split(",")[2])
+        return float(search_contents(self.ras_data, HEADER_LATERAL_WEIR_END, expect_one=True).split(",")[2])
 
     @cached_property
     def tw_distance(self):
@@ -923,11 +927,13 @@ class Reach:
     """HEC-RAS River Reach."""
 
     def __init__(self, ras_data: list[str], river_reach: str):
-        reach_lines = text_block_from_start_end_str(f"River Reach={river_reach}", ["River Reach"], ras_data, -1)
+        reach_lines = text_block_from_start_end_str(
+            f"{HEADER_RIVER_REACH}={river_reach}", [HEADER_RIVER_REACH], ras_data, -1
+        )
         self.ras_data = reach_lines
         self.river_reach = river_reach
         self.river = river_reach.split(",")[0].rstrip()
-        self.reach = river_reach.split(",")[1].rstrip()
+        self.reach_name = river_reach.split(",")[1].rstrip()
 
     @cached_property
     def us_xs(self) -> "XS":
@@ -972,7 +978,7 @@ class Reach:
     @cached_property
     def reach_nodes(self) -> list[str]:
         """Reach nodes."""
-        return search_contents(self.ras_data, "Type RM Length L Ch R ", expect_one=False, require_one=False)
+        return search_contents(self.ras_data, HEADER_TYPE_RM, expect_one=False, require_one=False)
 
     @cached_property
     def cross_sections(self):
@@ -994,11 +1000,11 @@ class Reach:
 
             # Get xs text
             xs_lines = text_block_from_start_end_str(
-                f"Type RM Length L Ch R ={header}",
-                ["Type RM Length L Ch R", "River Reach"],
+                f"{HEADER_TYPE_RM}={header}",
+                [HEADER_TYPE_RM.strip(), HEADER_RIVER_REACH],
                 self.ras_data,
             )
-            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach, self.geom)
+            cross_section = XS(xs_lines, self.river_reach, self.river, self.reach_name, self.geom)
             cross_sections[cross_section.river_reach_rs] = cross_section
 
         for i, br in zip(cross_sections, bridge_xs):
@@ -1016,16 +1022,16 @@ class Reach:
             xs_type, _, _, _, _ = header.split(",")[:5]
             if int(xs_type) == 1:
                 xs_lines = text_block_from_start_end_str(
-                    f"Type RM Length L Ch R ={header}",
-                    ["Type RM Length L Ch R", "River Reach"],
+                    f"{HEADER_TYPE_RM}={header}",
+                    [HEADER_TYPE_RM.strip(), HEADER_RIVER_REACH],
                     self.ras_data,
                 )
-                cross_section = XS(xs_lines, self.river_reach, self.river, self.reach)
+                cross_section = XS(xs_lines, self.river_reach, self.river, self.reach_name)
                 continue
             elif int(xs_type) in [2, 3, 4, 5, 6]:  # culvert or bridge or multiple openeing
                 structure_lines = text_block_from_start_end_str(
-                    f"Type RM Length L Ch R ={header}",
-                    ["Type RM Length L Ch R", "River Reach"],
+                    f"{HEADER_TYPE_RM}={header}",
+                    [HEADER_TYPE_RM.strip(), HEADER_RIVER_REACH],
                     self.ras_data,
                 )
             else:
@@ -1038,7 +1044,7 @@ class Reach:
                 structure_lines,
                 self.river_reach,
                 self.river,
-                self.reach,
+                self.reach_name,
                 cross_section,
             )
             structures[structure.river_reach_rs] = structure
@@ -1052,7 +1058,7 @@ class Reach:
             {
                 "geometry": [LineString(self.coords)],
                 "river": [self.river],
-                "reach": [self.reach],
+                "reach": [self.reach_name],
                 "river_reach": [self.river_reach],
                 # "number_of_coords": [self.number_of_coords],
                 # "coords": [self.coords],
@@ -1197,7 +1203,6 @@ class StorageArea:
 
     def __init__(self, ras_data: list[str]):
         self.ras_data = ras_data
-        # TODO: Implement this
 
 
 class Connection:
@@ -1205,7 +1210,6 @@ class Connection:
 
     def __init__(self, ras_data: list[str]):
         self.ras_data = ras_data
-        # TODO: Implement this
 
 
 class ProjectFile(CachedFile):
@@ -1246,7 +1250,7 @@ class ProjectFile(CachedFile):
     @cached_property
     def ras_version(self) -> str | None:
         """Return the ras version."""
-        version = search_contents(self.file_lines, "Program Version", token="=", expect_one=False, require_one=False)
+        version = search_contents(self.file_lines, PROGRAM_VERSION, token="=", expect_one=False, require_one=False)
         if version == []:
             version = search_contents(
                 self.file_lines, "Program and Version", token=":", expect_one=False, require_one=False
@@ -1299,7 +1303,7 @@ class PlanFile(CachedFile):
     @cached_property
     def plan_version(self) -> str:
         """Return program version."""
-        return search_contents(self.file_lines, "Program Version", require_one=False)
+        return search_contents(self.file_lines, PROGRAM_VERSION, require_one=False)
 
     @cached_property
     def geometry_file(self) -> str:
@@ -1323,7 +1327,7 @@ class PlanFile(CachedFile):
     @cached_property
     def is_encroached(self) -> bool:
         """Check if any nodes are encroached."""
-        return any(["Encroach Node" in i for i in self.file_lines])
+        return any("Encroach Node" in i for i in self.file_lines)
 
     @cached_property
     def breach_locations(self) -> dict:
@@ -1354,7 +1358,7 @@ class GeometryFile(CachedFile):
     @cached_property
     def geom_version(self) -> str:
         """Return program version."""
-        v = search_contents(self.file_lines, "Program Version", require_one=False)
+        v = search_contents(self.file_lines, PROGRAM_VERSION, require_one=False)
         if len(v) == 0:
             return "N/A"
         else:
@@ -1396,7 +1400,7 @@ class GeometryFile(CachedFile):
         """A dictionary of river_name: River (class) for the rivers contained in the HEC-RAS geometry file."""
         tmp_rivers = defaultdict(list)
         for reach in self.reaches.values():  # First, group all reaches into their respective rivers
-            tmp_rivers[reach.river].append(reach.reach)
+            tmp_rivers[reach.river].append(reach.reach_name)
         for (
             river,
             reaches,
@@ -1507,7 +1511,7 @@ class GeometryFile(CachedFile):
             subset_xs = xs_gdf.loc[xs_gdf["river_reach"] == reach["river_reach"]].copy()
             not_reversed_xs = check_xs_direction(subset_xs, reach.geometry)
             subset_xs["geometry"] = subset_xs.apply(
-                lambda row: (
+                lambda row, not_reversed_xs=not_reversed_xs: (
                     row.geometry
                     if row["river_reach_rs"] in list(not_reversed_xs["river_reach_rs"])
                     else reverse(row.geometry)
@@ -1540,7 +1544,7 @@ class GeometryFile(CachedFile):
         xs_df = self.xs_gdf  # shorthand
         if len(xs_df) <= 0:
             return None
-        assert not all([i.is_empty for i in xs_df.geometry]), (
+        assert not all(i.is_empty for i in xs_df.geometry), (
             "No valid cross-sections found.  Possibly non-georeferenced model"
         )
         assert len(xs_df) > 1, "Only one valid cross-section found."
@@ -1569,7 +1573,7 @@ class GeometryFile(CachedFile):
                 polys = []
                 for i in valid.geoms:
                     if isinstance(i, MultiPolygon):
-                        polys.extend([j for j in i.geoms])
+                        polys.extend(i.geoms)
                     elif isinstance(i, Polygon):
                         polys.append(i)
                 all_valid.extend(polys)
@@ -1633,94 +1637,94 @@ class GeometryFile(CachedFile):
         if they are update 'has_lateral_structures' to True.
         """
         for structure in self.structures.values():
-            if structure.type == StructureType.LATERAL_STRUCTURE:
-                try:
-                    us_rs = xs_gdf.loc[
-                        (xs_gdf["river"] == structure.river)
-                        & (xs_gdf["reach"] == structure.reach)
-                        & (xs_gdf["river_station"] > structure.river_station),
-                        "river_station",
-                    ].min()
+            if structure.type != StructureType.LATERAL_STRUCTURE:
+                continue
 
-                    ds_xs = xs_gdf.loc[
-                        (xs_gdf["river"] == structure.river)
-                        & (xs_gdf["reach"] == structure.reach)
-                        & (xs_gdf["river_station"] <= us_rs)
-                    ]
+            try:
+                self._process_main_lateral_structure(xs_gdf, structure)
 
-                    reach_len = 0
-                    river_stations = []
-                    for _, row in ds_xs.iterrows():
-                        reach_len += row["channel_reach_length"]
-                        river_stations.append(row.river_station)
-                        if reach_len > structure.distance_to_us_xs + structure.weir_length:
-                            break
+                if structure.tail_water_river in xs_gdf.river:
+                    self._process_tail_water_lateral_structure(xs_gdf, structure)
 
-                    xs_gdf.loc[
-                        (xs_gdf["river"] == structure.river)
-                        & (xs_gdf["reach"] == structure.reach)
-                        & (xs_gdf["river_station"] <= max(river_stations))
-                        & (xs_gdf["river_station"] >= min(river_stations)),
-                        "has_lateral_structure",
-                    ] = True
-
-                    if structure.tail_water_river in xs_gdf.river:
-                        if structure.multiple_xs:
-                            ds_xs = xs_gdf.loc[
-                                (xs_gdf["river"] == structure.tail_water_river)
-                                & (xs_gdf["reach"] == structure.tail_water_reach)
-                                & (xs_gdf["river_station"] <= structure.tail_water_river_station)
-                            ]
-
-                            reach_len = 0
-                            river_stations = []
-                            for _, row in ds_xs.iterrows():
-                                reach_len += row["channel_reach_length"]
-                                river_stations.append(row.river_station)
-                                if reach_len > structure.tw_distance + structure.weir_length:
-                                    break
-
-                            xs_gdf.loc[
-                                (xs_gdf["river"] == structure.tail_water_river)
-                                & (xs_gdf["reach"] == structure.tail_water_reach)
-                                & (xs_gdf["river_station"] <= max(river_stations))
-                                & (xs_gdf["river_station"] >= min(river_stations)),
-                                "has_lateral_structure",
-                            ] = True
-                        else:
-                            ds_xs = xs_gdf.loc[
-                                (xs_gdf["river"] == structure.tail_water_river)
-                                & (xs_gdf["reach"] == structure.tail_water_reach)
-                                & (xs_gdf["river_station"] <= structure.tail_water_river_station)
-                            ]
-
-                            reach_len = 0
-                            river_stations = []
-                            for _, row in ds_xs.iterrows():
-                                reach_len += row["channel_reach_length"]
-                                river_stations.append(row.river_station)
-                                if len(river_stations) > 1:
-                                    break
-
-                            xs_gdf.loc[
-                                (xs_gdf["river"] == structure.tail_water_river)
-                                & (xs_gdf["reach"] == structure.tail_water_reach)
-                                & (xs_gdf["river_station"] <= max(river_stations))
-                                & (xs_gdf["river_station"] >= min(river_stations)),
-                                "has_lateral_structure",
-                            ] = True
-
-                except InvalidStructureDataError:
-                    pass
+            except InvalidStructureDataError:
+                pass
 
         return xs_gdf
+
+    def _process_main_lateral_structure(self, xs_gdf, structure):
+        """Process main lateral structure."""
+        us_rs = xs_gdf.loc[
+            (xs_gdf["river"] == structure.river)
+            & (xs_gdf["reach"] == structure.reach)
+            & (xs_gdf["river_station"] > structure.river_station),
+            "river_station",
+        ].min()
+
+        ds_xs = xs_gdf.loc[
+            (xs_gdf["river"] == structure.river)
+            & (xs_gdf["reach"] == structure.reach)
+            & (xs_gdf["river_station"] <= us_rs)
+        ]
+
+        river_stations = self._calculate_affected_stations(ds_xs, structure.distance_to_us_xs + structure.weir_length)
+
+        xs_gdf.loc[
+            (xs_gdf["river"] == structure.river)
+            & (xs_gdf["reach"] == structure.reach)
+            & (xs_gdf["river_station"] <= max(river_stations))
+            & (xs_gdf["river_station"] >= min(river_stations)),
+            "has_lateral_structure",
+        ] = True
+
+    def _process_tail_water_lateral_structure(self, xs_gdf, structure):
+        """Process lateral structure on the tail water river."""
+        ds_xs = xs_gdf.loc[
+            (xs_gdf["river"] == structure.tail_water_river)
+            & (xs_gdf["reach"] == structure.tail_water_reach)
+            & (xs_gdf["river_station"] <= structure.tail_water_river_station)
+        ]
+
+        if structure.multiple_xs:
+            river_stations = self._calculate_affected_stations(ds_xs, structure.tw_distance + structure.weir_length)
+        else:
+            river_stations = self._calculate_single_xs_stations(ds_xs)
+
+        xs_gdf.loc[
+            (xs_gdf["river"] == structure.tail_water_river)
+            & (xs_gdf["reach"] == structure.tail_water_reach)
+            & (xs_gdf["river_station"] <= max(river_stations))
+            & (xs_gdf["river_station"] >= min(river_stations)),
+            "has_lateral_structure",
+        ] = True
+
+    def _calculate_affected_stations(self, ds_xs, max_reach_length) -> list:
+        """Calculate affected river stations."""
+        reach_len = 0
+        river_stations = []
+
+        for _, row in ds_xs.iterrows():
+            reach_len += row["channel_reach_length"]
+            river_stations.append(row.river_station)
+            if reach_len > max_reach_length:
+                break
+
+        return river_stations
+
+    def _calculate_single_xs_stations(self, ds_xs) -> list:
+        """Calculate river stations for a single cross-section."""
+        river_stations = []
+
+        for _, row in ds_xs.iterrows():
+            river_stations.append(row.river_station)
+            if len(river_stations) > 1:
+                break
+
+        return river_stations
 
     def get_subtype_gdf(self, subtype: str) -> gpd.GeoDataFrame:
         """Get a geodataframe of a specific subtype of geometry asset."""
         tmp_objs: dict[str] = getattr(self, subtype)
-        return gpd.GeoDataFrame(
-            pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True)
-        )  # TODO: may need to add some logic here for empty dicts
+        return gpd.GeoDataFrame(pd.concat([obj.gdf for obj in tmp_objs.values()], ignore_index=True))
 
     def iter_labeled_gdfs(self) -> Iterator[tuple[str, gpd.GeoDataFrame]]:
         """Return gdf and associated property."""
@@ -1750,7 +1754,7 @@ class SteadyFlowFile(CachedFile):
     @cached_property
     def n_flow_change_locations(self):
         """Number of flow change locations."""
-        return len(search_contents(self.file_lines, "River Rch & RM", expect_one=False))
+        return len(search_contents(self.file_lines, HEADER_RIVER_RCH_RM, expect_one=False))
 
     @cached_property
     def profile_names(self):
@@ -1762,41 +1766,66 @@ class SteadyFlowFile(CachedFile):
         """Retrieve flow change locations."""
         flow_change_locations = []
         tmp_n_flow_change_locations = self.n_flow_change_locations
-        for ind, location in enumerate(search_contents(self.file_lines, "River Rch & RM", expect_one=False)):
-            # parse river, reach, and river station for the flow change location
-            river, reach, rs = location.split(",")
-            lines = text_block_from_start_end_str(
-                f"River Rch & RM={location}",
-                ["River Rch & RM", "Boundary for River Rch & Prof#"],
-                self.file_lines,
-            )
-            flows = []
+        locations = enumerate(search_contents(self.file_lines, HEADER_RIVER_RCH_RM, expect_one=False))
+        for location in locations:
+            result = self._process_flow_change_location(location, flow_change_locations, tmp_n_flow_change_locations)
+            if result is not None:
+                flow_change_locations, tmp_n_flow_change_locations = result
+                if len(flow_change_locations) == tmp_n_flow_change_locations:
+                    return flow_change_locations
 
-            for line in lines[1:]:
-                if "River Rch & RM" in line:
+    def _process_flow_change_location(self, location, flow_change_locations, tmp_n_flow_change_locations):
+        """Process a single flow change location."""
+        # parse river, reach, and river station for the flow change location
+        river, reach, rs = location.split(",")
+        lines = text_block_from_start_end_str(
+            f"{HEADER_RIVER_RCH_RM}={location}",
+            [HEADER_RIVER_RCH_RM, "Boundary for River Rch & Prof#"],
+            self.file_lines,
+        )
+        flows = []
+
+        for line in lines[1:]:
+            if HEADER_RIVER_RCH_RM in line:
+                break
+
+            result = self._process_flow_line(
+                line, flows, flow_change_locations, tmp_n_flow_change_locations, river, reach, rs
+            )
+            if result is not None:
+                return result
+
+        return None
+
+    def _process_flow_line(self, line, flows, flow_change_locations, tmp_n_flow_change_locations, river, reach, rs):
+        """Process a single line of flow data."""
+        for i in range(0, len(line), 8):
+            tmp_str = line[i : i + 8].lstrip(" ")
+
+            if len(tmp_str) == 0:
+                tmp_n_flow_change_locations -= 1  # invalid entry
+                if len(flow_change_locations) == tmp_n_flow_change_locations:
+                    return flow_change_locations, tmp_n_flow_change_locations
+                else:
                     break
 
-                for i in range(0, len(line), 8):
-                    tmp_str = line[i : i + 8].lstrip(" ")
-                    if len(tmp_str) == 0:
-                        tmp_n_flow_change_locations -= 1  # invalid entry
-                        if len(flow_change_locations) == tmp_n_flow_change_locations:
-                            return flow_change_locations
-                        else:
-                            break
-                    flows.append(float(tmp_str))
-                    if len(flows) == self.n_profiles:
-                        flow_change_locations.append(
-                            {
-                                "river": river.strip(" "),
-                                "reach": reach.strip(" "),
-                                "rs": float(rs),
-                                "flows": flows,
-                                "profile_names": self.profile_names,
-                            }
-                        )
-                    if len(flow_change_locations) == tmp_n_flow_change_locations:
-                        return flow_change_locations
+            flows.append(float(tmp_str))
+
+            if len(flows) == self.n_profiles:
+                flow_change_locations.append(
+                    {
+                        "river": river.strip(" "),
+                        "reach": reach.strip(" "),
+                        "rs": float(rs),
+                        "flows": flows,
+                        "profile_names": self.profile_names,
+                    }
+                )
+
+            if len(flow_change_locations) == tmp_n_flow_change_locations:
+                return flow_change_locations, tmp_n_flow_change_locations
+
+        return None
 
 
 @dataclass
@@ -1859,7 +1888,6 @@ class UnsteadyFlowFile(CachedFile):
 class QuasiUnsteadyFlowFile(CachedFile):
     """HEC-RAS Quasi-Unsteady Flow file data."""
 
-    # TODO: implement this class
     pass
 
 
@@ -1876,7 +1904,7 @@ class RASHDFFile(CachedFile):
         self._initialized = True
         self.logger = get_logger(__name__)
         self.fpath = fpath
-        self.logger.info(f"Reading: {self.fpath}")
+        self.logger.info(f"Reading HDF File: {self.fpath}")
 
         self.hdf_object = self._hdf_constructor.open_uri(
             fpath,
