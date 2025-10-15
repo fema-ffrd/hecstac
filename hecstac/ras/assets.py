@@ -144,12 +144,13 @@ PLAN_TITLE = "HEC-RAS:plan_title"
 FLOW_TITLE = "HEC-RAS:flow_title"
 
 PRJ_CRS = "authority_code"
+RAS_PRJ_REGEX = r".+\.[pP][rR][jJ]$"
 
 
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
-    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    regex_parse_str = RAS_PRJ_REGEX
     __roles__ = ["ras-project"]
     __media_type__ = MediaType.TEXT
     __description__ = "The HEC-RAS project file."
@@ -170,7 +171,7 @@ class ProjectAsset(GenericAsset[ProjectFile]):
 class ProjectionAsset(GenericAsset[CachedFile]):
     """.prj projection file."""
 
-    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    regex_parse_str = RAS_PRJ_REGEX
     __roles__ = ["projection"]
     __media_type__ = MediaType.TEXT
     __description__ = "A coordinate reference system projection file."
@@ -185,7 +186,7 @@ class ProjectionAsset(GenericAsset[CachedFile]):
 class PrjAsset(GenericAsset[CachedFile]):
     """Factory to create HEC-RAS project file assets or projection assets."""
 
-    regex_parse_str = r".+\.[pP][rR][jJ]$"
+    regex_parse_str = RAS_PRJ_REGEX
     __roles__ = []
     __description__ = "N/A"
     __file_class__ = CachedFile
@@ -271,7 +272,6 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
-        # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
             return None
         elif self.geometry is None:
@@ -512,8 +512,6 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
 class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     """HEC-RAS Quasi-Unsteady Flow file asset."""
 
-    # TODO: implement this class
-
     regex_parse_str = r".+\.q\d{2}$"
     __roles__ = ["ras-quasi-unsteady"]
     __media_type__ = MediaType.TEXT
@@ -660,7 +658,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
 
     @cached_property
     def reference_line_names(self) -> list[str] | None:
-        """Docstring."""  # TODO: fill out
+        """Return the list of reference line names from the file."""
         if self.file.reference_lines is not None and not self.file.reference_lines.empty:
             return list(self.file.reference_lines["refln_name"])
 
@@ -727,7 +725,6 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     @cached_property
     def geometry_wgs84(self) -> Polygon | MultiPolygon:
         """Reproject geometry to wgs84."""
-        # TODO: this could be generalized to be a function that takes argument for CRS.
         if self.crs is None:
             return None
         else:
@@ -841,7 +838,6 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
                 map_layers.append(self._plot_breaklines)
             elif layer == "bc_lines":
                 map_layers.append(self._plot_bc_lines)
-            # TODO: Add support for river centerline and cross-sections (from .hdf)
         title = f"{title} - {os.path.basename(self.href)}"
         hdf_ext = os.path.basename(self.href).split(".")[-2]
         filename = f"thumbnail.{hdf_ext}.png"
@@ -883,7 +879,7 @@ class GeometricPreprocessorAsset(GenericAsset):
     __roles__ = ["ras-geometric-preprocessor"]
     __media_type__ = MediaType.TEXT
     __description__ = "Geometric Pre-Processor output file containing hydraulic properties, rating curves, and more."
-    __file_class__ = None  # TODO:  make a generic parent for these.
+    __file_class__ = None
 
 
 class BoundaryConditionAsset(GenericAsset):

@@ -7,6 +7,7 @@ import argparse
 from rashdf import RasPlanHdf
 from openpyxl.utils.exceptions import IllegalCharacterError
 from dotenv import load_dotenv
+from typing import Optional
 
 from hecstac.common.logger import initialize_logger
 from hecstac.common.utils import load_config
@@ -74,7 +75,7 @@ def list_plan_hdfs(s3_client, model_prefix: str) -> list[str]:
 
 def create_event_item(
     plan_file_path: str, source_model_path: str, output_prefix: str, calibration_only: bool = False
-) -> FFRDEventItem:
+) -> Optional[FFRDEventItem]:
     """
     Create and upload a STAC item for a RAS model event.
 
@@ -92,7 +93,7 @@ def create_event_item(
 
     if calibration_only and "calibration" not in event_name:
         logger.warning(f"{event_name} does not contain 'calibration', skipping...")
-        return
+        return None
 
     logger.info(f"Creating stac item for event: {event_name}")
 
@@ -157,7 +158,7 @@ if __name__ == "__main__":
 
         try:
             configs = load_config(args.config)
-        except (json.JSONDecodeError, ValueError) as e:
+        except ValueError as e:
             logger.error(f"Invalid config input: {e}")
             raise SystemExit(1)
 

@@ -105,14 +105,13 @@ if __name__ == "__main__":
     try:
         dotenv_loaded = load_dotenv()
         if not dotenv_loaded:
-            # TODO: Verify no issues occur on AWS if roles are in place and env vars are not set
             logger.warning(".env file not found or not loaded.")
 
         args = parse_args()
 
         try:
             configs = load_config(args.config)
-        except (json.JSONDecodeError, ValueError) as e:
+        except ValueError as e:
             logger.error(f"Invalid config input: {e}")
             raise SystemExit(1)
 

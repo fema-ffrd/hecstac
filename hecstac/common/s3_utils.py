@@ -93,7 +93,7 @@ def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
     """Check if a file exists in S3."""
     try:
         s3_client.head_object(Bucket=bucket, Key=key)
-    except Exception as e:
+    except Exception:
         raise FileNotFoundError(
             f"Cannot access file at `s3://{bucket}/{key}` please check the path and ensure credentials are correct."
         )
@@ -120,7 +120,6 @@ def metadata_to_s3(
     metadata_part: str = "metadata",
 ):
     """Upload the metadata JSON to S3."""
-    logger = get_logger(__name__)
     expected_href = f"s3://{bucket}/{prefix}/{metadata_part}/{model_name}.json"
     if item.self_href != expected_href:
         raise ValueError(

@@ -199,7 +199,7 @@ class GageAsset(GenericAsset[GageFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]} | {
-            f"hms:{gage.name}".lower(): {key: val for key, val in gage.attrs.items()} for gage in self.file.gages
+            f"hms:{gage.name}".lower(): dict(gage.attrs.items()) for gage in self.file.gages
         }
 
 
@@ -217,7 +217,7 @@ class GridAsset(GenericAsset[GridFile]):
         return (
             {HMS_TITLE: self.file.name}
             | {f"hms:{key}".lower(): val for key, val in self.file.attrs.items()}
-            | {f"hms:{grid.name}".lower(): {key: val for key, val in grid.attrs.items()} for grid in self.file.grids}
+            | {f"hms:{grid.name}".lower(): dict(grid.attrs.items()) for grid in self.file.grids}
         )
 
 
@@ -273,7 +273,7 @@ class TerrainAsset(GenericAsset[TerrainFile]):
     def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]} | {
-            f"hms:{layer['name']}".lower(): {key: val for key, val in layer.items()} for layer in self.file.layers
+            f"hms:{layer['name']}".lower(): dict(layer.items()) for layer in self.file.layers
         }
 
 

@@ -31,7 +31,7 @@ def check_storage_extension(asset: Asset) -> Asset:
     return asset
 
 
-def get_metadata(key: str) -> str:
+def get_metadata(key: str) -> dict:
     """Read the head object and return metadata."""
     _, _, s3_resource = init_s3_resources2()
     bucket, key = split_s3_key(key)
