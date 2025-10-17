@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
         try:
             configs = load_config(args.config)
-        except (json.JSONDecodeError, ValueError) as e:
+        except ValueError as e:
             logger.error(f"Invalid config input: {e}")
             raise SystemExit(1)
 
