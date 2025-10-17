@@ -19,8 +19,8 @@ from shapely.geometry import LineString, MultiLineString, Point
 
 import hecstac.hms.utils as utils
 from hecstac.common.base_io import ModelFileReader
-from hecstac.common.logger import get_logger
 from hecstac.common.consts import S3_PREFIX
+from hecstac.common.logger import get_logger
 from hecstac.hms.consts import BC_LENGTH, BC_LINE_BUFFER
 from hecstac.hms.data_model import (
     ET,
