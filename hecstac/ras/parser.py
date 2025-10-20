@@ -1549,15 +1549,21 @@ class GeometryFile(CachedFile):
         )
         assert len(xs_df) > 1, "Only one valid cross-section found."
         for river_reach in xs_df["river_reach"].unique():
-            xs_subset = xs_df[xs_df["river_reach"] == river_reach]
-            points = xs_subset.boundary.explode(index_parts=True).unstack()
-            points_last_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[-1].coords]
-            points_first_xs = [Point(coord) for coord in xs_subset["geometry"].iloc[0].coords[::-1]]
-            polygon = Polygon(points_first_xs + list(points[0]) + points_last_xs + list(points[1])[::-1])
-            if isinstance(polygon, MultiPolygon):
-                polygons += list(polygon.geoms)
-            else:
-                polygons.append(polygon)
+            xs_subset = xs_df[xs_df["river_reach"] == river_reach].sort_values("river_station")
+            for i in range(len(xs_subset) - 1):
+                first = xs_subset.iloc[i]
+                last = xs_subset.iloc[i + 1]
+                first_pts = [Point(coord) for coord in first["geometry"].coords]
+                last_pts = [Point(coord) for coord in last["geometry"].coords]
+                if not LineString([first_pts[0], last_pts[0]]).intersects(LineString([first_pts[-1], last_pts[-1]])):
+                    poly = Polygon(last_pts + first_pts[::-1])
+                else:
+                    poly = Polygon(last_pts + first_pts)
+                if poly.is_valid:
+                    polygons.append(poly)
+                else:
+                    polygons.append(make_valid(poly))
+
         if self.junction_gdf is not None:
             for _, j in self.junction_gdf.iterrows():
                 polygons.append(self.junction_hull(xs_df, j))
@@ -1565,26 +1571,33 @@ class GeometryFile(CachedFile):
         return out_hull
 
     def clean_polygons(self, polygons: list) -> list:
-        """Make polygons valid and remove geometry collections."""
-        all_valid = []
-        for p in polygons:
-            valid = make_valid(p)
-            if isinstance(valid, GeometryCollection):
-                polys = []
-                for i in valid.geoms:
-                    if isinstance(i, MultiPolygon):
-                        polys.extend(i.geoms)
-                    elif isinstance(i, Polygon):
-                        polys.append(i)
-                all_valid.extend(polys)
+        """Unpack geometry collections, make polygons valid, and remove internal rings."""
+        polys = self.unpack_geoms(polygons)
+        polys = [make_valid(i) for i in polys]
+        unioned = union_all(polys)
+        unioned = self.remove_holes(unioned)
+        return unioned
+
+    def unpack_geoms(self, geoms: list):
+        """Unpack multipolygons and geometry collections to polygon list."""
+        out = []
+        for i in geoms:
+            if isinstance(i, GeometryCollection):
+                for j in i.geoms:
+                    out.extend(self.unpack_geoms([j]))
+            elif isinstance(i, MultiPolygon):
+                out.extend([j for j in i.geoms])
             else:
-                all_valid.append(valid)
-        unioned = union_all(all_valid)
-        unioned = buffer(unioned, 0)
-        if unioned.interiors:
-            return Polygon(list(unioned.exterior.coords))
-        else:
-            return unioned
+                out.append(i)
+        return out
+
+    def remove_holes(self, geom):
+        """Remove internal holes in polygons."""
+        if isinstance(geom, Polygon):
+            return Polygon(geom.exterior)
+        elif isinstance(geom, MultiPolygon):
+            return MultiPolygon([Polygon(p.exterior) for p in geom.geoms])
+        return geom
 
     def junction_hull(self, xs_gdf: gpd.GeoDataFrame, junction: gpd.GeoSeries) -> Polygon:
         """Compute and return the concave hull (polygon) for a juction."""
