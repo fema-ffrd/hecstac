@@ -23,24 +23,24 @@ classifiers = [
 ]
 
 dependencies = [
-    "aiobotocore==2.21.1",
-    "boto3==1.37.1",
-    "botocore==1.37.1",
-    "contextily==1.6.2",
-    "dotenv==0.9.9",
-    "fiona==1.10.0rc1",
-    "fsspec==2025.3.1",
-    "geopandas==1.0.1",
-    "matplotlib==3.7.3",
+    "aiobotocore>=2.21.1",
+    "boto3>=1.37.1",
+    "botocore>=1.37.1",
+    "contextily>=1.6.2",
+    "dotenv>=0.9.9",
+    "fiona>=1.10.0rc1",
+    "fsspec>=2025.3.1",
+    "geopandas>=1.0.1",
+    "matplotlib>=3.7.3",
     "mypy-boto3-s3",
-    "obstore==0.6.0",
-    "pystac==1.13.0",
-    "rashdf==0.8.0",
-    "rasqc==0.0.3",
-    "requests==2.32.3",
-    "s3fs==2025.3.1",
-    "shapely==2.0.7",
-    "python-dotenv==1.1.0"
+    "obstore>=0.6.0",
+    "pystac>=1.13.0",
+    "rashdf>=0.8.0",
+    "rasqc>=0.0.3",
+    "requests>=2.32.3",
+    "s3fs>=2025.3.1",
+    "shapely>=2.0.7",
+    "python-dotenv>=1.1.0"
 ]
 
 [project.optional-dependencies]
