@@ -35,7 +35,7 @@ dependencies = [
     "mypy-boto3-s3",
     "obstore>=0.6.0",
     "pystac>=1.13.0",
-    "rashdf>=0.8.0",
+    "rashdf>=0.10.0",
     "rasqc>=0.0.3",
     "requests>=2.32.3",
     "s3fs>=2025.3.1",
