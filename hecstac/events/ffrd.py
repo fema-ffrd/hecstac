@@ -10,6 +10,7 @@ from typing import List
 
 from functools import cached_property
 import numpy as np
+import pandas as pd 
 from pystac import Asset, Item, Link
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
@@ -218,3 +219,32 @@ class FFRDEventItem(Item):
             self._add_ts_assets_from_dict(refpt_paths, "Parquet containing reference point time series data.")
         else:
             logger.info("No reference points found.")
+
+    def add_flow_asset(self, output_path: str):
+        """Extract flow time series from boundary condition lines, reference lines, and reference points. All data is combined into a single Parquet file and saved as an asset."""
+
+        plan_hdf = self.plan_hdf
+
+        bcline = plan_hdf.bc_lines_flow()
+        bcline.columns = [f"bc_line_id_{col}" for col in bcline.columns]
+
+        ref_pnt_stage = plan_hdf.reference_points_stage()
+        ref_pnt_stage.columns = [f"refpt_id_{col}" for col in ref_pnt_stage.columns]
+
+        ref_ln_flow = plan_hdf.reference_lines_flow()
+        ref_ln_flow.columns = [f"refln_id_{col}" for col in ref_ln_flow.columns]
+
+        all_flows = pd.concat([bcline, ref_pnt_stage, ref_ln_flow], axis=1)
+
+        all_flows.to_parquet(output_path)
+
+        self.add_asset(
+            "flow_data",
+            Asset(
+                href=output_path,
+                title="flow_data",
+                description="Parquet containing time series flow data for reference lines and bc lines, as well as reference point stages.",
+                media_type="application/x-parquet",
+                roles=["data"],
+            ),
+        )
