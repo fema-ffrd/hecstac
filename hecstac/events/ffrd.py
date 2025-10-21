@@ -222,7 +222,6 @@ class FFRDEventItem(Item):
 
     def add_flow_asset(self, output_path: str):
         """Extract flow time series from boundary condition lines, reference lines, and reference points. All data is combined into a single Parquet file and saved as an asset."""
-
         plan_hdf = self.plan_hdf
 
         bcline = plan_hdf.bc_lines_flow()
