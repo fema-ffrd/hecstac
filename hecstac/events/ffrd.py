@@ -10,7 +10,7 @@ from typing import List
 
 from functools import cached_property
 import numpy as np
-import pandas as pd 
+import pandas as pd
 from pystac import Asset, Item, Link
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension

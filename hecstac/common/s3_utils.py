@@ -40,7 +40,12 @@ def init_s3_resources() -> tuple:
 
 
 def list_keys_regex(
-    s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix: str = "", recursive: bool = True, return_full_path: bool = False
+    s3_client: boto3.Session.client,
+    bucket: str,
+    prefix_includes: str,
+    suffix: str = "",
+    recursive: bool = True,
+    return_full_path: bool = False,
 ) -> list:
     """List all keys in an S3 bucket matching a given prefix pattern and suffix."""
     keys = []
