@@ -78,10 +78,6 @@ def get_ras_files(s3_client, item_output_path):
     model_prefix = output_key.replace(output_key.split("/")[-1], "")
     ras_files = list_keys_regex(s3_client, bucket, model_prefix, return_full_path=True)
 
-    file_to_remove = "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork/item.json"
-    if file_to_remove in ras_files:
-        ras_files.remove(file_to_remove)
-
     return ras_files
 
 
