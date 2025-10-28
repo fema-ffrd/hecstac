@@ -133,7 +133,7 @@ class FFRDEventItem(Item):
     def _geometry(self) -> dict | None:
         """Geometry of the FFRD Event STAC item. Union of all basins in the FFRD Event items."""
         if len(self.source_model_items) == 0:
-            areas = self.plan_hdf.mesh_areas() 
+            areas = self.plan_hdf.mesh_areas()
 
             if areas.crs is not None:
                 areas = areas.to_crs("EPSG:4326")
@@ -159,7 +159,7 @@ class FFRDEventItem(Item):
             areas = self.plan_hdf.mesh_areas()
             if areas.crs is not None:
                 areas = areas.to_crs("EPSG:4326")
-            bounds = areas.total_bounds 
+            bounds = areas.total_bounds
             return [float(b) for b in bounds]
         elif len(self.source_model_items) > 1:
             bboxes = np.array([item.bbox for item in self.source_model_items])
