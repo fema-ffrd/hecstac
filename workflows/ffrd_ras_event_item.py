@@ -12,7 +12,7 @@ from typing import Optional
 from hecstac.common.logger import initialize_logger
 from hecstac.common.utils import load_config
 from hecstac.common.s3_utils import init_s3_resources, list_keys_regex, parse_s3_url, save_bytes_s3
-from hecstac.events.ffrd import FFRDEventItem
+from hecstac.events.ras_ffrd import FFRDEventItem
 
 
 def parse_args() -> argparse.Namespace:
