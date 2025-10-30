@@ -1,13 +1,13 @@
 [{
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-    "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/flow.pq"
+    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=blw-clear-fork/timeseries.pq"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek",
-    "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=bardwell-creek/flow.pq"
+    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=bardwell-creek/timeseries.pq"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek",
-    "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=bedias-creek/flow.pq"
+    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=bedias-creek/timeseries.pq"
 }
 ]

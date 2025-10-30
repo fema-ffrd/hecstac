@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     Config fields:
         Required:
             - model_prefix: S3 path prefix to the RAS simulation files. Item will be written to this prefix.
-            - flow_output_path: S3 path for the output flow time series parquet asset.
+            - timeseries_output_path: S3 path for the output flow time series parquet asset.
         Optional:
             - source_model_item: S3 path to a source model STAC Item the event is derived from
     Example JSON config:
@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
         Single:
         '{
             "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-            "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/flow.pq",
+            "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/timeseries.pq",
             "source_model_item": "s3://trinity-pilot/stac/prod-support/calibration/model=blw-clear-fork/item.json"
         }'
 
@@ -36,11 +36,11 @@ def parse_args() -> argparse.Namespace:
         '[
             {
             "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-            "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/flow.pq",
+            "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/timeseries.pq",
             },
             {
             "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/150/hydraulics/bedias-creek",
-            "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=150/model=bedias-creek/flow.pq",
+            "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=150/model=bedias-creek/timeseries.pq",
             }
         ]'
 
@@ -123,7 +123,7 @@ def main(config) -> None:
         event_item = create_conformance_item(
             model_prefix=config["model_prefix"],
             ras_files=ras_files,
-            flow_output_path=config["flow_output_path"],
+            flow_output_path=config["timeseries_output_path"],
             item_id=item_id,
             source_model_path=source_model_item,
         )
