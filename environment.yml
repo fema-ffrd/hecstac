@@ -95,13 +95,13 @@ dependencies:
   # pip-only packages
   - pip
   - pip:
-      - cfgv==3.4.0
-      - dotenv==0.9.9
-      - fiona==1.10.0rc1
-      - hydrostab==0.2.0
-      - iniconfig==2.1.0
-      - propcache==0.3.2
-      - pyarrow==21.0.0
-      - rashdf==0.8.0
-      - rasqc==0.0.3
+      - cfgv>=3.4.0
+      - dotenv>=0.9.9
+      - fiona>=1.10.0rc1
+      - hydrostab>=0.2.0
+      - iniconfig>=2.1.0
+      - propcache>=0.3.2
+      - pyarrow>=21.0.0
+      - rashdf>=0.10.0
+      - rasqc>=0.0.3
       - -e .

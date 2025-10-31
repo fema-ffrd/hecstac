@@ -40,7 +40,12 @@ def init_s3_resources() -> tuple:
 
 
 def list_keys_regex(
-    s3_client: boto3.Session.client, bucket: str, prefix_includes: str, suffix: str = "", recursive: bool = True
+    s3_client: boto3.Session.client,
+    bucket: str,
+    prefix_includes: str,
+    suffix: str = "",
+    recursive: bool = True,
+    return_full_path: bool = False,
 ) -> list:
     """List all keys in an S3 bucket matching a given prefix pattern and suffix."""
     keys = []
@@ -61,7 +66,11 @@ def list_keys_regex(
             break
         kwargs["ContinuationToken"] = resp["NextContinuationToken"]
 
-    return keys
+    if return_full_path:
+        full_path_keys = [f"s3://{bucket}/{key}" for key in keys]
+        return full_path_keys
+    else:
+        return keys
 
 
 def save_bytes_s3(
@@ -93,7 +102,7 @@ def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
     """Check if a file exists in S3."""
     try:
         s3_client.head_object(Bucket=bucket, Key=key)
-    except Exception as e:
+    except Exception:
         raise FileNotFoundError(
             f"Cannot access file at `s3://{bucket}/{key}` please check the path and ensure credentials are correct."
         )
@@ -120,7 +129,6 @@ def metadata_to_s3(
     metadata_part: str = "metadata",
 ):
     """Upload the metadata JSON to S3."""
-    logger = get_logger(__name__)
     expected_href = f"s3://{bucket}/{prefix}/{metadata_part}/{model_name}.json"
     if item.self_href != expected_href:
         raise ValueError(

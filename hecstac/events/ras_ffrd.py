@@ -10,11 +10,12 @@ from typing import List
 
 from functools import cached_property
 import numpy as np
+import pandas as pd
 from pystac import Asset, Item, Link
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.storage import StorageExtension
 from rashdf import RasPlanHdf
-from shapely import to_geojson, union_all
+from shapely import simplify, to_geojson, union_all
 from shapely.geometry import shape
 
 from hecstac.common.base_io import ModelFileReader
@@ -37,7 +38,7 @@ class FFRDEventItem(Item):
     def __init__(
         self,
         ras_simulation_files: list,
-        source_model_paths: list,
+        source_model_paths: list = None,
         event_id: str = None,
         realization: str = None,
         block_group: str = None,
@@ -53,11 +54,11 @@ class FFRDEventItem(Item):
         self.event_id = event_id or self._event_id_from_plan_hdf()
         self.hms_factory = AssetFactory(HMS_EXTENSION_MAPPING)
         self.ras_factory = AssetFactory(RAS_EXTENSION_MAPPING)
-        # TODO: Add ras_factory
 
-        for path in source_model_paths:
-            ras_model_dict = json.loads((ModelFileReader(path).content))
-            self.source_model_items.append(Item.from_dict(ras_model_dict))
+        if source_model_paths is not None:
+            for path in source_model_paths:
+                ras_model_dict = json.loads((ModelFileReader(path).content))
+                self.source_model_items.append(Item.from_dict(ras_model_dict))
 
         super().__init__(
             self._item_id,
@@ -126,16 +127,25 @@ class FFRDEventItem(Item):
             properties[self.FFRD_REALIZATION] = self.realization
         if self.block_group:
             properties[self.FFRD_BLOCK_GROUP] = self.block_group
-        # TODO: Pull this from the items list
-        # properties["proj:code"] = self.pf.basins[0].epsg
-        # properties["proj:wkt"] = self.pf.basins[0].wkt
         return properties
 
     @property
     def _geometry(self) -> dict | None:
         """Geometry of the FFRD Event STAC item. Union of all basins in the FFRD Event items."""
-        geometries = [shape(item.geometry) for item in self.source_model_items]
-        return json.loads(to_geojson(union_all(geometries)))
+        if len(self.source_model_items) == 0:
+            areas = self.plan_hdf.mesh_areas()
+
+            if areas.crs is not None:
+                areas = areas.to_crs("EPSG:4326")
+            else:
+                logger.warning("No CRS found with mesh areas, using geometry without reprojection.")
+
+            unioned_geometry = union_all(areas.geometry)
+            unioned_geometry = simplify(unioned_geometry, 0.001)
+            return json.loads(to_geojson(unioned_geometry))
+        else:
+            geometries = [shape(item.geometry) for item in self.source_model_items]
+            return json.loads(to_geojson(union_all(geometries)))
 
     @property
     def _datetime(self) -> datetime:
@@ -145,7 +155,13 @@ class FFRDEventItem(Item):
     @property
     def _bbox(self) -> list[float]:
         """Bounding box of the FFRD Event STAC item."""
-        if len(self.source_model_items) > 1:
+        if len(self.source_model_items) == 0:
+            areas = self.plan_hdf.mesh_areas()
+            if areas.crs is not None:
+                areas = areas.to_crs("EPSG:4326")
+            bounds = areas.total_bounds
+            return [float(b) for b in bounds]
+        elif len(self.source_model_items) > 1:
             bboxes = np.array([item.bbox for item in self.source_model_items])
             bboxes = [bboxes[:, 0].min(), bboxes[:, 1].min(), bboxes[:, 2].max(), bboxes[:, 3].max()]
             return [float(i) for i in bboxes]
@@ -222,3 +238,31 @@ class FFRDEventItem(Item):
             self._add_ts_assets_from_dict(refpt_paths, "Parquet containing reference point time series data.")
         else:
             logger.info("No reference points found.")
+
+    def add_flow_asset(self, output_path: str):
+        """Extract flow time series from boundary condition lines, reference lines, and reference points. All data is combined into a single Parquet file and saved as an asset."""
+        plan_hdf = self.plan_hdf
+
+        bcline = plan_hdf.bc_lines_flow()
+        bcline.columns = [f"bc_line_id_{col}" for col in bcline.columns]
+
+        ref_pnt_stage = plan_hdf.reference_points_stage()
+        ref_pnt_stage.columns = [f"refpt_id_{col}" for col in ref_pnt_stage.columns]
+
+        ref_ln_flow = plan_hdf.reference_lines_flow()
+        ref_ln_flow.columns = [f"refln_id_{col}" for col in ref_ln_flow.columns]
+
+        all_flows = pd.concat([bcline, ref_pnt_stage, ref_ln_flow], axis=1)
+
+        all_flows.to_parquet(output_path)
+
+        self.add_asset(
+            "flow_data",
+            Asset(
+                href=output_path,
+                title="flow_data",
+                description="Parquet containing time series flow data for reference lines and bc lines, as well as reference point stages.",
+                media_type="application/x-parquet",
+                roles=["data"],
+            ),
+        )

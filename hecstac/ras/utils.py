@@ -64,13 +64,19 @@ def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str
 
 
 def find_model_files(ras_prj: str) -> list[str]:
-    # TODO: Add option to recursively iterate through all subdirectories in a model folder.
-    # TODO: Add option to search for files on S3.
     """Find all files with the same base name and return absolute paths."""
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
     stem = ras_prj.stem
     return [str(i.resolve()) for i in parent.glob(f"{stem}*")]
+
+
+def is_unc_path(file_path: str):
+    """Check if a path is a Universal Naming Convention (UNC) network path."""
+    if file_path.startswith("//") or file_path.startswith("\\\\"):
+        return True
+    else:
+        return False
 
 
 def is_ras_prj(url: str) -> bool:
