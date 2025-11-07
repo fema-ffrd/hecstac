@@ -250,7 +250,7 @@ class FFRDEventItem(Item):
         all_flows = pd.concat([bcline, ref_pnt_stage, ref_ln_flow], axis=1)
 
         # BC and reference lines can sometimes have same point, remove duplicates
-        all_flows = all_flows.loc[:, ~all_flows.columns.duplicated(keep='first')]
+        all_flows = all_flows.loc[:, ~all_flows.columns.duplicated(keep="first")]
 
         all_flows.to_parquet(output_path)
 
