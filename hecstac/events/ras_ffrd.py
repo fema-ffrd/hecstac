@@ -243,16 +243,14 @@ class FFRDEventItem(Item):
         """Extract flow time series from boundary condition lines, reference lines, and reference points. All data is combined into a single Parquet file and saved as an asset."""
         plan_hdf = self.plan_hdf
 
-        bcline = plan_hdf.bc_lines_flow()
-        bcline.columns = [f"bc_line_id_{col}" for col in bcline.columns]
-
-        ref_pnt_stage = plan_hdf.reference_points_stage()
-        ref_pnt_stage.columns = [f"refpt_id_{col}" for col in ref_pnt_stage.columns]
-
-        ref_ln_flow = plan_hdf.reference_lines_flow()
-        ref_ln_flow.columns = [f"refln_id_{col}" for col in ref_ln_flow.columns]
+        bcline = plan_hdf.bc_lines_flow(use_names=True)
+        ref_pnt_stage = plan_hdf.reference_points_stage(use_names=True)
+        ref_ln_flow = plan_hdf.reference_lines_flow(use_names=True)
 
         all_flows = pd.concat([bcline, ref_pnt_stage, ref_ln_flow], axis=1)
+
+        # BC and reference lines can sometimes have same point, remove duplicates
+        all_flows = all_flows.loc[:, ~all_flows.columns.duplicated(keep="first")]
 
         all_flows.to_parquet(output_path)
 
