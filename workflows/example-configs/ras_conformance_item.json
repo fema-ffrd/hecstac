@@ -1,105 +1,105 @@
 [{
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-bear",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-bear/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-bear"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-east-fork",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-east-fork/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-east-fork"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-elkhart",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-elkhart/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-elkhart"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-richland",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-richland/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-richland"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-west-fork",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-west-fork/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-west-fork"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bridgeport",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bridgeport/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bridgeport"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/cedar-creek",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=cedar-creek/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=cedar-creek"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/chambers-creek",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=chambers-creek/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=chambers-creek"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/clear-creek",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=clear-creek/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=clear-creek"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/clear-fork",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=clear-fork/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=clear-fork"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/denton",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=denton/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=denton"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/eagle-mountain",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=eagle-mountain/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=eagle-mountain"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/east-fork",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=east-fork/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=east-fork"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/kickapoo",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=kickapoo/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=kickapoo"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/lavon",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=lavon/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=lavon"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/lewisville",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=lewisville/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=lewisville"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/livingston",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=livingston/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=livingston"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/mill-creek",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=mill-creek/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=mill-creek"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/mountain",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=mountain/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=mountain"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/ray-hubbard",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=ray-hubbard/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=ray-hubbard"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/ray-roberts",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=ray-roberts/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=ray-roberts"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/rchlnd-chmbers",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=rchlnd-chmbers/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=rchlnd-chmbers"
 },
 {
     "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/white-rock",
-    "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=white-rock/timeseries.pq"
+    "timeseries_output_prefix": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=white-rock"
 }
 ]

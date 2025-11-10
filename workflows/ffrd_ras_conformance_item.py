@@ -84,15 +84,19 @@ def get_ras_files(s3_client, model_prefix):
 
 
 def create_conformance_item(
-    model_prefix: str, ras_files: list, flow_output_path: str, item_id: str, source_model_path: str = None
+    model_prefix: str, ras_files: list, timeseries_output_prefix: str, item_id: str, source_model_path: str = None
 ):
     """Create FFRD RAS conformance item and add flow parquet as an asset."""
+    flow_output_path = f"{timeseries_output_prefix}/flow_timeseries.pq"
+    stage_output_path = f"{timeseries_output_prefix}/stage_timeseries.pq"
+    
     if source_model_path is not None:
         source_model_paths = [source_model_path]
     else:
         source_model_paths = None
     event_item = FFRDEventItem(ras_simulation_files=ras_files, event_id=item_id, source_model_paths=source_model_paths)
-    event_item.add_flow_asset(flow_output_path)
+    event_item.add_flow_ts_asset(flow_output_path)
+    event_item.add_stage_ts_asset(stage_output_path)
 
     item_output_path = f"{model_prefix}/item.json"
     event_item.set_self_href(item_output_path)
@@ -123,7 +127,7 @@ def main(config) -> None:
         event_item = create_conformance_item(
             model_prefix=config["model_prefix"],
             ras_files=ras_files,
-            flow_output_path=config["timeseries_output_path"],
+            timeseries_output_prefix=config["timeseries_output_prefix"],
             item_id=item_id,
             source_model_path=source_model_item,
         )
