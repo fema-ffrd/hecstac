@@ -272,10 +272,7 @@ class FFRDEventItem(Item):
         ref_line_ts = plan_hdf.reference_lines_timeseries_output()
 
         bc_line_stage = (
-            bc_line_ts["Stage"]
-            .to_dataframe()
-            .reset_index()
-            .pivot(index="time", columns="bc_line_name", values="Stage")
+            bc_line_ts["Stage"].to_dataframe().reset_index().pivot(index="time", columns="bc_line_name", values="Stage")
         )
         ref_line_stage = (
             ref_line_ts["Water Surface"]
