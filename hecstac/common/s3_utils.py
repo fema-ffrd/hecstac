@@ -110,15 +110,16 @@ def save_file_s3(
     s3 = boto3.client("s3")
     expected_bucket_owner = expected_bucket_owner or os.getenv("AWS_EXPECTED_BUCKET_OWNER")
 
+    extra_args = {}
     if expected_bucket_owner:
-        s3.upload_file(
-            Filename=local_path,
-            Bucket=bucket,
-            Key=key,
-            ExtraArgs={"ExpectedBucketOwner": expected_bucket_owner},
-        )
-    else:
-        s3.upload_file(Filename=local_path, Bucket=bucket, Key=key)
+        extra_args["ExpectedBucketOwner"] = expected_bucket_owner
+
+    s3.upload_file(
+        Filename=local_path,
+        Bucket=bucket,
+        Key=key,
+        ExtraArgs=extra_args or None,
+    )
 
 
 def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
