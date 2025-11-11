@@ -29,6 +29,7 @@ logger = get_logger(__name__)
 
 PARQUET_MEDIA_TYPE = "application/x-parquet"
 
+
 class FFRDEventItem(Item):
     """Class for event items."""
 
