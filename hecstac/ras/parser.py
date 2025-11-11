@@ -1586,7 +1586,7 @@ class GeometryFile(CachedFile):
                 for j in i.geoms:
                     out.extend(self.unpack_geoms([j]))
             elif isinstance(i, MultiPolygon):
-                out.extend([j for j in i.geoms])
+                out.extend(i.geoms)
             else:
                 out.append(i)
         return out

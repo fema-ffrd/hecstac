@@ -77,13 +77,26 @@ def save_bytes_s3(
     data: io.BytesIO,
     s3_path: str,
     content_type: str = "",
+    expected_bucket_owner: str | None = None,
 ):
     """Upload BytesIO to S3."""
     parsed = urlparse(s3_path)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     s3 = boto3.client("s3")
-    s3.put_object(Bucket=bucket, Key=key, Body=data.getvalue(), ContentType=content_type)
+    expected_bucket_owner = expected_bucket_owner or os.getenv("AWS_EXPECTED_BUCKET_OWNER")
+
+    params = {
+        "Bucket": bucket,
+        "Key": key,
+        "Body": data.getvalue(),
+    }
+    if content_type:
+        params["ContentType"] = content_type
+    if expected_bucket_owner:
+        params["ExpectedBucketOwner"] = expected_bucket_owner
+
+    s3.put_object(**params)
 
 
 def save_file_s3(
@@ -95,7 +108,18 @@ def save_file_s3(
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     s3 = boto3.client("s3")
-    s3.upload_file(Filename=local_path, Bucket=bucket, Key=key)
+    expected_bucket_owner = expected_bucket_owner or os.getenv("AWS_EXPECTED_BUCKET_OWNER")
+
+    extra_args = {}
+    if expected_bucket_owner:
+        extra_args["ExpectedBucketOwner"] = expected_bucket_owner
+
+    s3.upload_file(
+        Filename=local_path,
+        Bucket=bucket,
+        Key=key,
+        ExtraArgs=extra_args or None,
+    )
 
 
 def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
