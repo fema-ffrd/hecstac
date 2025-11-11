@@ -27,6 +27,7 @@ from hecstac.events.ts_utils import save_bc_lines, save_reference_lines, save_re
 
 logger = get_logger(__name__)
 
+PARQUET_MEDIA_TYPE = "application/x-parquet"
 
 class FFRDEventItem(Item):
     """Class for event items."""
@@ -196,7 +197,7 @@ class FFRDEventItem(Item):
                         href=path,
                         title=title,
                         description=description,
-                        media_type="application/x-parquet",
+                        media_type=PARQUET_MEDIA_TYPE,
                         roles=["data"],
                     ),
                 )
@@ -259,7 +260,7 @@ class FFRDEventItem(Item):
                 href=output_path,
                 title="flow_data",
                 description="Parquet containing time series flow data for reference lines and bc lines.",
-                media_type="application/x-parquet",
+                media_type=PARQUET_MEDIA_TYPE,
                 roles=["data"],
             ),
         )
@@ -296,7 +297,7 @@ class FFRDEventItem(Item):
                 href=output_path,
                 title="stage_data",
                 description="Parquet containing time series stage data for reference lines, reference points, and bc lines.",
-                media_type="application/x-parquet",
+                media_type=PARQUET_MEDIA_TYPE,
                 roles=["data"],
             ),
         )
