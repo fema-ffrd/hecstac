@@ -24,13 +24,15 @@ def parse_args() -> argparse.Namespace:
             - source_model_item: S3 path to a source model STAC Item the event is derived from
             - flow_output_path: S3 path to the flow time series parquet file.
             - stage_output_path: S3 path to the stage time series parquet file.
+            - item_output_path: S3 path to write the generated STAC Item. If not provided, defaults to '{model_prefix}/item.json'.
     Example JSON config:
 
         Single:
             '{
                 "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
                 "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
-                "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
+                "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq",
+                "item_output_path": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork/item.json"
             }'
 
         List:
@@ -92,11 +94,11 @@ def get_ras_files(s3_client, model_prefix):
 
 
 def create_conformance_item(
-    model_prefix: str,
+    item_output_path: str,
     ras_files: list,
-    flow_output_path: str,
-    stage_output_path: str,
     item_id: str,
+    flow_output_path: str = None,
+    stage_output_path: str = None,
     source_model_path: str = None,
 ):
     """Create FFRD RAS conformance item and add flow parquet as an asset."""
@@ -111,7 +113,6 @@ def create_conformance_item(
     if stage_output_path:
         event_item.add_stage_ts_asset(stage_output_path)
 
-    item_output_path = f"{model_prefix}/item.json"
     event_item.set_self_href(item_output_path)
 
     return event_item
@@ -136,12 +137,15 @@ def main(config) -> None:
             item_id = model_id
 
         source_model_item = config.get("source_model_item")
-
         flow_output_path = config.get("flow_output_path")
         stage_output_path = config.get("stage_output_path")
+        item_output_path = config.get("item_output_path")
+
+        if not item_output_path:
+            item_output_path = f"{config['model_prefix']}/item.json"
 
         event_item = create_conformance_item(
-            model_prefix=config["model_prefix"],
+            item_output_path=item_output_path,
             ras_files=ras_files,
             flow_output_path=flow_output_path,
             stage_output_path=stage_output_path,
