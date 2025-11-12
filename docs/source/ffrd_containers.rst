@@ -96,7 +96,8 @@ Single model example:
     {
         "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
         "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
-        "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
+        "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq",
+        "item_output_path": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork/item.json"
     }
 
 Multiple model example:
@@ -107,17 +108,20 @@ Multiple model example:
         {
             "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
             "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
-            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
+            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq",
+            "item_output_path": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork/item.json"
         },
         {
             "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek",
             "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/flow_timeseries.pq",
-            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/stage_timeseries.pq"
+            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/stage_timeseries.pq",
+            "item_output_path": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek/item.json"
         },
         {
             "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek",
             "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/flow_timeseries.pq",
-            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/stage_timeseries.pq"
+            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/stage_timeseries.pq",
+            "item_output_path": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek/item.json"
         }
     ]
 
