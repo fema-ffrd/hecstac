@@ -27,6 +27,8 @@ from hecstac.events.ts_utils import save_bc_lines, save_reference_lines, save_re
 
 logger = get_logger(__name__)
 
+PARQUET_MEDIA_TYPE = "application/x-parquet"
+
 
 class FFRDEventItem(Item):
     """Class for event items."""
@@ -196,14 +198,14 @@ class FFRDEventItem(Item):
                         href=path,
                         title=title,
                         description=description,
-                        media_type="application/x-parquet",
+                        media_type=PARQUET_MEDIA_TYPE,
                         roles=["data"],
                     ),
                 )
 
     def add_ts_assets(self, prefix: str):
         """
-        Extract and add time series assets from the plan HDF file to the STAC item. Stores each asset as a parquet.
+        Extract and add time series assets from the plan HDF file to the STAC item. Seperates data by element and data type (stage and flow) and saves as Parquet files for each individual element and data type.
 
         This includes:
         - Boundary condition line time series
@@ -239,15 +241,14 @@ class FFRDEventItem(Item):
         else:
             logger.info("No reference points found.")
 
-    def add_flow_asset(self, output_path: str):
-        """Extract flow time series from boundary condition lines, reference lines, and reference points. All data is combined into a single Parquet file and saved as an asset."""
+    def add_flow_ts_asset(self, output_path: str):
+        """Extract flow time series from boundary condition lines and reference lines. All data is combined into a single Parquet file and saved as an asset."""
         plan_hdf = self.plan_hdf
 
         bcline = plan_hdf.bc_lines_flow(use_names=True)
-        ref_pnt_stage = plan_hdf.reference_points_stage(use_names=True)
         ref_ln_flow = plan_hdf.reference_lines_flow(use_names=True)
 
-        all_flows = pd.concat([bcline, ref_pnt_stage, ref_ln_flow], axis=1)
+        all_flows = pd.concat([bcline, ref_ln_flow], axis=1)
 
         # BC and reference lines can sometimes have same point, remove duplicates
         all_flows = all_flows.loc[:, ~all_flows.columns.duplicated(keep="first")]
@@ -259,8 +260,45 @@ class FFRDEventItem(Item):
             Asset(
                 href=output_path,
                 title="flow_data",
-                description="Parquet containing time series flow data for reference lines and bc lines, as well as reference point stages.",
-                media_type="application/x-parquet",
+                description="Parquet containing time series flow data for reference lines and bc lines.",
+                media_type=PARQUET_MEDIA_TYPE,
+                roles=["data"],
+            ),
+        )
+
+    def add_stage_ts_asset(self, output_path: str):
+        """Extract stage time series from boundary condition lines, reference lines, and reference points. All data is combined into a single Parquet file and saved as an asset."""
+        plan_hdf = self.plan_hdf
+
+        bc_line_ts = plan_hdf.bc_lines_timeseries_output()
+        ref_line_ts = plan_hdf.reference_lines_timeseries_output()
+
+        bc_line_stage = (
+            bc_line_ts["Stage"].to_dataframe().reset_index().pivot(index="time", columns="bc_line_name", values="Stage")
+        )
+        ref_line_stage = (
+            ref_line_ts["Water Surface"]
+            .to_dataframe()
+            .reset_index()
+            .pivot(index="time", columns="refln_name", values="Water Surface")
+        )
+
+        ref_pnt_stage = plan_hdf.reference_points_stage(use_names=True)
+
+        all_stages = pd.concat([bc_line_stage, ref_pnt_stage, ref_line_stage], axis=1)
+
+        # BC and reference lines can sometimes have same point, remove duplicates
+        all_stages = all_stages.loc[:, ~all_stages.columns.duplicated(keep="first")]
+
+        all_stages.to_parquet(output_path)
+
+        self.add_asset(
+            "stage_data",
+            Asset(
+                href=output_path,
+                title="stage_data",
+                description="Parquet containing time series stage data for reference lines, reference points, and bc lines.",
+                media_type=PARQUET_MEDIA_TYPE,
                 roles=["data"],
             ),
         )

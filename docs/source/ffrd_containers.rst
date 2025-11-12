@@ -9,7 +9,7 @@ The current container hosts a variety of python scripts to support the creation 
 
 Current workflow scripts include:
 
-- **ffrd_ras_conformance_item.py**: Creates STAC Items for HEC-RAS conformance event models and associated parquet asset containing flow at boundary and reference lines and stage at reference points.
+- **ffrd_ras_conformance_item.py**: Creates STAC Items for HEC-RAS conformance event models and associated parquet time series assets containing flow at boundary and reference lines and stage at reference points, reference lines, and boundary condition lines.
 - **ffrd_ras_calibration_item.py**: Creates STAC Items for HEC-RAS calibration models which include thumbnails showing model geometry features and parquets of geospatial data.
 - **ffrd_ras_event_item.py**: Creates STAC Items for HEC-RAS calibration event models. Also creates parquets with various time series data for boundary conditions, reference points, and reference lines.
 - **ras_calibration_check.py**: Performs naming convention QC checks on HEC-RAS models utilizing the `rasqc` library.
@@ -31,9 +31,9 @@ To use this container, ensure you have Docker installed and run the following co
 
 .. code-block:: bash
 
-    docker pull ghcr.io/fema-ffrd/hecstac:pr-118
+    docker pull ghcr.io/fema-ffrd/hecstac:latest
 
-    docker run -it --rm ghcr.io/fema-ffrd/hecstac:pr-118
+    docker run -it --rm ghcr.io/fema-ffrd/hecstac:latest
 
 Usage
 =====
@@ -95,8 +95,8 @@ Single model example:
 
     {
         "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-        "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=blw-clear-fork/timeseries.pq",
-        "source_model_item": "s3://trinity-pilot/stac/prod-support/calibration/model=blw-clear-fork/item.json"
+        "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
+        "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
     }
 
 Multiple model example:
@@ -105,16 +105,19 @@ Multiple model example:
 
     [
         {
-        "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-        "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=blw-clear-fork/timeseries.pq"
+            "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
+            "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
+            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
         },
         {
-        "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek",
-        "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=bardwell-creek/timeseries.pq"
+            "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek",
+            "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/flow_timeseries.pq",
+            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/stage_timeseries.pq"
         },
         {
-        "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek",
-        "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_id=1/model=bedias-creek/timeseries.pq"
+            "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek",
+            "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/flow_timeseries.pq",
+            "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/stage_timeseries.pq"
         }
     ]
 

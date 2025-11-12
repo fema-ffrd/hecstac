@@ -20,29 +20,37 @@ def parse_args() -> argparse.Namespace:
     Config fields:
         Required:
             - model_prefix: S3 path prefix to the RAS simulation files. Item will be written to this prefix.
-            - timeseries_output_path: S3 path for the output flow time series parquet asset.
         Optional:
             - source_model_item: S3 path to a source model STAC Item the event is derived from
+            - flow_output_path: S3 path to the flow time series parquet file.
+            - stage_output_path: S3 path to the stage time series parquet file.
     Example JSON config:
 
         Single:
-        '{
-            "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-            "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/timeseries.pq",
-            "source_model_item": "s3://trinity-pilot/stac/prod-support/calibration/model=blw-clear-fork/item.json"
-        }'
+            '{
+                "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
+                "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
+                "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
+            }'
 
         List:
-        '[
+        [
             {
-            "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
-            "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=1/model=blw-clear-fork/timeseries.pq",
+                "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/blw-clear-fork",
+                "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/flow_timeseries.pq",
+                "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=blw-clear-fork/stage_timeseries.pq"
             },
             {
-            "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/150/hydraulics/bedias-creek",
-            "timeseries_output_path": "s3://trinity-pilot/stac/prod-support/conformance/hydraulics/event_num=150/model=bedias-creek/timeseries.pq",
+                "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bardwell-creek",
+                "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/flow_timeseries.pq",
+                "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bardwell-creek/stage_timeseries.pq"
+            },
+            {
+                "model_prefix": "s3://trinity-pilot/conformance/simulations/event-data/1/hydraulics/bedias-creek",
+                "flow_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/flow_timeseries.pq",
+                "stage_output_path": "s3://trinity-pilot/stac/prod-support/conformance/event_id=1/ras_model=bedias-creek/stage_timeseries.pq"
             }
-        ]'
+        ],
 
     """
     parser = argparse.ArgumentParser(description="Create STAC Item(s) for HEC-RAS conformance model events on S3.")
@@ -84,7 +92,12 @@ def get_ras_files(s3_client, model_prefix):
 
 
 def create_conformance_item(
-    model_prefix: str, ras_files: list, flow_output_path: str, item_id: str, source_model_path: str = None
+    model_prefix: str,
+    ras_files: list,
+    flow_output_path: str,
+    stage_output_path: str,
+    item_id: str,
+    source_model_path: str = None,
 ):
     """Create FFRD RAS conformance item and add flow parquet as an asset."""
     if source_model_path is not None:
@@ -92,7 +105,11 @@ def create_conformance_item(
     else:
         source_model_paths = None
     event_item = FFRDEventItem(ras_simulation_files=ras_files, event_id=item_id, source_model_paths=source_model_paths)
-    event_item.add_flow_asset(flow_output_path)
+
+    if flow_output_path:
+        event_item.add_flow_ts_asset(flow_output_path)
+    if stage_output_path:
+        event_item.add_stage_ts_asset(stage_output_path)
 
     item_output_path = f"{model_prefix}/item.json"
     event_item.set_self_href(item_output_path)
@@ -120,10 +137,14 @@ def main(config) -> None:
 
         source_model_item = config.get("source_model_item")
 
+        flow_output_path = config.get("flow_output_path")
+        stage_output_path = config.get("stage_output_path")
+
         event_item = create_conformance_item(
             model_prefix=config["model_prefix"],
             ras_files=ras_files,
-            flow_output_path=config["timeseries_output_path"],
+            flow_output_path=flow_output_path,
+            stage_output_path=stage_output_path,
             item_id=item_id,
             source_model_path=source_model_item,
         )
@@ -152,7 +173,7 @@ if __name__ == "__main__":
 
         try:
             configs = load_config(args.config)
-        except (json.JSONDecodeError, ValueError) as e:
+        except ValueError as e:
             logger.error(f"Invalid config input: {e}")
             raise SystemExit(1)
 
