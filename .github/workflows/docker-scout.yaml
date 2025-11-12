@@ -5,12 +5,20 @@ permissions:
   pull-requests: write
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+        description: 'Docker image tag to scan'
   schedule:
     - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM UTC
-  push:
-    branches:
-      - dev
-      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to scan manually'
+        required: false
+        default: 'ghcr.io/fema-ffrd/hecstac:latest'
 
 jobs:
   docker-scout:
@@ -34,7 +42,7 @@ jobs:
         uses: docker/scout-action@v1
         with:
           command: cves
-          image: ghcr.io/fema-ffrd/hecstac:latest
+          image: ${{ inputs.image_tag || 'ghcr.io/fema-ffrd/hecstac:latest' }}
           only-severities: critical,high
           summary: true
           exit-code: true
