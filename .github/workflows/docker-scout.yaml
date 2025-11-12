@@ -13,6 +13,12 @@ on:
         description: 'Docker image tag to scan'
   schedule:
     - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to scan manually'
+        required: false
+        default: 'ghcr.io/fema-ffrd/hecstac:latest'
 
 jobs:
   docker-scout:
