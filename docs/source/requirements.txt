@@ -20,7 +20,7 @@ cycler==0.12.1
 dotenv==0.9.9
 et_xmlfile==2.0.0
 fiona==1.10.0rc1
-fonttools==4.57.0
+fonttools==4.61.0
 frozenlist==1.6.0
 fsspec==2025.3.1
 geographiclib==2.0
