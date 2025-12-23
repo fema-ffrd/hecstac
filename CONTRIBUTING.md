@@ -68,6 +68,7 @@ Install dev dependencies:
 - Write draft release notes and save as draft release
     - https://github.com/Dewberry/****/releases
 - Once approved, merge into `main`.
+- Update `dev` branch by submitting a PR from `main` to `dev` after the release.
 
 ### Verify
 - Double check pypi
