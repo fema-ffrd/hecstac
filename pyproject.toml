@@ -29,7 +29,7 @@ dependencies = [
     "contextily>=1.6.2",
     "dotenv>=0.9.9",
     "fiona>=1.10.0rc1",
-    "fsspec>=2025.3.1",
+    "fsspec==2025.3.1",
     "geopandas>=1.0.1",
     "matplotlib>=3.7.3",
     "mypy-boto3-s3",
@@ -38,7 +38,7 @@ dependencies = [
     "rashdf>=0.10.0",
     "rasqc>=0.0.3",
     "requests>=2.32.3",
-    "s3fs>=2025.3.1",
+    "s3fs==2025.3.1",
     "shapely>=2.0.7",
     "python-dotenv>=1.1.0"
 ]
