@@ -63,12 +63,47 @@ def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str
     plt.close(fig)
 
 
-def find_model_files(ras_prj: str) -> list[str]:
-    """Find all files with the same base name and return absolute paths."""
+def find_model_files(ras_prj: str, recursive: bool = False, match_project_name: bool = True) -> list[str]:
+    """Find all files with the same base name and return absolute paths.
+
+    Parameters
+    ----------
+    ras_prj : str
+        Path to the HEC-RAS project file (.prj).
+    recursive : bool, optional
+        Whether to search recursively in subdirectories. Defaults to False.
+    match_project_name : bool, optional
+        Whether to filter files by the project name (stem). Defaults to True.
+
+    Returns
+    -------
+    list[str]
+        List of absolute paths to the found model files.
+    """
+    if ras_prj.startswith("s3://"):
+        import fsspec
+
+        fs = fsspec.filesystem("s3")
+        path = ras_prj.replace("s3://", "")
+        p = Path(path)
+
+        search_pattern = f"{p.stem}*" if match_project_name else "*"
+
+        if recursive:
+            pattern = f"{p.parent}/**/{search_pattern}"
+        else:
+            pattern = f"{p.parent}/{search_pattern}"
+
+        return [f"s3://{f}" for f in fs.glob(pattern)]
+
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
-    stem = ras_prj.stem
-    return [str(i.resolve()) for i in parent.glob(f"{stem}*")]
+    search_pattern = f"{ras_prj.stem}*" if match_project_name else "*"
+
+    if recursive:
+        return [str(i.resolve()) for i in parent.rglob(search_pattern)]
+
+    return [str(i.resolve()) for i in parent.glob(search_pattern)]
 
 
 def is_unc_path(file_path: str):
