@@ -9,7 +9,7 @@ def reproject_geometry(geom: Geometry, src_crs: str, target_crs: str = "EPSG:432
     """Convert geometry from source CRS to target CRS. Target CRS defaults to WGS84."""
     pyproj_src = CRS.from_user_input(src_crs)
     pyproj_target = CRS.from_user_input(target_crs)
-    
+
     if pyproj_src != pyproj_target:
         transformer = Transformer.from_crs(pyproj_src, pyproj_target, always_xy=True)
         return transform(transformer.transform, geom)

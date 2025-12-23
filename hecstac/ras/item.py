@@ -97,7 +97,9 @@ class RASModelItem(Item):
         if not assets:
             try:
                 model_files = find_model_files(ras_project_file)
-                logger.info(f"No assets given, found {len(model_files)} model files automatically for {ras_project_file}")
+                logger.info(
+                    f"No assets given, found {len(model_files)} model files automatically for {ras_project_file}"
+                )
             except Exception as e:
                 logger.error(f"Error finding model files for {ras_project_file}: {e}")
                 model_files = []
