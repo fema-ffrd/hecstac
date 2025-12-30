@@ -20,6 +20,7 @@ from shapely.geometry import LineString, MultiPoint, Point
 from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import save_bytes_s3
+from hecstac.common.consts import S3_PREFIX
 
 logger = get_logger(__name__)
 
@@ -50,7 +51,7 @@ def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str
     fig.tight_layout()
 
     # Save
-    if filepath.startswith("s3://"):
+    if filepath.startswith(S3_PREFIX):
         img_data = BytesIO()
         fig.savefig(img_data, format="png", bbox_inches="tight")
         img_data.seek(0)
@@ -80,11 +81,11 @@ def find_model_files(ras_prj: str, recursive: bool = False, match_project_name: 
     list[str]
         List of absolute paths to the found model files.
     """
-    if ras_prj.startswith("s3://"):
+    if ras_prj.startswith(S3_PREFIX):
         import fsspec
 
         fs = fsspec.filesystem("s3")
-        path = ras_prj.replace("s3://", "")
+        path = ras_prj.replace(S3_PREFIX, "")
         p = Path(path)
 
         search_pattern = f"{p.stem}*" if match_project_name else "*"
@@ -94,7 +95,7 @@ def find_model_files(ras_prj: str, recursive: bool = False, match_project_name: 
         else:
             pattern = f"{p.parent}/{search_pattern}"
 
-        return [f"s3://{f}" for f in fs.glob(pattern)]
+        return [f"{S3_PREFIX}{f}" for f in fs.glob(pattern)]
 
     ras_prj = Path(ras_prj).resolve()
     parent = ras_prj.parent
