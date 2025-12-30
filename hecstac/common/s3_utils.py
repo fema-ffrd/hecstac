@@ -14,6 +14,7 @@ import pandas as pd
 from botocore.config import Config
 
 from hecstac.common.logger import get_logger
+from hecstac.common.consts import S3_PREFIX
 
 if TYPE_CHECKING:
     from hecstac.ras.item import RASModelItem
@@ -67,7 +68,7 @@ def list_keys_regex(
         kwargs["ContinuationToken"] = resp["NextContinuationToken"]
 
     if return_full_path:
-        full_path_keys = [f"s3://{bucket}/{key}" for key in keys]
+        full_path_keys = [f"{S3_PREFIX}{bucket}/{key}" for key in keys]
         return full_path_keys
     else:
         return keys
@@ -128,7 +129,7 @@ def verify_file_exists(bucket: str, key: str, s3_client: boto3.client) -> bool:
         s3_client.head_object(Bucket=bucket, Key=key)
     except Exception:
         raise FileNotFoundError(
-            f"Cannot access file at `s3://{bucket}/{key}` please check the path and ensure credentials are correct."
+            f"Cannot access file at `{S3_PREFIX}{bucket}/{key}` please check the path and ensure credentials are correct."
         )
 
 
@@ -153,7 +154,7 @@ def metadata_to_s3(
     metadata_part: str = "metadata",
 ):
     """Upload the metadata JSON to S3."""
-    expected_href = f"s3://{bucket}/{prefix}/{metadata_part}/{model_name}.json"
+    expected_href = f"{S3_PREFIX}{bucket}/{prefix}/{metadata_part}/{model_name}.json"
     if item.self_href != expected_href:
         raise ValueError(
             f"Item self href `{item.self_href}` does not match the provided S3 key `{expected_href}`. Please check the item."

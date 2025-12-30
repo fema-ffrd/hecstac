@@ -23,7 +23,7 @@ from shapely import MultiPolygon, Polygon
 
 from hecstac.common.asset_factory import GenericAsset
 from hecstac.common.consts import DEFAULT_CRS, HTTPS_PREFIX, S3_PREFIX
-from hecstac.common.geometry import reproject_to_wgs84
+from hecstac.common.geometry import reproject_geometry
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import make_uri_public, save_bytes_s3, save_file_s3
 from hecstac.ras.consts import NULL_GEOMETRY
@@ -277,7 +277,7 @@ class GeometryAsset(GenericAsset[GeometryFile]):
         elif self.geometry is None:
             return None
         else:
-            return reproject_to_wgs84(self.geometry, self.crs)
+            return reproject_geometry(self.geometry, self.crs)
 
     def _plot_river(self, ax: Axes):
         """Add the river centerline to a pyplot."""
@@ -728,7 +728,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         if self.crs is None:
             return None
         else:
-            return reproject_to_wgs84(self.geometry, self.crs)
+            return reproject_geometry(self.geometry, self.crs)
 
     def _plot_mesh_areas(self, ax: Axes) -> list[Line2D]:
         """Plot mesh areas on the given axes."""

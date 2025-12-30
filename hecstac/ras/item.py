@@ -95,7 +95,14 @@ class RASModelItem(Item):
 
         """
         if not assets:
-            model_files = find_model_files(ras_project_file)
+            try:
+                model_files = find_model_files(ras_project_file)
+                logger.info(
+                    f"No assets given, found {len(model_files)} model files automatically for {ras_project_file}"
+                )
+            except Exception as e:
+                logger.error(f"Error finding model files for {ras_project_file}: {e}")
+                model_files = []
             assets = {}
             for file_path in model_files:
                 asset_name = Path(file_path).name
@@ -110,6 +117,14 @@ class RASModelItem(Item):
 
         else:
             assets = {Path(i).name: Asset(i, Path(i).name) for i in assets}
+
+        # Ensure project file is in assets
+        prj_name = Path(ras_project_file).name
+        if prj_name not in assets:
+            asset = Asset(ras_project_file, prj_name)
+            if is_unc_path(ras_project_file):
+                asset.href = ras_project_file
+            assets[prj_name] = asset
 
         if not stac_id:
             stac_id = Path(ras_project_file).stem
@@ -509,24 +524,28 @@ class RASModelItem(Item):
 
     def add_asset(self, key, asset):
         """Subclass asset then add, eagerly load metadata safely."""
-        subclass = self.factory.asset_from_dict(asset)
-        if subclass is None:
-            return
-
-        # Eager load extra fields
         try:
-            _ = subclass.extra_fields
-        except ModelFileReaderError as e:
-            logger.error(e)
+            subclass = self.factory.asset_from_dict(asset)
+            if subclass is None:
+                return
+
+            # Eager load extra fields
+            try:
+                _ = subclass.extra_fields
+            except ModelFileReaderError as e:
+                logger.error(e)
+                return
+
+            # Safely load file only if __file_class__ is not None
+            if getattr(subclass, "__file_class__", None) is not None:
+                _ = subclass.file
+
+            if self.crs is None and isinstance(subclass, GeometryHdfAsset) and subclass.file.projection is not None:
+                self.crs = subclass.file.projection
+            return super().add_asset(key, subclass)
+        except Exception as e:
+            logger.error(f"Error adding asset {key}: {str(e)}")
             return
-
-        # Safely load file only if __file_class__ is not None
-        if getattr(subclass, "__file_class__", None) is not None:
-            _ = subclass.file
-
-        if self.crs is None and isinstance(subclass, GeometryHdfAsset) and subclass.file.projection is not None:
-            self.crs = subclass.file.projection
-        return super().add_asset(key, subclass)
 
     def _process_and_add_pq_asset(self, gdf, path, asset_key, title, description):
         if gdf is not None and not gdf.empty:
