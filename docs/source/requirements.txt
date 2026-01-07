@@ -20,7 +20,7 @@ cycler==0.12.1
 dotenv==0.9.9
 et_xmlfile==2.0.0
 fiona==1.10.0rc1
-fonttools==4.57.0
+fonttools==4.61.0
 frozenlist==1.6.0
 fsspec==2025.3.1
 geographiclib==2.0
@@ -85,7 +85,7 @@ sphinxcontrib-serializinghtml==2.0.0
 tomli==2.2.1
 typing_extensions==4.13.2
 tzdata==2025.2
-urllib3==2.5.0
+urllib3>=2.6.0
 wrapt==1.17.2
 xarray==2025.4.0
 xyzservices==2025.4.0

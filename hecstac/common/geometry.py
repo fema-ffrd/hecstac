@@ -5,12 +5,13 @@ from shapely import Geometry
 from shapely.ops import transform
 
 
-def reproject_to_wgs84(geom: Geometry, crs: str) -> Geometry:
-    """Convert geometry CRS to EPSG:4326 for stac item geometry."""
-    pyproj_crs = CRS.from_user_input(crs)
-    wgs_crs = CRS.from_authority("EPSG", "4326")
-    if pyproj_crs != wgs_crs:
-        transformer = Transformer.from_crs(pyproj_crs, wgs_crs, True)
+def reproject_geometry(geom: Geometry, src_crs: str, target_crs: str = "EPSG:4326") -> Geometry:
+    """Convert geometry from source CRS to target CRS. Target CRS defaults to WGS84."""
+    pyproj_src = CRS.from_user_input(src_crs)
+    pyproj_target = CRS.from_user_input(target_crs)
+
+    if pyproj_src != pyproj_target:
+        transformer = Transformer.from_crs(pyproj_src, pyproj_target, always_xy=True)
         return transform(transformer.transform, geom)
     return geom
 
