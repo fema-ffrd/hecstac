@@ -1,4 +1,4 @@
-﻿affine==2.4.0
+affine==2.4.0
 aiobotocore==2.21.1
 aiohappyeyeballs==2.6.1
 aiohttp==3.12.14
@@ -24,7 +24,7 @@ fonttools==4.61.0
 frozenlist==1.6.0
 fsspec==2025.3.1
 geographiclib==2.0
-geopandas==1.0.1
+geopandas==1.1.2
 geopy==2.4.1
 h5py==3.13.0
 hydrostab==0.2.0
