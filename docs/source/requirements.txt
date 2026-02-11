@@ -1,4 +1,4 @@
-﻿affine==2.4.0
+affine==2.4.0
 aiobotocore==2.21.1
 aiohappyeyeballs==2.6.1
 aiohttp==3.12.14
@@ -47,7 +47,7 @@ obstore==0.6.0
 openpyxl==3.1.5
 packaging==25.0
 pandas==2.2.3
-pillow==11.3.0
+pillow==12.1.1
 propcache==0.3.1
 pyarrow==20.0.0
 pydata_sphinx_theme
