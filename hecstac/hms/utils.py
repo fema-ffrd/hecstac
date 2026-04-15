@@ -64,6 +64,7 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
         if nested_keyval_pairs:
             _process_nested_pair(attrs, nested_keyval_pairs, key, val)
 
+        # TODO: Rethink if this ad-hoc handling is appropriate or if this should be rolled into a different function
         hamon_line = _process_hamon_coefficient(attrs, line)
         if hamon_line:
             key, val = hamon_line
