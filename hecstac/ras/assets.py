@@ -9,6 +9,7 @@ import sqlite3
 from functools import cached_property, lru_cache
 from tempfile import NamedTemporaryFile, TemporaryFile
 from urllib.parse import urlparse
+from typing import List, Union
 
 import boto3
 import contextily as ctx
@@ -150,26 +151,33 @@ RAS_PRJ_REGEX = r".+\.[pP][rR][jJ]$"
 class ProjectAsset(GenericAsset[ProjectFile]):
     """HEC-RAS Project file asset."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
+
     regex_parse_str = RAS_PRJ_REGEX
     __roles__ = ["ras-project"]
     __media_type__ = MediaType.TEXT
     __description__ = "The HEC-RAS project file."
     __file_class__ = ProjectFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[CURRENT_PLAN] = self.file.plan_current
-        self._extra_fields[PLAN_FILES] = self.file.plan_files
-        self._extra_fields[GEOMETRY_FILES] = self.file.geometry_files
-        self._extra_fields[STEADY_FLOW_FILES] = self.file.steady_flow_files
-        self._extra_fields[QUASI_UNSTEADY_FLOW_FILES] = self.file.quasi_unsteady_flow_files
-        self._extra_fields[UNSTEADY_FLOW_FILES] = self.file.unsteady_flow_files
-        return self._extra_fields
+        self.extra_fields[CURRENT_PLAN] = self.file.plan_current
+        self.extra_fields[PLAN_FILES] = self.file.plan_files
+        self.extra_fields[GEOMETRY_FILES] = self.file.geometry_files
+        self.extra_fields[STEADY_FLOW_FILES] = self.file.steady_flow_files
+        self.extra_fields[QUASI_UNSTEADY_FLOW_FILES] = self.file.quasi_unsteady_flow_files
+        self.extra_fields[UNSTEADY_FLOW_FILES] = self.file.unsteady_flow_files
+        return self.extra_fields
 
 
 class ProjectionAsset(GenericAsset[CachedFile]):
     """.prj projection file."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
 
     regex_parse_str = RAS_PRJ_REGEX
     __roles__ = ["projection"]
@@ -177,10 +185,9 @@ class ProjectionAsset(GenericAsset[CachedFile]):
     __description__ = "A coordinate reference system projection file."
     __file_class__ = CachedFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[PRJ_CRS] = CRS.from_wkt(self.file.model_file.content).to_authority()
+        self.extra_fields[PRJ_CRS] = CRS.from_wkt(self.file.model_file.content).to_authority()
 
 
 class PrjAsset(GenericAsset[CachedFile]):
@@ -203,27 +210,33 @@ class PrjAsset(GenericAsset[CachedFile]):
 class PlanAsset(GenericAsset[PlanFile]):
     """HEC-RAS Plan file asset."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
+
     regex_parse_str = r".+\.p\d{2}$"
     __roles__ = ["ras-plan"]
     __media_type__ = MediaType.TEXT
     __description__ = "The plan file which contains a list of associated input files and all simulation options."
     __file_class__ = PlanFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[PLAN_TITLE] = self.file.plan_title
-        self._extra_fields[VERSION] = self.file.plan_version
-        self._extra_fields[GEOMETRY_FILE] = self.file.geometry_file
-        self._extra_fields[FLOW_FILE] = self.file.flow_file
-        self._extra_fields[BREACH_LOCATIONS] = self.file.breach_locations
-        self._extra_fields[PLAN_SHORT_ID] = self.file.short_identifier
-
-        return self._extra_fields
+        self.extra_fields[PLAN_TITLE] = self.file.plan_title
+        self.extra_fields[VERSION] = self.file.plan_version
+        self.extra_fields[GEOMETRY_FILE] = self.file.geometry_file
+        self.extra_fields[FLOW_FILE] = self.file.flow_file
+        self.extra_fields[BREACH_LOCATIONS] = self.file.breach_locations
+        self.extra_fields[PLAN_SHORT_ID] = self.file.short_identifier
+        return self.extra_fields
 
 
 class GeometryAsset(GenericAsset[GeometryFile]):
     """HEC-RAS Geometry file asset."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
 
     regex_parse_str = r".+\.g\d{2}$"
     __roles__ = ["ras-geometry"]
@@ -234,25 +247,24 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     __file_class__ = GeometryFile
     PROPERTIES_WITH_GDF = ["reaches", "junctions", "cross_sections", "structures"]
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[GEOMETRY_TITLE] = self.file.geom_title
-        self._extra_fields[VERSION] = self.file.geom_version
-        self._extra_fields[HAS_1D] = self.file.has_1d
-        self._extra_fields[HAS_2D] = self.file.has_2d
-        self._extra_fields[RIVERS] = list(self.file.rivers.keys())
-        self._extra_fields[REACHES] = list(self.file.reaches.keys())
-        self._extra_fields[JUNCTIONS] = list(self.file.junctions.keys())
-        self._extra_fields[CROSS_SECTIONS] = list(self.file.cross_sections.keys())
-        self._extra_fields[STRUCTURES] = list(self.file.structures.keys())
-        self._extra_fields[FLOW_ELEMENT_2D] = list(self.file.storage_areas.keys())
-        self._extra_fields[CONNECTIONS] = list(self.file.connections.keys())
-        self._extra_fields[IC_POINTS] = self.file.ic_point_names
-        self._extra_fields[REFERENCE_LINES] = self.file.ref_line_names
-        self._extra_fields[REFERENCE_POINTS] = self.file.ref_point_names
+        self.extra_fields[GEOMETRY_TITLE] = self.file.geom_title
+        self.extra_fields[VERSION] = self.file.geom_version
+        self.extra_fields[HAS_1D] = self.file.has_1d
+        self.extra_fields[HAS_2D] = self.file.has_2d
+        self.extra_fields[RIVERS] = list(self.file.rivers.keys())
+        self.extra_fields[REACHES] = list(self.file.reaches.keys())
+        self.extra_fields[JUNCTIONS] = list(self.file.junctions.keys())
+        self.extra_fields[CROSS_SECTIONS] = list(self.file.cross_sections.keys())
+        self.extra_fields[STRUCTURES] = list(self.file.structures.keys())
+        self.extra_fields[FLOW_ELEMENT_2D] = list(self.file.storage_areas.keys())
+        self.extra_fields[CONNECTIONS] = list(self.file.connections.keys())
+        self.extra_fields[IC_POINTS] = self.file.ic_point_names
+        self.extra_fields[REFERENCE_LINES] = self.file.ref_line_names
+        self.extra_fields[REFERENCE_POINTS] = self.file.ref_point_names
 
-        return self._extra_fields
+        return self.extra_fields
 
     @cached_property
     def geometry(self) -> Polygon | MultiPolygon:
@@ -491,9 +503,12 @@ class GeometryAsset(GenericAsset[GeometryFile]):
             filepath = make_uri_public(filepath)
         return self._add_geopackage_asset(filepath)
 
-
 class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     """HEC-RAS Steady Flow file asset."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
 
     regex_parse_str = r".+\.f\d{2}$"
     __roles__ = ["ras-steady"]
@@ -501,16 +516,19 @@ class SteadyFlowAsset(GenericAsset[SteadyFlowFile]):
     __description__ = "Steady Flow file which contains profile information, flow data, and boundary conditions."
     __file_class__ = SteadyFlowFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[FLOW_TITLE] = self.file.flow_title
-        self._extra_fields[N_PROFILES] = self.file.n_profiles
-        return self._extra_fields
+        self.extra_fields[FLOW_TITLE] = self.file.flow_title
+        self.extra_fields[N_PROFILES] = self.file.n_profiles
+        return self.extra_fields
 
 
 class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     """HEC-RAS Quasi-Unsteady Flow file asset."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
 
     regex_parse_str = r".+\.q\d{2}$"
     __roles__ = ["ras-quasi-unsteady"]
@@ -518,15 +536,18 @@ class QuasiUnsteadyFlowAsset(GenericAsset[QuasiUnsteadyFlowFile]):
     __description__ = "Quasi-Unsteady Flow file."
     __file_class__ = QuasiUnsteadyFlowFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:  
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[TITLE] = self.file.flow_title
-        return self._extra_fields
+        self.extra_fields[TITLE] = self.file.flow_title
+        return self.extra_fields
 
 
 class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     """HEC-RAS Unsteady Flow file asset."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
 
     regex_parse_str = r".+\.u\d{2}$"
     __roles__ = ["ras-unsteady"]
@@ -534,18 +555,21 @@ class UnsteadyFlowAsset(GenericAsset[UnsteadyFlowFile]):
     __description__ = "The unsteady file contains hydrographs, initial conditions, and any flow options."
     __file_class__ = UnsteadyFlowFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[UNSTEADY_FLOW_TITLE] = self.file.flow_title
-        self._extra_fields[BOUNDARY_LOCATIONS] = self.file.boundary_locations
-        self._extra_fields[REFERENCE_LINES] = self.file.reference_lines
-        self._extra_fields[PRECIP_BC] = self.file.precip_bc
-        return self._extra_fields
+        self.extra_fields[UNSTEADY_FLOW_TITLE] = self.file.flow_title
+        self.extra_fields[BOUNDARY_LOCATIONS] = self.file.boundary_locations
+        self.extra_fields[REFERENCE_LINES] = self.file.reference_lines
+        self.extra_fields[PRECIP_BC] = self.file.precip_bc
+        return self.extra_fields
 
 
 class UnsteadyFlowHdfAsset(GenericAsset[RASHDFFile]):
     """HEC-RAS Unsteady Flow HDF file asset."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
 
     regex_parse_str = r".+\.u\d{2}\.hdf$"
 
@@ -554,8 +578,7 @@ class UnsteadyFlowHdfAsset(GenericAsset[RASHDFFile]):
     __description__ = "The HEC-RAS unsteady HDF file."
     __file_class__ = None
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields when complete."""
         pass
 
@@ -563,80 +586,99 @@ class UnsteadyFlowHdfAsset(GenericAsset[RASHDFFile]):
 class PlanHdfAsset(GenericAsset[PlanHDFFile]):
     """HEC-RAS Plan HDF file asset."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.populate_extra_fields()
+
     regex_parse_str = r".+\.p\d{2}\.hdf$"
     __roles__ = ["ras-plan"]
     __media_type__ = MediaType.HDF
     __description__ = "The HEC-RAS plan HDF file."
     __file_class__ = PlanHDFFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def add_extra_field_planhdf(
+            self,
+            field_name: str,
+            value: str = "",
+            use_parser: bool = False,
+        ):
+        """Add extra field information based on asset property"""
+        if use_parser: # parser.py should have function to get value directly
+            _field_name = self.__unique_extra_field_paths(field_name).replace("HEC-RAS:", "", 1)
+            self.add_extra_field(field_name, self.file.__getattribute__(_field_name))
+        else: # user provides the value
+            self.add_extra_field(field_name, value)
+        return self.extra_fields
+    
+    def __unique_extra_field_paths(self, field_name):
+        """Check field name for exceptions that require unqiue paths to plan object data"""
+        if field_name == VERSION:
+            return "HEC-RAS:file_version"
+        elif field_name == UNITS:
+            return "HEC-RAS:units_system"
+        else:
+            return field_name
+
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[VERSION] = self.file.file_version
-        self._extra_fields[UNITS] = self.file.units_system
-        self._extra_fields[PLAN_INFORMATION_BASE_OUTPUT_INTERVAL] = self.file.plan_information_base_output_interval
-        self._extra_fields[PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE] = (
-            self.file.plan_information_computation_time_step_base
+        self.add_extra_field_planhdf(VERSION, use_parser=True)
+        self.add_extra_field_planhdf(UNITS, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_BASE_OUTPUT_INTERVAL, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_COMPUTATION_TIME_STEP_BASE, use_parser=True)
+
+        self.add_extra_field_planhdf(PLAN_INFORMATION_FLOW_FILENAME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_GEOMETRY_FILENAME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_PLAN_FILENAME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_PLAN_NAME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_PROJECT_FILENAME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_PROJECT_TITLE, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_SIMULATION_END_TIME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_INFORMATION_SIMULATION_START_TIME, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D_FLOW_TOLERANCE, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS, use_parser=True)
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS_WITHOUT_IMPROVEMENT, use_parser=True
         )
-        self._extra_fields[PLAN_INFORMATION_FLOW_FILENAME] = self.file.plan_information_flow_filename
-        self._extra_fields[PLAN_INFORMATION_GEOMETRY_FILENAME] = self.file.plan_information_geometry_filename
-        self._extra_fields[PLAN_INFORMATION_PLAN_FILENAME] = self.file.plan_information_plan_filename
-        self._extra_fields[PLAN_INFORMATION_PLAN_NAME] = self.file.plan_information_plan_name
-        self._extra_fields[PLAN_INFORMATION_PROJECT_FILENAME] = self.file.plan_information_project_filename
-        self._extra_fields[PLAN_INFORMATION_PROJECT_TITLE] = self.file.plan_information_project_title
-        self._extra_fields[PLAN_INFORMATION_SIMULATION_END_TIME] = self.file.plan_information_simulation_end_time
-        self._extra_fields[PLAN_INFORMATION_SIMULATION_START_TIME] = self.file.plan_information_simulation_start_time
-        self._extra_fields[PLAN_PARAMETERS_1D_FLOW_TOLERANCE] = self.file.plan_parameters_1d_flow_tolerance
-        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS] = self.file.plan_parameters_1d_maximum_iterations
-        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_ITERATIONS_WITHOUT_IMPROVEMENT] = (
-            self.file.plan_parameters_1d_maximum_iterations_without_improvement
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D_MAXIMUM_WATER_SURFACE_ERROR_TO_ABORT, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D_MAXIMUM_WATER_SURFACE_ERROR_TO_ABORT] = (
-            self.file.plan_parameters_1d_maximum_water_surface_error_to_abort
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D_STORAGE_AREA_ELEVATION_TOLERANCE, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D_STORAGE_AREA_ELEVATION_TOLERANCE] = (
-            self.file.plan_parameters_1d_storage_area_elevation_tolerance
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D_THETA, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D_THETA_WARMUP, use_parser=True)
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D_WATER_SURFACE_ELEVATION_TOLERANCE, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D_THETA] = self.file.plan_parameters_1d_theta
-        self._extra_fields[PLAN_PARAMETERS_1D_THETA_WARMUP] = self.file.plan_parameters_1d_theta_warmup
-        self._extra_fields[PLAN_PARAMETERS_1D_WATER_SURFACE_ELEVATION_TOLERANCE] = (
-            self.file.plan_parameters_1d_water_surface_elevation_tolerance
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D2D_GATE_FLOW_SUBMERGENCE_DECAY_EXPONENT, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_GATE_FLOW_SUBMERGENCE_DECAY_EXPONENT] = (
-            self.file.plan_parameters_1d2d_gate_flow_submergence_decay_exponent
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D2D_IS_STABLITY_FACTOR, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D2D_LS_STABLITY_FACTOR, use_parser=True)
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D2D_MAXIMUM_NUMBER_OF_TIME_SLICES, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_IS_STABLITY_FACTOR] = self.file.plan_parameters_1d2d_is_stablity_factor
-        self._extra_fields[PLAN_PARAMETERS_1D2D_LS_STABLITY_FACTOR] = self.file.plan_parameters_1d2d_ls_stablity_factor
-        self._extra_fields[PLAN_PARAMETERS_1D2D_MAXIMUM_NUMBER_OF_TIME_SLICES] = (
-            self.file.plan_parameters_1d2d_maximum_number_of_time_slices
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D2D_MINIMUM_TIME_STEP_FOR_SLICINGHOURS, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_MINIMUM_TIME_STEP_FOR_SLICINGHOURS] = (
-            self.file.plan_parameters_1d2d_minimum_time_step_for_slicinghours
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D2D_NUMBER_OF_WARMUP_STEPS, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D2D_WARMUP_TIME_STEP_HOURS, use_parser=True)
+        self.add_extra_field_planhdf(
+            PLAN_PARAMETERS_1D2D_WEIR_FLOW_SUBMERGENCE_DECAY_EXPONENT, use_parser=True
         )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_NUMBER_OF_WARMUP_STEPS] = (
-            self.file.plan_parameters_1d2d_number_of_warmup_steps
-        )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_WARMUP_TIME_STEP_HOURS] = (
-            self.file.plan_parameters_1d2d_warmup_time_step_hours
-        )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_WEIR_FLOW_SUBMERGENCE_DECAY_EXPONENT] = (
-            self.file.plan_parameters_1d2d_weir_flow_submergence_decay_exponent
-        )
-        self._extra_fields[PLAN_PARAMETERS_1D2D_MAXITER] = self.file.plan_parameters_1d2d_maxiter
-        self._extra_fields[PLAN_PARAMETERS_2D_EQUATION_SET] = self.file.plan_parameters_2d_equation_set
-        self._extra_fields[PLAN_PARAMETERS_2D_NAMES] = self.file.plan_parameters_2d_names
-        self._extra_fields[PLAN_PARAMETERS_2D_VOLUME_TOLERANCE] = self.file.plan_parameters_2d_volume_tolerance
-        self._extra_fields[PLAN_PARAMETERS_2D_WATER_SURFACE_TOLERANCE] = (
-            self.file.plan_parameters_2d_water_surface_tolerance
-        )
-        self._extra_fields[METEOROLOGY_DSS_FILENAME] = self.file.meteorology_dss_filename
-        self._extra_fields[METEOROLOGY_DSS_PATHNAME] = self.file.meteorology_dss_pathname
-        self._extra_fields[METEOROLOGY_DATA_TYPE] = self.file.meteorology_data_type
-        self._extra_fields[METEOROLOGY_MODE] = self.file.meteorology_mode
-        self._extra_fields[METEOROLOGY_RASTER_CELLSIZE] = self.file.meteorology_raster_cellsize
-        self._extra_fields[METEOROLOGY_SOURCE] = self.file.meteorology_source
-        self._extra_fields[METEOROLOGY_UNITS] = self.file.meteorology_units
-        return self._extra_fields
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_1D2D_MAXITER, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_2D_EQUATION_SET, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_2D_NAMES, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_2D_VOLUME_TOLERANCE, use_parser=True)
+        self.add_extra_field_planhdf(PLAN_PARAMETERS_2D_WATER_SURFACE_TOLERANCE, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_DSS_FILENAME, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_DSS_PATHNAME, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_DATA_TYPE, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_MODE, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_RASTER_CELLSIZE, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_SOURCE, use_parser=True)
+        self.add_extra_field_planhdf(METEOROLOGY_UNITS, use_parser=True)
+        return self.extra_fields
 
 
 class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
@@ -648,13 +690,12 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
     __description__ = "The HEC-RAS geometry HDF file."
     __file_class__ = GeometryHDFFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self) -> dict:
+    def populate_extra_fields(self) -> dict:
         """Return extra fields with added dynamic keys/values."""
-        self._extra_fields[VERSION] = self.file.file_version
-        self._extra_fields[UNITS] = self.file.units_system
-        self._extra_fields[REFERENCE_LINES] = self.reference_line_names
-        return self._extra_fields
+        self.extra_fields[VERSION] = self.file.file_version
+        self.extra_fields[UNITS] = self.file.units_system
+        self.extra_fields[REFERENCE_LINES] = self.reference_line_names
+        return self.extra_fields
 
     @cached_property
     def reference_line_names(self) -> list[str] | None:
