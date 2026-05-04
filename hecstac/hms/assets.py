@@ -56,8 +56,9 @@ class ThumbnailAsset(GenericAsset):
     __roles__ = ["thumbnail", MediaType.PNG]
     __description__ = "Thumbnail"
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         basin_file = self.href.split(".")[0] + ".basin"
         return {"associated_basin_file": basin_file}
@@ -71,8 +72,9 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
     __description__ = "Defines the basin geometry and elements for HEC-HMS simulations."
     __file_class__ = BasinFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return (
             {
@@ -99,8 +101,9 @@ class EventBasinAsset(GenericAsset[BasinFile]):
     __description__ = "Defines the basin geometry and elements for HEC-HMS simulations."
     __file_class__ = BasinFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
             HMS_BASIN_TITLE: self.file.name,
@@ -118,8 +121,9 @@ class RunAsset(GenericAsset[RunFile]):
     __roles__ = ["hms-run", MediaType.TEXT]
     __description__ = "Contains data for HEC-HMS simulations."
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {"hms:run_title": self.name.removesuffix(".run")} | {
             run.name: {f"hms:{key}".lower(): val for key, val in run.attrs.items()} for _, run in self.file.elements
@@ -134,8 +138,9 @@ class ControlAsset(GenericAsset[ControlFile]):
     __description__ = "Defines time control information for HEC-HMS simulations."
     __file_class__ = ControlFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
             "hms:control_title": self.file.name,
@@ -151,8 +156,9 @@ class MetAsset(GenericAsset[MetFile]):
     __description__ = "Contains meteorological data such as precipitation and temperature."
     __file_class__ = MetFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {
             "hms:met_title": self.file.name,
@@ -167,8 +173,9 @@ class DSSAsset(GenericAsset):
     __roles__ = ["hec-dss", "application/octet-stream"]
     __description__ = "HEC-DSS file."
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.name}
 
@@ -181,8 +188,9 @@ class SqliteAsset(GenericAsset[SqliteDB]):
     __description__ = "Stores spatial data for HEC-HMS basin files."
     __file_class__ = SqliteDB
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.name, "hms:layers": self.file.layers}
 
@@ -195,8 +203,9 @@ class GageAsset(GenericAsset[GageFile]):
     __description__ = "Contains data for HEC-HMS gages."
     __file_class__ = GageFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]} | {
             f"hms:{gage.name}".lower(): dict(gage.attrs.items()) for gage in self.file.gages
@@ -211,8 +220,9 @@ class GridAsset(GenericAsset[GridFile]):
     __description__ = "Contains data for HEC-HMS grid files."
     __file_class__ = GridFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return (
             {HMS_TITLE: self.file.name}
@@ -228,8 +238,9 @@ class LogAsset(GenericAsset):
     __roles__ = ["hms-log", "results", MediaType.TEXT]
     __description__ = "Contains log data for HEC-HMS simulations."
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.name}
 
@@ -241,8 +252,9 @@ class OutAsset(GenericAsset):
     __roles__ = ["hms-out", "results", MediaType.TEXT]
     __description__ = "Contains output data for HEC-HMS simulations."
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.name}
 
@@ -255,8 +267,9 @@ class PdataAsset(GenericAsset[PairedDataFile]):
     __description__ = "Contains paired data for HEC-HMS simulations."
     __file_class__ = PairedDataFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]}
 
@@ -269,8 +282,9 @@ class TerrainAsset(GenericAsset[TerrainFile]):
     __description__ = "Contains terrain data for HEC-HMS simulations."
     __file_class__ = TerrainFile
 
-    @GenericAsset.extra_fields.getter
-    def extra_fields(self):
+    # @GenericAsset.extra_fields.getter
+    def populate_extra_fields(self) -> dict:
+        # def extra_fields(self):
         """Return extra fields with added dynamic keys/values."""
         return {HMS_TITLE: self.file.name, HMS_VERSION: self.file.attrs["Version"]} | {
             f"hms:{layer['name']}".lower(): dict(layer.items()) for layer in self.file.layers

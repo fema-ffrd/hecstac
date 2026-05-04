@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, Generic, Optional, Type, TypeVar
+from abc import abstractmethod
 
 from pyproj import CRS
 from pystac import Asset
@@ -31,6 +32,7 @@ class GenericAsset(Asset, Generic[T]):
         self.name = Path(self.href).name
         self.media_type = self.__media_type__
         self.logger = get_logger(__file__)
+        self.populate_extra_fields()
 
     @property
     def roles(self) -> list[str]:
@@ -45,16 +47,28 @@ class GenericAsset(Asset, Generic[T]):
     def roles(self, roles: list):
         self._roles = roles
 
-    @property
     def extra_fields(self):
         """Return extra fields."""
         # boilerplate here, but overwritten in subclasses
         return self._extra_fields
+    
+    def add_extra_field(self, field_name: str, value: str = ""):
+        """Add or replace extra field information based on asset property"""
+        self.extra_fields[field_name] = value
+        return self.extra_fields
+    
+    def remove_extra_field(self, field_name: str):
+        """Remove extra field information based on asset property"""
+        if field_name in self.extra_fields.keys():
+            del self.extra_fields[field_name]
+        else:
+            print(f"Key: [{field_name}] not found in extra_fields")
+        return self.extra_fields
 
-    @extra_fields.setter
-    def extra_fields(self, extra_fields: dict):
-        """Set user-defined extra fields."""
-        self._extra_fields = extra_fields
+    @abstractmethod
+    def populate_extra_fields(self):
+        """extra_fields will be overwritten in subclasses"""
+        pass
 
     @property
     def file(self) -> T:
