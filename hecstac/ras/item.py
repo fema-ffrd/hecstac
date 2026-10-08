@@ -35,7 +35,7 @@ from hecstac.ras.assets import (
     SteadyFlowAsset,
     UnsteadyFlowAsset,
 )
-from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
+from hecstac.ras.consts import NULL_DATETIME
 from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files, is_unc_path
 
@@ -131,8 +131,8 @@ class RASModelItem(Item):
 
         stac = cls(
             stac_id,
-            NULL_STAC_GEOMETRY,
-            NULL_STAC_BBOX,
+            None,
+            None,
             NULL_DATETIME,
             {cls.PROJECT_KEY: Path(ras_project_file).name},
             href=ras_project_file.replace(".prj", ".json").replace(".PRJ", ".json"),
@@ -212,19 +212,19 @@ class RASModelItem(Item):
         prj_ext.apply(code=auth, wkt2=crs.to_wkt())
 
     @property
-    def geometry(self) -> dict:
+    def geometry(self) -> dict | None:
         """Return footprint of model as a geojson."""
         if hasattr(self, "_geometry_cached"):
             return self._geometry_cached
 
         if self.crs is None:
             logger.warning("Geometry requested for model with no spatial reference.")
-            self._geometry_cached = NULL_STAC_GEOMETRY
+            self._geometry_cached = None
             return self._geometry_cached
 
         if len(self.geometry_assets) == 0:
             logger.error("No geometry found for RAS item.")
-            self._geometry_cached = NULL_STAC_GEOMETRY
+            self._geometry_cached = None
             return self._geometry_cached
 
         geometries = []
@@ -252,8 +252,10 @@ class RASModelItem(Item):
         pass
 
     @property
-    def bbox(self) -> list[float]:
+    def bbox(self) -> list[float] | None:
         """Get the bounding box of the model geometry."""
+        if self.geometry is None:
+            return None
         return list(shape(self.geometry).bounds)
 
     @bbox.setter

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,16 @@ def test_stac_creation(prj_path: str, crs: str, assets: list):
         if bad_fields != ["bbox"]:  # allow only dt diffs
             raise RuntimeError(f"Serialization failed for {prj_path}. The following fields do not match: {bad_fields}")
     print(f"{prj_path} passed")
+
+
+def test_unlocated_item_uses_null_geometry_without_bbox():
+    """Serialize a model without a CRS as an unlocated STAC item."""
+    item = RASModelItem("unlocated", None, None, datetime.now(timezone.utc), {}, assets={})
+
+    item_dict = item.to_dict()
+
+    assert item_dict["geometry"] is None
+    assert "bbox" not in item_dict
 
 
 def dict_comparer(dict_1, dict_2, tb=""):
