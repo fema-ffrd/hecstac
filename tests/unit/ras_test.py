@@ -90,9 +90,7 @@ def test_unlocated_item_uses_null_geometry_without_bbox():
 def test_geometry_returns_largest_polygonal_component(source_geometry):
     item = RASModelItem("geometry-test", None, None, datetime.now(timezone.utc), {}, assets={})
     item.crs = "EPSG:4326"
-    item.geometry_assets = [
-        SimpleNamespace(href="geometry.g01", geometry_wgs84=source_geometry)
-    ]
+    item.geometry_assets = [SimpleNamespace(href="geometry.g01", geometry_wgs84=source_geometry)]
 
     geometry = shape(item.geometry)
 
