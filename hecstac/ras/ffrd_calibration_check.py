@@ -13,8 +13,6 @@ from hecstac.common.s3_utils import (
     verify_file_exists,
 )
 from hecstac.ras.item import RASModelItem
-from rasqc.check import check
-from rasqc.utils import summarize_results
 
 
 def build_s3_path(
@@ -122,6 +120,16 @@ class RASModelCalibrationChecker:
 
     def run_qc(self, ras_item):
         """Perform QC check and upload to s3."""
+        try:
+            from rasqc.check import check
+            from rasqc.utils import summarize_results
+        except ModuleNotFoundError as error:
+            if error.name != "rasqc":
+                raise
+            raise ImportError(
+                "FFRD calibration QC requires the optional 'ffrd-calibration-check' dependencies."
+            ) from error
+
         qc_results = summarize_results(check(ras_item, check_suite="ras_stac_ffrd"))
         self.logger.debug("run_qc results computed")
         qc_results_path = build_s3_path(
