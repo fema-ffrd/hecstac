@@ -64,8 +64,10 @@ def parse_attrs(lines: list[str]) -> OrderedDict:
         if nested_keyval_pairs:
             _process_nested_pair(attrs, nested_keyval_pairs, key, val)
 
-        key, val = _process_hamon_coefficient(attrs, line)
-        keyval_pairs = (key, val)
+        # TODO: Rethink if this ad-hoc handling is appropriate or if this should be rolled into a different function
+        hamon_line = _process_hamon_coefficient(attrs, line)
+        if hamon_line:
+            key, val = hamon_line
 
         _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs)
     else:
@@ -95,12 +97,11 @@ def _process_nested_pair(attrs: dict, nested_keyval_pairs: list[any], parent_key
     add_no_duplicate(attrs[parent_key][parent_val], nested_key, nested_val)
 
 
-def _process_hamon_coefficient(attrs: dict, line: str) -> tuple[str, str]:
+def _process_hamon_coefficient(attrs: dict, line: str) -> tuple[str, str] | None:
     if "Hamon Coefficient" in line:
         key, val = line.split(":")
         add_no_duplicate(attrs, key, val)
-
-    return (key, val)
+        return (key, val)
 
 
 def _handle_keyval_error(line, keyval_pairs, nested_keyval_pairs):
