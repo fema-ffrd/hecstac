@@ -143,7 +143,7 @@ def search_contents(
     results = []
     for line in lines:
         if matches(line):
-            val = line.split(token)[1]
+            val = token.join(line.split(token)[1:])
             if val != "":
                 results.append(val)
 
@@ -161,7 +161,7 @@ def handle_spaces(line: str, lines: list[str]):
     """Handle spaces in the line."""
     if line in lines:
         return line
-    elif handle_spaces_arround_equals(line.rstrip(" "), lines):
+    elif handle_spaces_arround_equals(line.rstrip(" "), lines) in lines:
         return handle_spaces_arround_equals(line.rstrip(" "), lines)
     elif handle_spaces_arround_equals(line + " ", lines) in lines:
         return handle_spaces_arround_equals(line + " ", lines)

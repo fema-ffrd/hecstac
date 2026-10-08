@@ -9,6 +9,7 @@ import pytest
 from hecstac.common.logger import initialize_logger
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.item import RASModelItem
+from hecstac.ras.utils import handle_spaces, search_contents
 
 initialize_logger(level=logging.CRITICAL)
 
@@ -62,6 +63,15 @@ def test_unlocated_item_uses_null_geometry_without_bbox():
 
     assert item_dict["geometry"] is None
     assert "bbox" not in item_dict
+
+
+def test_search_contents_preserves_token_in_value():
+    assert search_contents(["key=value=tail"], "key") == "value=tail"
+
+
+def test_handle_spaces_rejects_missing_variant():
+    with pytest.raises(ValueError, match="not found in lines"):
+        handle_spaces("missing=value", ["other=value"])
 
 
 def dict_comparer(dict_1, dict_2, tb=""):
