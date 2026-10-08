@@ -1779,7 +1779,7 @@ class SteadyFlowFile(CachedFile):
         """Retrieve flow change locations."""
         flow_change_locations = []
         tmp_n_flow_change_locations = self.n_flow_change_locations
-        locations = enumerate(search_contents(self.file_lines, HEADER_RIVER_RCH_RM, expect_one=False))
+        locations = search_contents(self.file_lines, HEADER_RIVER_RCH_RM, expect_one=False)
         for location in locations:
             result = self._process_flow_change_location(location, flow_change_locations, tmp_n_flow_change_locations)
             if result is not None:
