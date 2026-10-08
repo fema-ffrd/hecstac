@@ -307,7 +307,8 @@ class RASModelItem(Item):
             self.properties[self.RAS_DATETIME_SOURCE_KEY] = "model_geometry"
         else:
             logger.warning("Could not extract item datetime from geometry.")
-            self.datetime = datetime.datetime.now()
+            if self.datetime is None or self.datetime == NULL_DATETIME:
+                self.datetime = datetime.datetime.now()
             self.properties[self.RAS_DATETIME_SOURCE_KEY] = "processing_time"
 
     @cached_property
