@@ -28,14 +28,6 @@ hecstac.common.path\_manager module
    :undoc-members:
    :show-inheritance:
 
-hecstac.common.schemas module
------------------------------
-
-.. automodule:: hecstac.common.schemas
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 
