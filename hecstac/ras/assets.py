@@ -282,64 +282,76 @@ class GeometryAsset(GenericAsset[GeometryFile]):
     def _plot_river(self, ax: Axes):
         """Add the river centerline to a pyplot."""
         c = "#050dd5"
-        self.file.reach_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="River")
-        legend_handle = [
-            Line2D(
-                [0],
-                [0],
-                color=c,
-                linewidth=2,
-                label="River",
-            )
-        ]
-        return legend_handle
+        if self.file.reach_gdf is not None:
+            self.file.reach_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="River")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    color=c,
+                    linewidth=2,
+                    label="River",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
 
     def _plot_cross_sections(self, ax: Axes):
         """Add cross-sections to a pyplot."""
         c = "#5eeb34"
-        self.file.xs_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="XS")
-        legend_handle = [
-            Line2D(
-                [0],
-                [0],
-                color=c,
-                linewidth=2,
-                label="XS",
-            )
-        ]
-        return legend_handle
+        if self.file.xs_gdf is not None:
+            self.file.xs_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="XS")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    color=c,
+                    linewidth=2,
+                    label="XS",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
 
     def _plot_junctions(self, ax: Axes):
         """Add junctions to a pyplot."""
         c = "#eb344c"
-        self.file.junction_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Junction")
-        legend_handle = [
-            Line2D(
-                [0],
-                [0],
-                marker="o",
-                color="none",
-                markerfacecolor=c,
-                markersize=8,
-                label="Junction",
-            )
-        ]
-        return legend_handle
+        if self.file.junction_gdf is not None:
+            self.file.junction_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Junction")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="none",
+                    markerfacecolor=c,
+                    markersize=8,
+                    label="Junction",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
 
     def _plot_structures(self, ax: Axes):
         """Add structures to a pyplot."""
         c = "k"
-        self.file.structures_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Structure")
-        legend_handle = [
-            Line2D(
-                [0],
-                [0],
-                color=c,
-                linewidth=2,
-                label="Structure",
-            )
-        ]
-        return legend_handle
+        if self.file.structures_gdf is not None:
+            self.file.structures_gdf.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Structure")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    color=c,
+                    linewidth=2,
+                    label="Structure",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
 
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""

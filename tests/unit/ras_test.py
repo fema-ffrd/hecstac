@@ -9,7 +9,8 @@ import pytest
 from hecstac.common.logger import initialize_logger
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.item import RASModelItem
-from hecstac.ras.utils import handle_spaces, search_contents
+from hecstac.common.consts import OSM_ATTRIBUTION, OSM_USER_AGENT
+from hecstac.ras.utils import export_thumbnail, handle_spaces, search_contents
 
 initialize_logger(level=logging.CRITICAL)
 
@@ -72,6 +73,23 @@ def test_search_contents_preserves_token_in_value():
 def test_handle_spaces_rejects_missing_variant():
     with pytest.raises(ValueError, match="not found in lines"):
         handle_spaces("missing=value", ["other=value"])
+
+
+def test_export_thumbnail_uses_identified_osm_basemap(tmp_path, monkeypatch):
+    basemap_options = {}
+
+    def capture_basemap(ax, **kwargs):
+        basemap_options.update(kwargs)
+
+    monkeypatch.setattr("hecstac.ras.utils.ctx.add_basemap", capture_basemap)
+    thumbnail_path = tmp_path / "thumbnail.png"
+
+    export_thumbnail([], "thumbnail", "EPSG:4326", str(thumbnail_path))
+
+    assert basemap_options["source"]["url"] == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    assert basemap_options["headers"]["user-agent"] == OSM_USER_AGENT
+    assert basemap_options["attribution"] == OSM_ATTRIBUTION
+    assert thumbnail_path.is_file()
 
 
 def dict_comparer(dict_1, dict_2, tb=""):
