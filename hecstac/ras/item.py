@@ -16,7 +16,7 @@ from pyproj import CRS
 from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.utils import datetime_to_str
-from shapely import Polygon, simplify, to_geojson, union_all
+from shapely import GeometryCollection, MultiPolygon, Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
 from typing_extensions import Self
 
@@ -42,6 +42,14 @@ from hecstac.ras.utils import find_model_files, is_unc_path
 logger = get_logger(__name__)
 
 ThumbnailLayers = Literal["mesh_areas", "breaklines", "bc_lines", "River", "XS", "Structure", "Junction"]
+
+
+def _polygon_parts(geometry) -> list[Polygon]:
+    if isinstance(geometry, Polygon):
+        return [geometry]
+    if isinstance(geometry, (GeometryCollection, MultiPolygon)):
+        return [polygon for part in geometry.geoms for polygon in _polygon_parts(part)]
+    return []
 
 
 class RASModelItem(Item):
@@ -237,6 +245,12 @@ class RASModelItem(Item):
                 continue
 
         unioned_geometry = union_all(geometries)
+        polygon_parts = _polygon_parts(unioned_geometry)
+        if not polygon_parts:
+            self._geometry_cached = None
+            return self._geometry_cached
+        unioned_geometry = max(polygon_parts, key=lambda polygon: polygon.area)
+
         if self.simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
             if isinstance(unioned_geometry, Polygon):

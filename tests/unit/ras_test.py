@@ -3,8 +3,11 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from shapely import GeometryCollection, LineString, MultiPolygon, Polygon
+from shapely.geometry import shape
 
 from hecstac.common.logger import initialize_logger
 from hecstac.ras.errors import Invalid1DGeometryError
@@ -64,6 +67,37 @@ def test_unlocated_item_uses_null_geometry_without_bbox():
 
     assert item_dict["geometry"] is None
     assert "bbox" not in item_dict
+
+
+@pytest.mark.parametrize(
+    "source_geometry",
+    [
+        GeometryCollection(
+            [
+                Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),
+                Polygon([(10, 0), (11, 0), (11, 1), (10, 1)]),
+                LineString([(20, 20), (21, 21)]),
+            ]
+        ),
+        MultiPolygon(
+            [
+                Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),
+                Polygon([(10, 0), (11, 0), (11, 1), (10, 1)]),
+            ]
+        ),
+    ],
+)
+def test_geometry_returns_largest_polygonal_component(source_geometry):
+    item = RASModelItem("geometry-test", None, None, datetime.now(timezone.utc), {}, assets={})
+    item.crs = "EPSG:4326"
+    item.geometry_assets = [
+        SimpleNamespace(href="geometry.g01", geometry_wgs84=source_geometry)
+    ]
+
+    geometry = shape(item.geometry)
+
+    assert geometry.geom_type == "Polygon"
+    assert geometry.area == 16
 
 
 def test_search_contents_preserves_token_in_value():
