@@ -7,7 +7,7 @@ import json
 import os
 import re
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import boto3
 import pandas as pd
@@ -205,11 +205,11 @@ def parse_s3_url(s3_url: str):
     """
     parsed = urlparse(s3_url)
     bucket = parsed.netloc
-    path = parsed.path.lstrip("/")
+    path = s3_url.partition(f"{bucket}/")[2]
     return bucket, path
 
 
 def make_uri_public(uri: str) -> str:
-    """Convert from an AWS S3 URI to an https url."""
+    """Convert an AWS S3 URI to an HTTPS URL with a URL-encoded object key."""
     bucket, path = parse_s3_url(uri)
-    return f"https://{bucket}.s3.amazonaws.com/{path}"
+    return f"https://{bucket}.s3.amazonaws.com/{quote(unquote(path), safe='/')}"
