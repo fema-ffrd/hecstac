@@ -20,7 +20,7 @@ from shapely.geometry import LineString, MultiPoint, Point
 from hecstac.common.base_io import ModelFileReader
 from hecstac.common.logger import get_logger
 from hecstac.common.s3_utils import save_bytes_s3
-from hecstac.common.consts import S3_PREFIX
+from hecstac.common.consts import OSM_ATTRIBUTION, OSM_USER_AGENT, S3_PREFIX
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,13 @@ def export_thumbnail(layers: list[Callable], title: str, crs: CRS, filepath: str
 
     # Add OpenStreetMap basemap
     try:
-        ctx.add_basemap(ax, crs=crs, source=ctx.providers.OpenStreetMap.Mapnik)
+        ctx.add_basemap(
+            ax,
+            crs=crs,
+            source=ctx.providers.OpenStreetMap.Mapnik,
+            headers={"user-agent": OSM_USER_AGENT},
+            attribution=OSM_ATTRIBUTION,
+        )
     except Exception as e:
         logger.warning(f"Warning: Failed to add basemap for {filepath}: {e}")
 
@@ -143,7 +149,7 @@ def search_contents(
     results = []
     for line in lines:
         if matches(line):
-            val = line.split(token)[1]
+            val = token.join(line.split(token)[1:])
             if val != "":
                 results.append(val)
 
@@ -161,7 +167,7 @@ def handle_spaces(line: str, lines: list[str]):
     """Handle spaces in the line."""
     if line in lines:
         return line
-    elif handle_spaces_arround_equals(line.rstrip(" "), lines):
+    elif handle_spaces_arround_equals(line.rstrip(" "), lines) in lines:
         return handle_spaces_arround_equals(line.rstrip(" "), lines)
     elif handle_spaces_arround_equals(line + " ", lines) in lines:
         return handle_spaces_arround_equals(line + " ", lines)

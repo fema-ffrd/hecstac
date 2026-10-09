@@ -16,7 +16,7 @@ from pyproj import CRS
 from pystac import Asset, Item
 from pystac.extensions.projection import ProjectionExtension
 from pystac.utils import datetime_to_str
-from shapely import Polygon, simplify, to_geojson, union_all
+from shapely import GeometryCollection, MultiPolygon, Polygon, simplify, to_geojson, union_all
 from shapely.geometry import shape
 from typing_extensions import Self
 
@@ -35,13 +35,21 @@ from hecstac.ras.assets import (
     SteadyFlowAsset,
     UnsteadyFlowAsset,
 )
-from hecstac.ras.consts import NULL_DATETIME, NULL_STAC_BBOX, NULL_STAC_GEOMETRY
+from hecstac.ras.consts import NULL_DATETIME
 from hecstac.ras.parser import ProjectFile
 from hecstac.ras.utils import find_model_files, is_unc_path
 
 logger = get_logger(__name__)
 
 ThumbnailLayers = Literal["mesh_areas", "breaklines", "bc_lines", "River", "XS", "Structure", "Junction"]
+
+
+def _polygon_parts(geometry) -> list[Polygon]:
+    if isinstance(geometry, Polygon):
+        return [geometry]
+    if isinstance(geometry, (GeometryCollection, MultiPolygon)):
+        return [polygon for part in geometry.geoms for polygon in _polygon_parts(part)]
+    return []
 
 
 class RASModelItem(Item):
@@ -131,8 +139,8 @@ class RASModelItem(Item):
 
         stac = cls(
             stac_id,
-            NULL_STAC_GEOMETRY,
-            NULL_STAC_BBOX,
+            None,
+            None,
             NULL_DATETIME,
             {cls.PROJECT_KEY: Path(ras_project_file).name},
             href=ras_project_file.replace(".prj", ".json").replace(".PRJ", ".json"),
@@ -212,19 +220,19 @@ class RASModelItem(Item):
         prj_ext.apply(code=auth, wkt2=crs.to_wkt())
 
     @property
-    def geometry(self) -> dict:
+    def geometry(self) -> dict | None:
         """Return footprint of model as a geojson."""
         if hasattr(self, "_geometry_cached"):
             return self._geometry_cached
 
         if self.crs is None:
             logger.warning("Geometry requested for model with no spatial reference.")
-            self._geometry_cached = NULL_STAC_GEOMETRY
+            self._geometry_cached = None
             return self._geometry_cached
 
         if len(self.geometry_assets) == 0:
             logger.error("No geometry found for RAS item.")
-            self._geometry_cached = NULL_STAC_GEOMETRY
+            self._geometry_cached = None
             return self._geometry_cached
 
         geometries = []
@@ -237,6 +245,12 @@ class RASModelItem(Item):
                 continue
 
         unioned_geometry = union_all(geometries)
+        polygon_parts = _polygon_parts(unioned_geometry)
+        if not polygon_parts:
+            self._geometry_cached = None
+            return self._geometry_cached
+        unioned_geometry = max(polygon_parts, key=lambda polygon: polygon.area)
+
         if self.simplify_geometry:
             unioned_geometry = simplify(unioned_geometry, 0.001)
             if isinstance(unioned_geometry, Polygon):
@@ -252,8 +266,10 @@ class RASModelItem(Item):
         pass
 
     @property
-    def bbox(self) -> list[float]:
+    def bbox(self) -> list[float] | None:
         """Get the bounding box of the model geometry."""
+        if self.geometry is None:
+            return None
         return list(shape(self.geometry).bounds)
 
     @bbox.setter
@@ -305,7 +321,8 @@ class RASModelItem(Item):
             self.properties[self.RAS_DATETIME_SOURCE_KEY] = "model_geometry"
         else:
             logger.warning("Could not extract item datetime from geometry.")
-            self.datetime = datetime.datetime.now()
+            if self.datetime is None or self.datetime == NULL_DATETIME:
+                self.datetime = datetime.datetime.now()
             self.properties[self.RAS_DATETIME_SOURCE_KEY] = "processing_time"
 
     @cached_property

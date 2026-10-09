@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hecstac"
 dynamic = ["version"]
+requires-python = ">=3.10"
 description = "Create stac objects and metadata from HEC modeling software."
 readme = "README.md"
 maintainers = [
@@ -20,32 +21,35 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 dependencies = [
-    "aiobotocore>=2.21.1",
     "boto3>=1.37.1",
     "botocore>=1.37.1",
     "contextily>=1.6.2",
     "dotenv>=0.9.9",
     "fiona>=1.10.0rc1",
-    "fsspec==2025.3.1",
+    "fsspec==2026.9.0",
     "geopandas>=1.0.1",
     "matplotlib>=3.7.3",
     "mypy-boto3-s3",
-    "obstore>=0.6.0",
+    "obstore>=0.6.0; python_version < '3.14'",
+    "obstore>=0.8.2; python_version >= '3.14'",
     "pystac>=1.13.0",
     "rashdf>=0.10.0",
-    "rasqc>=0.0.3",
     "requests>=2.32.3",
-    "s3fs==2025.3.1",
+    "s3fs==2026.9.0",
     "shapely>=2.0.7",
+    "typing-extensions>=4.4",
     "python-dotenv>=1.1.0"
 ]
 
 [project.optional-dependencies]
 dev = ["pre-commit", "ruff", "pytest", "pytest-cov", "pytest-json-report"]
 docs = ["sphinx", "numpydoc", "sphinx_rtd_theme", "sphinx_design", "pydata-sphinx-theme", "sphinx-autodoc-typehints", "myst-parser"]
+ffrd-calibration-check = ["rasqc>=0.0.3; python_version < '3.14'"]
 
 [project.urls]
 repository = "https://github.com/fema-ffrd/hecstac"

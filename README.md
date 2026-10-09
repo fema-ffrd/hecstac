@@ -18,6 +18,17 @@ This package may be installed using pip with the following command
 $ pip install hecstac
 ```
 
+> [!NOTE]
+> Fiona, used by the HEC-HMS readers, does not currently publish Python 3.14 wheels. Installing hecstac on Python 3.14 therefore requires GDAL development files, including `gdal-config` (`libgdal-dev` on Ubuntu).
+
+FFRD calibration checks are optional:
+
+```
+$ pip install "hecstac[ffrd-calibration-check]"
+```
+
+The `ffrd-calibration-check` extra is available on Python 3.10 through 3.13. The current `rasqc` release pins `obstore==0.6.0`, which has no CPython 3.14 build; the extra will support Python 3.14 once rasqc publishes a compatible dependency set.
+
 ## FFRD
 
 While `hecstac` was created principally in support of FFRD pilot projects, the ability to create STAC based metadata items for HEC models (RAS and HMS in particular) has guided some design and implementation decisions that make it flexible enough to support more generalized use cases.

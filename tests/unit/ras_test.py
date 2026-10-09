@@ -1,13 +1,19 @@
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from shapely import GeometryCollection, LineString, MultiPolygon, Polygon
+from shapely.geometry import shape
 
 from hecstac.common.logger import initialize_logger
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.item import RASModelItem
+from hecstac.common.consts import OSM_ATTRIBUTION, OSM_USER_AGENT
+from hecstac.ras.utils import export_thumbnail, handle_spaces, search_contents
 
 initialize_logger(level=logging.CRITICAL)
 
@@ -51,6 +57,71 @@ def test_stac_creation(prj_path: str, crs: str, assets: list):
         if bad_fields != ["bbox"]:  # allow only dt diffs
             raise RuntimeError(f"Serialization failed for {prj_path}. The following fields do not match: {bad_fields}")
     print(f"{prj_path} passed")
+
+
+def test_unlocated_item_uses_null_geometry_without_bbox():
+    """Serialize a model without a CRS as an unlocated STAC item."""
+    item = RASModelItem("unlocated", None, None, datetime.now(timezone.utc), {}, assets={})
+
+    item_dict = item.to_dict()
+
+    assert item_dict["geometry"] is None
+    assert "bbox" not in item_dict
+
+
+@pytest.mark.parametrize(
+    "source_geometry",
+    [
+        GeometryCollection(
+            [
+                Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),
+                Polygon([(10, 0), (11, 0), (11, 1), (10, 1)]),
+                LineString([(20, 20), (21, 21)]),
+            ]
+        ),
+        MultiPolygon(
+            [
+                Polygon([(0, 0), (4, 0), (4, 4), (0, 4)]),
+                Polygon([(10, 0), (11, 0), (11, 1), (10, 1)]),
+            ]
+        ),
+    ],
+)
+def test_geometry_returns_largest_polygonal_component(source_geometry):
+    item = RASModelItem("geometry-test", None, None, datetime.now(timezone.utc), {}, assets={})
+    item.crs = "EPSG:4326"
+    item.geometry_assets = [SimpleNamespace(href="geometry.g01", geometry_wgs84=source_geometry)]
+
+    geometry = shape(item.geometry)
+
+    assert geometry.geom_type == "Polygon"
+    assert geometry.area == 16
+
+
+def test_search_contents_preserves_token_in_value():
+    assert search_contents(["key=value=tail"], "key") == "value=tail"
+
+
+def test_handle_spaces_rejects_missing_variant():
+    with pytest.raises(ValueError, match="not found in lines"):
+        handle_spaces("missing=value", ["other=value"])
+
+
+def test_export_thumbnail_uses_identified_osm_basemap(tmp_path, monkeypatch):
+    basemap_options = {}
+
+    def capture_basemap(ax, **kwargs):
+        basemap_options.update(kwargs)
+
+    monkeypatch.setattr("hecstac.ras.utils.ctx.add_basemap", capture_basemap)
+    thumbnail_path = tmp_path / "thumbnail.png"
+
+    export_thumbnail([], "thumbnail", "EPSG:4326", str(thumbnail_path))
+
+    assert basemap_options["source"]["url"] == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    assert basemap_options["headers"]["user-agent"] == OSM_USER_AGENT
+    assert basemap_options["attribution"] == OSM_ATTRIBUTION
+    assert thumbnail_path.is_file()
 
 
 def dict_comparer(dict_1, dict_2, tb=""):

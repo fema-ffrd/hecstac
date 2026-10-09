@@ -17,6 +17,7 @@ from pystac.extensions.storage import StorageExtension
 from shapely import to_geojson, unary_union
 
 from hecstac.common.asset_factory import AssetFactory
+from hecstac.common.consts import OSM_ATTRIBUTION, OSM_USER_AGENT
 from hecstac.common.logger import get_logger
 from hecstac.common.path_manager import LocalPathManager
 from hecstac.hms.assets import HMS_EXTENSION_MAPPING
@@ -280,7 +281,13 @@ class HMSModelItem(Item):
             try:
                 ctx.add_basemap(ax, crs=crs, source=ctx.providers.Esri.WorldStreetMap)
             except requests.exceptions.HTTPError:
-                ctx.add_basemap(ax, crs=crs, source=ctx.providers.OpenStreetMap.Mapnik)
+                ctx.add_basemap(
+                    ax,
+                    crs=crs,
+                    source=ctx.providers.OpenStreetMap.Mapnik,
+                    headers={"user-agent": OSM_USER_AGENT},
+                    attribution=OSM_ATTRIBUTION,
+                )
 
         # Format
         # ax.legend()
