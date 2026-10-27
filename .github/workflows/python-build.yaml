@@ -43,6 +43,13 @@ jobs:
     - name: Build wheel and source distribution
       run: python -m build
 
+    # Fiona may need a source build when no wheel matches the Python version.
+    - name: Install GDAL development dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y libgdal-dev
+        gdal-config --version
+
     - name: Install the built wheel
       run: |
         python -c "import glob; import subprocess; wheel_files = glob.glob('dist/*.whl'); subprocess.check_call(['pip', 'install', wheel_files[0]])"
