@@ -10,7 +10,7 @@ on:
         description: "Whether to run tests"
       python_versions:
         type: string
-        default: '["3.10", "3.11", "3.12"]'
+        default: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
         required: false
         description: "JSON array of Python versions to test against"
 
