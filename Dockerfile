@@ -29,8 +29,11 @@ FROM ghcr.io/osgeo/gdal:ubuntu-small-latest
 
 WORKDIR /app
 
+# Installing the wheel can compile dependencies such as Fiona from source.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     python3 \
+    python3-dev \
     python3-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \

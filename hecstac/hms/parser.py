@@ -88,7 +88,7 @@ class BaseTextFile(ABC):
                 self.content = self.model_file.content
             except Exception as e:
                 logger.error(e)
-                raise FileNotFoundError(f"could not find {self.path} locally nor on s3")
+                raise
 
     def parse_header(self):
         """Scan the file down to the first instance of 'End:' and save each colon-separated keyval pair as attrs dict."""

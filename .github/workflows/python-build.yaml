@@ -10,7 +10,7 @@ on:
         description: "Whether to run tests"
       python_versions:
         type: string
-        default: '["3.10", "3.11", "3.12"]'
+        default: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
         required: false
         description: "JSON array of Python versions to test against"
 
@@ -42,6 +42,13 @@ jobs:
 
     - name: Build wheel and source distribution
       run: python -m build
+
+    # Fiona may need a source build when no wheel matches the Python version.
+    - name: Install GDAL development dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y libgdal-dev
+        gdal-config --version
 
     - name: Install the built wheel
       run: |
