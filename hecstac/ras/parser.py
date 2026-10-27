@@ -2,7 +2,6 @@
 
 import datetime
 import math
-import os
 from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from enum import Enum
@@ -1919,12 +1918,12 @@ class RASHDFFile(CachedFile):
         self.fpath = fpath
         self.logger.info(f"Reading HDF File: {self.fpath}")
 
+        # Use default credential discovery, including IAM roles without environment credentials.
         self.hdf_object = self._hdf_constructor.open_uri(
             fpath,
             fsspec_kwargs={
                 "default_cache_type": "blockcache",
                 "default_block_size": 10**5,
-                "anon": (os.getenv("AWS_ACCESS_KEY_ID") is None and os.getenv("AWS_SECRET_ACCESS_KEY") is None),
             },
         )
         self._root_attrs: dict | None = None

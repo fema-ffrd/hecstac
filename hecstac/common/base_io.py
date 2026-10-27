@@ -72,13 +72,9 @@ class ModelFileReader:
             else:
                 raise ModelFileReaderError(error_msg)
         except Exception as e:
-            raise ModelFileReaderError(f"An unexpected error occurred: {e}")
+            raise ModelFileReaderError(f"An unexpected error occurred: {e}") from e
 
     def _create_s3_store(self, bucket: str) -> obstore.store.S3Store:
-        return obstore.store.S3Store(
-            bucket=bucket,
-            skip_signature=(os.getenv("AWS_ACCESS_KEY_ID") is None and os.getenv("AWS_SECRET_ACCESS_KEY") is None),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID") or "",
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY") or "",
-            session_token=os.getenv("AWS_SESSION_TOKEN") or "",
-        )
+        # Let obstore discover credentials, including IAM roles without environment credentials.
+        # Anonymous access can be requested explicitly via a supplied store with skip_signature=True.
+        return obstore.store.S3Store(bucket=bucket)
