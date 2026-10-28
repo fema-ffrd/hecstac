@@ -142,10 +142,10 @@ class HMSModelItem(Item):
         # Get data from the first basin
         properties[self.MODEL_UNITS] = self.pf.basins[0].attrs["Unit System"]
         properties[self.MODEL_GAGES] = self.pf.basins[0].gages
-        properties["proj:code"] = self.pf.basins[0].epsg
+        properties["proj:code"] = self.pf.basins[0].crs_code
 
-        if self.pf.basins[0].epsg is None:
-            logger.warning("No EPSG code found in basin file.")
+        if self.pf.basins[0].crs_code is None:
+            logger.warning("No CRS code found in basin file.")
 
         properties["proj:wkt"] = self.pf.basins[0].wkt
         properties[self.SUMMARY] = self.pf.file_counts
@@ -310,3 +310,15 @@ class HMSModelItem(Item):
     # Prevent external modification of dynamically generated datetime property
     def datetime(self, value):
         pass
+
+    def to_dict(self, *args, lightweight=True, **kwargs):
+            """Preload fields before serializing to dict.
+    
+            If lightweight=True, skip loading heavy geometry assets.
+            """
+            if not lightweight:
+                _ = self.geometry
+                _ = self.bbox
+            _ = self.datetime
+            _ = self.properties
+            return super().to_dict(*args, **kwargs)

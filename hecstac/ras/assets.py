@@ -812,6 +812,60 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             )
         return legend_handles
 
+    def _plot_river(self, ax: Axes):
+        """Add the river centerline to a pyplot."""
+        c = "#050dd5"
+        if self.file.river_reaches is not None:
+            self.file.river_reaches.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="River")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    color=c,
+                    linewidth=2,
+                    label="River",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
+
+    def _plot_cross_sections(self, ax: Axes):
+        """Add cross-sections to a pyplot."""
+        c = "#5eeb34"
+        if self.file.cross_sections is not None:
+            self.file.cross_sections.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="XS")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    color=c,
+                    linewidth=2,
+                    label="XS",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
+
+    def _plot_structures(self, ax: Axes):
+        """Add structures to a pyplot."""
+        c = "k"
+        if self.file.structures is not None:
+            self.file.structures.set_crs(self.crs).to_crs(THUMBNAIL_CRS).plot(ax=ax, color=c, label="Structure")
+            legend_handle = [
+                Line2D(
+                    [0],
+                    [0],
+                    color=c,
+                    linewidth=2,
+                    label="Structure",
+                )
+            ]
+            return legend_handle
+        else:
+            return []
+            
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
         if not (filepath.startswith(S3_PREFIX) or filepath.startswith(HTTPS_PREFIX)) and not os.path.exists(filepath):
@@ -844,7 +898,13 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
         """
         map_layers = []
         for layer in layers:
-            if layer == "mesh_areas":
+            if layer == "River":
+                map_layers.append(self._plot_river)
+            elif layer == "XS":
+                map_layers.append(self._plot_cross_sections)
+            elif layer == "Structure":
+                map_layers.append(self._plot_structures)
+            elif layer == "mesh_areas":
                 map_layers.append(self._plot_mesh_areas)
             elif layer == "breaklines":
                 map_layers.append(self._plot_breaklines)
