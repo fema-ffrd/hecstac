@@ -865,7 +865,7 @@ class GeometryHdfAsset(GenericAsset[GeometryHDFFile]):
             return legend_handle
         else:
             return []
-            
+
     def _add_thumbnail_asset(self, filepath: str) -> None:
         """Add the thumbnail image as an asset with a relative href."""
         if not (filepath.startswith(S3_PREFIX) or filepath.startswith(HTTPS_PREFIX)) and not os.path.exists(filepath):

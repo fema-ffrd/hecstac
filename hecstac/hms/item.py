@@ -312,13 +312,13 @@ class HMSModelItem(Item):
         pass
 
     def to_dict(self, *args, lightweight=True, **kwargs):
-            """Preload fields before serializing to dict.
-    
-            If lightweight=True, skip loading heavy geometry assets.
-            """
-            if not lightweight:
-                _ = self.geometry
-                _ = self.bbox
-            _ = self.datetime
-            _ = self.properties
-            return super().to_dict(*args, **kwargs)
+        """Preload fields before serializing to dict.
+
+        If lightweight=True, skip loading heavy geometry assets.
+        """
+        if not lightweight:
+            _ = self.geometry
+            _ = self.bbox
+        _ = self.datetime
+        _ = self.properties
+        return super().to_dict(*args, **kwargs)

@@ -387,12 +387,14 @@ class RASModelItem(Item):
         is_text = isinstance(geom, GeometryAsset)
         has_hdf = any(i.href == geom.href + ".hdf" for i in self.geometry_assets)
         has_text = is_hdf and any(i.href == geom.href.replace(".hdf", "") for i in self.geometry_assets)
-        
+
         if not self._should_make_thumbnail(is_text, has_hdf, geom.has_1d, is_hdf, has_text):
             return None
-        
+
         if is_hdf:
-            if not self._has_required_layers(layers, ["River", "XS", "Structure", "mesh_areas", "breaklines", "bc_lines"]):
+            if not self._has_required_layers(
+                layers, ["River", "XS", "Structure", "mesh_areas", "breaklines", "bc_lines"]
+            ):
                 return None
             return f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"
         else:  # is_text
