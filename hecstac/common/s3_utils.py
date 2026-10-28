@@ -217,7 +217,7 @@ def make_uri_public(uri: str) -> str:
     return f"https://{bucket}.s3.amazonaws.com/{quote(unquote(path), safe='/')}"
 
 def download_data_from_s3(s3_prefix_uri: str, files_list: list[str], local_dir: str, overwrite: bool = True) -> None:
-    """Downloads specific files from a public S3 bucket locally.
+    """Download specific files from a public S3 bucket locally.
 
     Args:
         s3_prefix_uri (str): The full S3 URI
