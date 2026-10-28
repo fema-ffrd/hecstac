@@ -84,7 +84,7 @@ class ModelBasinAsset(GenericAsset[BasinFile]):
                 "hms:drainage_area_miles": self.file.drainage_area,
                 "hms:reach_length_miles": self.file.reach_miles,
                 "proj:wkt": self.file.wkt,
-                "proj:code": self.file.epsg,
+                "proj:code": self.file.crs_code,
             }
             | self.file.hms_methods
             | {f"hms_basin:{key.lower()}": val for key, val in self.file.elements.element_counts.items()}

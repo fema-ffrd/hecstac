@@ -6,11 +6,13 @@ import io
 import json
 import os
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import quote, unquote, urlparse
 
 import boto3
 import pandas as pd
+from botocore import UNSIGNED
 from botocore.config import Config
 
 from hecstac.common.logger import get_logger
@@ -213,3 +215,42 @@ def make_uri_public(uri: str) -> str:
     """Convert an AWS S3 URI to an HTTPS URL with a URL-encoded object key."""
     bucket, path = parse_s3_url(uri)
     return f"https://{bucket}.s3.amazonaws.com/{quote(unquote(path), safe='/')}"
+
+
+def download_data_from_s3(s3_prefix_uri: str, files_list: list[str], local_dir: str, overwrite: bool = True) -> None:
+    """Download specific files from a public S3 bucket locally.
+
+    Args:
+        s3_prefix_uri (str): The full S3 URI
+        local_dir (str): Local path where files should be saved
+        overwrite (bool): Whether to overwrite existing files (default: True)
+        files_list (list[str]): List of file names to download from the S3 prefix
+
+    """
+    clean_uri = s3_prefix_uri.replace("s3://", "")
+    parts = clean_uri.split("/", 1)
+    bucket_name = parts[0]
+    s3_prefix = parts[1] if len(parts) > 1 else ""
+
+    if s3_prefix and not s3_prefix.endswith("/"):
+        s3_prefix += "/"
+
+    target_local_dir = Path(local_dir)
+    target_local_dir.mkdir(parents=True, exist_ok=True)
+
+    s3_client = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+    for filename in files_list:
+        s3_key = f"{s3_prefix}{filename}" if s3_prefix else filename
+        destination_file = Path(local_dir) / filename
+
+        # Skip downloading if the file exists and overwrite is disabled
+        if destination_file.exists() and not overwrite:
+            continue
+
+        try:
+            s3_client.download_file(bucket_name, s3_key, str(destination_file))
+        except Exception:
+            raise FileNotFoundError(
+                f"Cannot access file {filename} at `{s3_prefix_uri}` please check if the file exists."
+            )
