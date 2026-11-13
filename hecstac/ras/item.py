@@ -392,7 +392,9 @@ class RASModelItem(Item):
             return None
 
         if is_hdf:
-            if not self._has_required_layers(layers, ["mesh_areas", "breaklines", "bc_lines"]):
+            if not self._has_required_layers(
+                layers, ["River", "XS", "Structure", "mesh_areas", "breaklines", "bc_lines"]
+            ):
                 return None
             return f"{geom.href.rsplit('/')[-1][:-4]}_thumbnail"
         else:  # is_text
@@ -401,18 +403,15 @@ class RASModelItem(Item):
             return f"{geom.href.rsplit('/')[-1]}_thumbnail"
 
     def _should_make_thumbnail(self, is_text: bool, has_hdf: bool, has_1d: bool, is_hdf: bool, has_text: bool) -> bool:
-        if is_text and has_hdf:
-            if has_1d:
-                make = True
-            else:
-                make = False
-        elif is_text and not has_hdf:
+        if is_hdf:
             make = True
-        elif is_hdf:
-            if has_1d and has_text:
-                make = False
-            else:
+        elif is_text:
+            if has_1d and not has_hdf:
                 make = True
+            else:
+                make = False
+        else:
+            make = False
 
         return make
 

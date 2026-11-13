@@ -414,9 +414,12 @@ class BasinFile(BaseTextFile):
         return CRS(self.wkt)
 
     @property
-    def epsg(self):
-        """Return the EPSG code."""
-        return self.crs.to_epsg()
+    def crs_code(self):
+        """Return the CRS authority and code (e.g., 'EPSG:4326')."""
+        auth = self.crs.to_authority()
+        if auth:
+            return f"{auth[0]}:{auth[1]}"
+        return None
 
     def parse_name(self):
         """Parse basin name."""
@@ -1044,8 +1047,8 @@ class SqliteDB:
         if self.fiona_aws_session:
             with fiona.Env(self.fiona_aws_session):
                 self.layers = fiona.listlayers(self.path)
-                self.reach_feats = gpd.read_file(self.path, layer="reach2d")
-                self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d")
+                self.reach_feats = gpd.read_file(self.path, layer="reach2d", engine="fiona")
+                self.subbasin_feats = gpd.read_file(self.path, layer="subbasin2d", engine="fiona")
         else:
             self.layers = fiona.listlayers(self.path)
             self.reach_feats = gpd.read_file(self.path, layer="reach2d")

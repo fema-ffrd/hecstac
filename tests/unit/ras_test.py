@@ -10,10 +10,12 @@ from shapely import GeometryCollection, LineString, MultiPolygon, Polygon
 from shapely.geometry import shape
 
 from hecstac.common.logger import initialize_logger
+from hecstac.common.base_io import ModelFileReaderError
 from hecstac.ras.errors import Invalid1DGeometryError
 from hecstac.ras.item import RASModelItem
 from hecstac.common.consts import OSM_ATTRIBUTION, OSM_USER_AGENT
 from hecstac.ras.utils import export_thumbnail, handle_spaces, search_contents
+from hecstac.ras.parser import GeometryFile, ProjectFile, Structure, StructureType
 
 initialize_logger(level=logging.CRITICAL)
 
@@ -186,6 +188,104 @@ def test_geopackage_creation(prj_path: str, crs: str, assets: list):
     # Check that they were generated
     for i in [i.href for i in item.assets.values() if i.roles and "RAS-GEOMETRY-GPKG" in i.roles]:
         assert os.path.exists(i), f"Failed to generate geopackage for {i}"
+
+
+# Test for structure width and distance parsing from geometry files
+@pytest.fixture(scope="module")
+def geometry_files() -> list[GeometryFile]:
+    """Resolve the project's geometry files and parse them."""
+    try:
+        prj_path = get_baxter_prj_from_metadata()
+        prj = ProjectFile(prj_path)
+        assert prj.geometry_files, f"No geometry files listed in {prj_path}"
+        return [GeometryFile(associated_file_path(prj_path, g)) for g in prj.geometry_files]
+    except ModelFileReaderError as e:
+        pytest.skip(f"Unable to read RAS project {prj_path}: {e}")
+    return []  # Return an empty list if skipped to satisfy the return type
+
+
+def get_baxter_prj_from_metadata() -> str:
+    """Return the Baxter .prj path listed in test_data/input/ras_test/metadata.json."""
+    ras_prj_json = DATA_DIR / "metadata.json"
+    with open(ras_prj_json) as f:
+        models = json.load(f)["models"]
+    return next(m["prj_path"] for m in models if m["prj_path"].endswith("/Baxter.prj"))
+
+
+def associated_file_path(path: str, name: str) -> str:
+    """Return a file path in the same directory as path; works for S3 URIs and local paths."""
+    return path[: max(path.rfind("/"), path.rfind("\\")) + 1] + name
+
+
+def test_structure_width_and_distance(geometry_files: list[GeometryFile]):
+    """Test that the parsed structure width and distance match the values from the geometry file."""
+    for geom in geometry_files:  # Using test case Baxter.prj from ffrd-pilot. There is only 1 geometry file
+        # Check the first structure information against the expected values
+        first_key, first_val = next(iter(geom.structures.items()), (None, None))
+        if first_key:
+            parsed = {
+                (first_val.river.strip(), first_val.reach.strip(), first_val.river_station): (
+                    first_val.distance,
+                    first_val.width,
+                )
+            }
+
+        expected = {("Baxter River", "Upper Reach", 77737.0): (140, 20)}
+
+        assert parsed.keys() == expected.keys(), f"{geom.fpath}: structure mismatch"
+        for key, (distance, width) in parsed.items():
+            assert (distance, width) == expected[key], (
+                f"{geom.fpath} {key}: got {(distance, width)}, expected {expected[key]}"
+            )
+
+
+# Unit tests using synthetic RAS data for distance and width of structures.
+def make_structure(ras_data: list[str]) -> Structure:
+    return Structure(ras_data, "River,Reach", "River", "Reach", us_xs=None)
+
+
+@pytest.mark.parametrize(
+    "structure_type_code, structure_type",
+    [
+        (2, StructureType.CULVERT),
+        (3, StructureType.BRIDGE),
+        (4, StructureType.MULTIPLE_OPENING),
+    ],
+)
+def test_width_deck_structures(structure_type_code, structure_type):
+    ras_data = [
+        f"Type RM Length L Ch R = {structure_type_code} ,1050    ,,,",
+        "Deck Dist Width WeirC Skew NumUp NumDn MinLoCord MaxHiCord MaxSubmerge Is_Ogee",
+        " 25,40.5,2.6,0,10,10,,,.95,0,",
+        "Deck Dist Width End",
+    ]
+    structure = make_structure(ras_data)
+
+    assert structure.type == structure_type
+    assert structure.width == 40.5
+    assert structure.distance == 25.0
+
+
+def test_width_inline_structure():
+    ras_data = [
+        "Type RM Length L Ch R = 5 ,1050    ,,,",
+        "IW Dist,WD,Coef,Skew,MaxSub,Min_El,Is_Ogee,SpillHt,DesHd",
+        " 50,20,2.6,0,.95,,0,,",
+        "IW End",
+    ]
+    structure = make_structure(ras_data)
+
+    assert structure.type == StructureType.INLINE_STRUCTURE
+    assert structure.width == 20.0
+    assert structure.distance == 50.0
+
+
+def test_width_lateral_structure():
+    ras_data = ["Type RM Length L Ch R = 6 ,1050    ,,,"]
+    structure = make_structure(ras_data)
+
+    assert structure.type == StructureType.LATERAL_STRUCTURE
+    assert structure.width == 0.0
 
 
 if __name__ == "__main__":

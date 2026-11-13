@@ -834,12 +834,12 @@ class Structure:
 
     @cached_property
     def distance(self) -> float:
-        """Distance to upstream cross section."""
+        """Distance to upstream cross section in units fo the RAS Model."""
         return float(self.structure_data(0))
 
     @cached_property
     def width(self) -> float:
-        """Structure width."""
+        """Structure width in units of the RAS Model."""
         return float(self.structure_data(1))
 
     @cached_property
@@ -2438,10 +2438,26 @@ class GeometryHDFFile(PlanOrGeomHDFFile):
         return self.hdf_object.projection()
 
     @cached_property
-    def cross_sections(self) -> int | None:
+    def river_reaches(self) -> gpd.GeoDataFrame | None:
+        """Return geometry rivers reaches."""
+        try:
+            return self.hdf_object.river_reaches()
+        except KeyError:
+            return gpd.GeoDataFrame()
+
+    @cached_property
+    def cross_sections(self) -> gpd.GeoDataFrame | None:
         """Return geometry cross sections."""
         try:
             return self.hdf_object.cross_sections()
+        except KeyError:
+            return gpd.GeoDataFrame()
+
+    @cached_property
+    def structures(self) -> gpd.GeoDataFrame | None:
+        """Return geometry structures."""
+        try:
+            return self.hdf_object.structures()
         except KeyError:
             return gpd.GeoDataFrame()
 

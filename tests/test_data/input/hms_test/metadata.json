@@ -1,0 +1,38 @@
+{
+    "models": [
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.hms",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.basin",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.sqlite",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.terrain",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.run",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.grid",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.gage",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/MagatRv.dss",                
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/observed.dss",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/Oct2010.control",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/Oct2010.met",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/Oct2010.dss",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/Oct2010.log",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/MagatRv/Oct2010.out"                
+            ],
+            "note": "Sample dataset #1."
+        },
+        {
+            "prj_path": "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity.hms",
+            "assets": [
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity_sst.basin",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity_sst.sqlite",                
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity.terrain",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity.run",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity.grid",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity.pdata",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/trinity.dss",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/SST.control",
+                "s3://ffrd-pilot/public/hecstac_test_data/hms_models/Simulation/SST.met"
+            ],
+            "note": "Sample dataset #2."
+        }
+    ]
+}
