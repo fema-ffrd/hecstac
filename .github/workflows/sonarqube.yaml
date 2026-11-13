@@ -51,6 +51,7 @@ jobs:
         run: |
           export JAVA_HOME="$JAVA_HOME_21_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
+          sed -i 's/use_embedded_jre=true/use_embedded_jre=false/' "$(command -v sonar-scanner)"
           java -version
           sonar-scanner \
             -Dsonar.projectKey=hecstac \
